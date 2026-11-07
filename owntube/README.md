@@ -55,8 +55,9 @@ The collector allowlists these values actually exposed by SmartTube:
 
 - `MediaItemFormatInfo`: source title, `videoDetails.shortDescription`, author, channel ID,
   duration/view-count strings, upload date, live start timestamp/flags, paid-content text;
-  adaptive/regular formats with itag, MIME, bitrate, content length, audio track ID, exposed language
+  regular formats with itag, MIME, bitrate, content length, audio track ID, exposed language
   label, sampling rate, dimensions, FPS, quality label, DRC and projection type.
+  Adaptive-format inventories and their counts are excluded starting with `32.72-owntube.4`.
 - `MediaSubtitle`: caption language, kind, vss ID, name, MIME/codecs, translatability. `tlang` URL
   parameters distinguish translation options; these are excluded, with only an omitted count retained.
   Same-language aliases added by upstream are deduplicated by language/vss ID/exact URL.

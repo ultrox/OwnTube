@@ -54,7 +54,6 @@ public final class SourceEvidence {
                         .put("captionDuplicateOptionsOmitted", duplicateOptions)
                         .put("captionsSource", "MediaItemFormatInfo.getSubtitles; tlang options excluded; same-URL aliases deduplicated");
             }
-            formats(result, "adaptiveFormats", info.getAdaptiveFormats());
             formats(result, "urlFormats", info.getUrlFormats());
             format = result; cached = null;
         } catch (Exception e) { mappingError(format, e); }

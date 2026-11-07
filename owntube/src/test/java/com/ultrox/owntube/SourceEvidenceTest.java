@@ -38,7 +38,7 @@ public class SourceEvidenceTest {
         SourceEvidence evidence = new SourceEvidence("abcdefghijk");
         evidence.format(source(MediaItemFormatInfo.class, "getVideoId", "abcdefghijk", "getTitle", "Source title",
                 "getDescription", "Описание 🎥", "getLengthSeconds", "123", "getChannelId", "UCsource",
-                "getAdaptiveFormats", Arrays.asList(source(MediaFormat.class, "getITag", "251", "getAudioTrackId", "en.4",
+                "getUrlFormats", Arrays.asList(source(MediaFormat.class, "getITag", "251", "getAudioTrackId", "en.4",
                         "getLanguage", "en (original)", "getUrl", "https://secret/?token=secret"))));
         evidence.metadata(source(MediaItemMetadata.class, "getVideoId", "abcdefghijk", "getTitle", "Metadata title",
                 "getDescription", "Metadata description", "getLikeCount", "1.2K likes", "getPublishedDate", "Nov 7, 2026",
@@ -50,7 +50,7 @@ public class SourceEvidenceTest {
         assertEquals("Metadata description", json.getJSONObject("metadata").getString("description"));
         assertEquals("1.2K likes", json.getJSONObject("metadata").getString("likeCount"));
         assertEquals(0, json.getJSONObject("metadata").getJSONArray("chapters").getJSONObject(0).getLong("startTimeMs"));
-        assertEquals("en (original)", json.getJSONObject("formatInfo").getJSONArray("adaptiveFormats").getJSONObject(0).getString("language"));
+        assertEquals("en (original)", json.getJSONObject("formatInfo").getJSONArray("urlFormats").getJSONObject(0).getString("language"));
         assertFalse(json.has("defaultAudioLanguage")); assertFalse(json.has("selectedAudioLanguage"));
         assertFalse(json.has("algorithmVersion")); assertFalse(json.has("text"));
         assertFalse(json.toString().contains("secret"));
@@ -123,7 +123,7 @@ public class SourceEvidenceTest {
     @Test public void failingOptionalGetterPreservesAlreadyObservedValuesAndRecordsFailure() throws Exception {
         SourceEvidence evidence = new SourceEvidence("abcdefghijk");
         evidence.format(source(MediaItemFormatInfo.class, "getVideoId", "abcdefghijk", "getDescription", "Available",
-                "getAdaptiveFormats", new IllegalStateException("Do not expose token=secret")));
+                "getUrlFormats", new IllegalStateException("Do not expose token=secret")));
         JSONObject json = new JSONObject(evidence.snapshot("Browse title").json);
         assertEquals("Available", json.getString("description"));
         assertEquals("IllegalStateException", json.getJSONObject("formatInfo").getString("mappingError"));
