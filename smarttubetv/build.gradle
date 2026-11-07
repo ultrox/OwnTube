@@ -161,8 +161,10 @@ android {
     productFlavors {
         stown {
             applicationId "com.ultrox.owntube"
+            minSdkVersion 23
             targetSdkVersion project.properties.compileSdkVersion
-            versionNameSuffix "-owntube.1"
+            versionCode 2463
+            versionNameSuffix "-owntube.2"
             matchingFallbacks = ['ststable']
         }
         stbeta {

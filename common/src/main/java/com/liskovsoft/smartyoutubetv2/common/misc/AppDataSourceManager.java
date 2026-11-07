@@ -41,6 +41,11 @@ public class AppDataSourceManager {
     public List<SettingsItem> getSettingItems(Context context) {
         List<SettingsItem> settingItems = new ArrayList<>();
 
+        if (com.ultrox.owntube.Tracking.supported(context)) {
+            settingItems.add(new SettingsItem("OwnTube tracking",
+                    () -> com.ultrox.owntube.TrackingActivity.open(context), R.drawable.settings_account));
+        }
+
         settingItems.add(new SettingsItem(
                 context.getString(R.string.settings_accounts), () -> AccountSettingsPresenter.instance(context).show(), R.drawable.settings_account));
         settingItems.add(new SettingsItem(

@@ -41,6 +41,10 @@ public class VideoStateController extends BasePlayerController {
     private Boolean mRestoreLiveEdge;
     private long mSleepTimerStartMs;
 
+    public boolean isIncognitoSession() {
+        return mIncognito;
+    }
+
     @Override
     public void onInit() {
         mSleepTimerStartMs = System.currentTimeMillis();

@@ -3,7 +3,8 @@
 **Your feed. Your rules.**
 
 A personal fork of [SmartTube](https://github.com/yuliskov/SmartTube), focused on viewer control.
-Feed cleanup and JEV integration are planned; this first build adds the OwnTube identity.
+Playback tracking is available under **Settings → OwnTube tracking**.
+Feed cleanup and JEV integration are planned. See [tracking and upstream maintenance](owntube/README.md).
 
 - Repository: https://github.com/ultrox/OwnTube
 - Android package: `com.ultrox.owntube`

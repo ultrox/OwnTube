@@ -64,8 +64,10 @@ public class ExoPlayerController implements Player.EventListener, LiveStateProvi
     private VolumeBooster mVolumeBooster;
     private boolean mIsEnded;
     private Runnable mOnVideoLoaded;
+    private final com.ultrox.owntube.PlayerCollector mOwnTubeCollector;
 
     public ExoPlayerController(Context context, PlayerEventListener eventListener) {
+        mOwnTubeCollector = com.ultrox.owntube.SmartTubeTracking.create(context, this::getVideo, eventListener);
         PlayerTweaksData playerTweaksData = PlayerTweaksData.instance(context);
         mContext = context.getApplicationContext();
         mTrackSelectorManager = new TrackSelectorManager(context);
@@ -167,6 +169,7 @@ public class ExoPlayerController implements Player.EventListener, LiveStateProvi
     }
 
     private void openMediaSource(MediaSource mediaSource) {
+        if (mOwnTubeCollector != null) mOwnTubeCollector.preparingSource();
         mSabrLiveManifest = null; // set by the sabr live only
         mSabrLiveSeekBlocked = false;
         mSabrLiveStartPending = false;
@@ -279,6 +282,7 @@ public class ExoPlayerController implements Player.EventListener, LiveStateProvi
     public void setPlayer(SimpleExoPlayer player) {
         mPlayer = player;
         player.addListener(this);
+        if (mOwnTubeCollector != null) mOwnTubeCollector.attach(player);
     }
 
     //@Override
@@ -302,6 +306,8 @@ public class ExoPlayerController implements Player.EventListener, LiveStateProvi
     }
     
     public void setVideo(Video video) {
+        if (mOwnTubeCollector != null && (getVideo() == null || video == null ||
+                !java.util.Objects.equals(getVideo().videoId, video.videoId))) mOwnTubeCollector.beforeVideoChange();
         mVideo = new WeakReference<>(video);
     }
     
@@ -564,6 +570,7 @@ public class ExoPlayerController implements Player.EventListener, LiveStateProvi
     }
 
     private void releasePlayer() {
+        if (mOwnTubeCollector != null) mOwnTubeCollector.detach();
         if (mPlayer == null) {
             return;
         }
