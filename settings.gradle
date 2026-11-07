@@ -1,3 +1,5 @@
+rootProject.name = 'OwnTube'
+
 include ':smarttubetv', ':common', ':chatkit', ':leanbackassistant', ':leanback-1.0.0', ':fragment-1.1.0', ':filepicker-lib', ':doubletapplayerview', ':slidableactivity'
 
 def rootDir = settingsDir
@@ -21,5 +23,4 @@ apply from: new File(gradle.ext.exoplayerRoot, 'core_settings.gradle')
 // gradle.ext.exoplayerRoot = new File(rootDir, '../AmznExoPlayer2.10.6').exists() ? new File(rootDir, '../AmznExoPlayer2.10.6') : new File(rootDir, './AmznExoPlayer2.10.6')
 // gradle.ext.exoplayerModulePrefix = 'exoplayer-'
 // apply from: new File(gradle.ext.exoplayerRoot, 'core_settings.gradle')
-
 

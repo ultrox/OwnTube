@@ -1,3 +1,23 @@
+# OwnTube
+
+**Your feed. Your rules.**
+
+A personal fork of [SmartTube](https://github.com/yuliskov/SmartTube), focused on viewer control.
+Feed cleanup and JEV integration are planned; this first build adds the OwnTube identity.
+
+- Repository: https://github.com/ultrox/OwnTube
+- Android package: `com.ultrox.owntube`
+- Build: JDK 17, Android SDK 34, then `./gradlew :smarttubetv:assembleStownRelease`
+- Signing: local, ignored `keystore.properties` with `storeFile` (absolute path), `storePassword`, `keyAlias`, and `keyPassword`. Preserve that keystore for future updates.
+- APK: `smarttubetv/build/outputs/apk/stown/release/`
+- Install: `adb -s <TV_SERIAL> install -r <APK>`
+- Launch: `adb -s <TV_SERIAL> shell am start -n com.ultrox.owntube/com.liskovsoft.smartyoutubetv2.tv.ui.main.SplashActivity`
+
+OwnTube has a separate app identity and signing key. Updates are installed from this fork;
+the upstream APK updater is disabled for OwnTube. The original license and credits apply.
+
+## Upstream SmartTube documentation
+
 [<img src="images/badge_fdroid.png" alt="Get it on F-Droid" height="80">](https://f-droid.org/packages/app.smarttube.fdroid/)
 [<img src="images/badge_github.png" alt="Get it on GitHub" height="80">](https://github.com/yuliskov/SmartTube/releases)
 

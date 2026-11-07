@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string translatable="false" name="app_name">OwnTube</string>
+    <string translatable="false" name="browse_title">OwnTube</string>
+    <string name="search_label">OwnTube</string>
+    <string name="settings_description">OwnTube Videos</string>
+    <string translatable="false" name="search_authority">com.ultrox.owntube</string>
+    <string name="owntube_manual_updates">OwnTube updates are built and installed from the OwnTube repository.</string>
+    <!-- OwnTube uses its own signing key and must not offer upstream APKs. -->
+    <string-array name="update_urls" />
+</resources>
