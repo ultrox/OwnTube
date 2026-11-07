@@ -19,8 +19,10 @@ import org.json.JSONObject;
 /** Immutable, device-bound records. Kept outside Android backup along with delivery state. */
 final class TrackingStore extends SQLiteOpenHelper {
     static final class Event {
-        final String id, json;
-        Event(String id, String json) { this.id = id; this.json = json; }
+        final String id, json, evidenceId, evidence;
+        Event(String id, String json, String evidenceId, String evidence) {
+            this.id = id; this.json = json; this.evidenceId = evidenceId; this.evidence = evidence;
+        }
     }
     static final class State {
         int failures;
@@ -30,7 +32,7 @@ final class TrackingStore extends SQLiteOpenHelper {
     }
 
     TrackingStore(Context context) {
-        super(context, new File(context.getNoBackupFilesDir(), "ytdash-outbox.db").getAbsolutePath(), null, 1);
+        super(context, new File(context.getNoBackupFilesDir(), "ytdash-outbox.db").getAbsolutePath(), null, 2);
         setWriteAheadLoggingEnabled(true);
     }
     @Override public void onCreate(SQLiteDatabase db) {
@@ -40,36 +42,68 @@ final class TrackingStore extends SQLiteOpenHelper {
         db.execSQL("CREATE TABLE delivery (origin TEXT NOT NULL, device TEXT NOT NULL, failures INTEGER NOT NULL DEFAULT 0," +
                 " next_attempt INTEGER NOT NULL DEFAULT 0, paused INTEGER NOT NULL DEFAULT 0, last_ack INTEGER NOT NULL DEFAULT 0," +
                 " acknowledged INTEGER NOT NULL DEFAULT 0, error TEXT NOT NULL DEFAULT '', PRIMARY KEY(origin,device))");
+        addEvidenceSchema(db);
     }
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        throw new IllegalStateException("An explicit outbox migration is required");
+        if (oldVersion == 1 && newVersion == 2) addEvidenceSchema(db);
+        else throw new IllegalStateException("An explicit outbox migration is required");
+    }
+    private static void addEvidenceSchema(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE evidence (id TEXT PRIMARY KEY, snapshot TEXT NOT NULL)");
+        db.execSQL("ALTER TABLE events ADD COLUMN evidence_id TEXT");
+        db.execSQL("CREATE INDEX event_evidence ON events(evidence_id)");
     }
 
     synchronized void append(String device, JSONObject event) throws Exception {
+        append(device, event, null);
+    }
+    synchronized void append(String device, JSONObject event, EvidenceSnapshot evidence) throws Exception {
+        if (evidence == null ? event.has("evidenceId") : !evidence.id.equals(event.optString("evidenceId"))) {
+            throw new IOException("Evidence reference mismatch");
+        }
         String payload = event.toString();
         ContentValues values = new ContentValues();
         values.put("event_id", event.getString("eventId"));
         values.put("origin", YtdashApi.ORIGIN);
         values.put("device", device);
         values.put("payload", payload);
+        if (evidence != null) values.put("evidence_id", evidence.id);
         if (payload.getBytes(StandardCharsets.UTF_8).length > 64_000) {
             values.put("held", 1);
             values.put("error", "Event exceeds 64,000 bytes");
         }
-        getWritableDatabase().insertOrThrow("events", null, values);
+        SQLiteDatabase db = getWritableDatabase();
+        db.beginTransaction();
+        try {
+            if (evidence != null) {
+                ContentValues snapshot = new ContentValues();
+                snapshot.put("id", evidence.id); snapshot.put("snapshot", evidence.json);
+                db.insertWithOnConflict("evidence", null, snapshot, SQLiteDatabase.CONFLICT_IGNORE);
+            }
+            db.insertOrThrow("events", null, values);
+            db.setTransactionSuccessful();
+        } finally { db.endTransaction(); }
     }
 
     synchronized List<Event> pending(String device) {
         List<Event> events = new ArrayList<>();
-        int bytes = 0;
-        try (Cursor c = getReadableDatabase().query("events", new String[]{"event_id", "payload"},
-                "origin=? AND device=? AND held=0", binding(device), null, null, "rowid", "100")) {
+        int bytes = 4096;
+        Set<String> evidenceIds = new HashSet<>();
+        try (Cursor c = getReadableDatabase().rawQuery("SELECT e.event_id,e.payload,e.evidence_id,s.snapshot " +
+                "FROM events e LEFT JOIN evidence s ON s.id=e.evidence_id " +
+                "WHERE e.origin=? AND e.device=? AND e.held=0 ORDER BY e.rowid LIMIT 100", binding(device))) {
             while (c.moveToNext()) {
                 String json = c.getString(1);
-                int size = json.getBytes(StandardCharsets.UTF_8).length;
-                // Leave plenty of room for the envelope below the 4 MiB request limit.
+                String evidenceId = c.getString(2), snapshot = c.getString(3);
+                if (evidenceId != null && snapshot == null) throw new IllegalStateException("Missing evidence snapshot");
+                int size = json.getBytes(StandardCharsets.UTF_8).length + 1;
+                if (evidenceId != null && !evidenceIds.contains(evidenceId)) {
+                    // The protocol embeds evidence as a JSON STRING, so count its escaping too.
+                    size += JSONObject.quote(snapshot).getBytes(StandardCharsets.UTF_8).length + 70;
+                }
                 if (bytes + size > 3_000_000) break;
-                events.add(new Event(c.getString(0), json));
+                events.add(new Event(c.getString(0), json, evidenceId, snapshot));
+                if (evidenceId != null) evidenceIds.add(evidenceId);
                 bytes += size;
             }
         }
@@ -152,6 +186,7 @@ final class TrackingStore extends SQLiteOpenHelper {
             state.lastAck = now; state.acknowledged += deleted;
             state.failures = 0; state.nextAttempt = 0; state.error = ""; state.paused = false;
             saveState(db, device, state);
+            db.execSQL("DELETE FROM evidence WHERE NOT EXISTS (SELECT 1 FROM events WHERE evidence_id=evidence.id)");
             db.setTransactionSuccessful();
         } finally { db.endTransaction(); }
     }
@@ -171,7 +206,7 @@ final class TrackingStore extends SQLiteOpenHelper {
     }
 
     synchronized void export(OutputStream output) throws Exception {
-        output.write("{\"format\":\"owntube-outbox-v1\",\"events\":[".getBytes(StandardCharsets.UTF_8));
+        output.write("{\"format\":\"owntube-outbox-v2\",\"events\":[".getBytes(StandardCharsets.UTF_8));
         boolean first = true;
         try (Cursor c = getReadableDatabase().query("events", null, null, null, null, null, "rowid")) {
             while (c.moveToNext()) {
@@ -185,7 +220,16 @@ final class TrackingStore extends SQLiteOpenHelper {
                 first = false;
             }
         }
-        output.write("]}".getBytes(StandardCharsets.UTF_8));
+        output.write("],\"evidence\":{".getBytes(StandardCharsets.UTF_8));
+        first = true;
+        try (Cursor c = getReadableDatabase().query("evidence", new String[]{"id", "snapshot"}, null, null, null, null, "id")) {
+            while (c.moveToNext()) {
+                if (!first) output.write(',');
+                output.write((JSONObject.quote(c.getString(0)) + ":" + JSONObject.quote(c.getString(1))).getBytes(StandardCharsets.UTF_8));
+                first = false;
+            }
+        }
+        output.write("}}".getBytes(StandardCharsets.UTF_8));
     }
 
     private static String[] binding(String device) { return new String[]{YtdashApi.ORIGIN, device}; }

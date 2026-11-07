@@ -140,4 +140,83 @@ public class DeliveryTest {
         assertEquals("two", store.pending(pair.deviceId).get(0).id);
         assertEquals(1, store.count(pair.deviceId, false));
     }
+
+    EvidenceSnapshot evidence(String description) throws Exception {
+        return EvidenceSnapshot.create(new JSONObject().put("title", "A title").put("description", description));
+    }
+    void add(String id, EvidenceSnapshot snapshot) throws Exception {
+        store.append(pair.deviceId, event(id).put("evidenceId", snapshot.id), snapshot);
+    }
+    JSONObject export() throws Exception {
+        ByteArrayOutputStream output = new ByteArrayOutputStream(); store.export(output);
+        return new JSONObject(output.toString("UTF-8"));
+    }
+
+    @Test public void evidenceSurvivesLostReceiptRestartPartialAckAndHeldExportExactly() throws Exception {
+        EvidenceSnapshot snapshot = evidence("Unicode 🎥 \"quoted\"\nline two");
+        add("one", snapshot); add("two", snapshot);
+        String body = Delivery.body(pair.deviceId, store.pending(pair.deviceId));
+        assertEquals(1, new JSONObject(body).getJSONObject("evidence").length());
+        assertEquals(snapshot.json, new JSONObject(body).getJSONObject("evidence").getString(snapshot.id));
+        new Delivery(store, (key, payload) -> { throw new IOException("Lost receipt"); }, () -> now).drain(pair);
+        store.close(); store = new TrackingStore(RuntimeEnvironment.getApplication());
+        assertEquals(body, Delivery.body(pair.deviceId, store.pending(pair.deviceId)));
+        store.acknowledge(pair.deviceId, store.pending(pair.deviceId), receipt(pair.deviceId, "one"), now);
+        store.hold(pair.deviceId, store.pending(pair.deviceId).get(0), 422);
+        assertEquals(snapshot.json, export().getJSONObject("evidence").getString(snapshot.id));
+        store.retryHeld(pair.deviceId);
+        now += 60_000;
+        assertFalse(new Delivery(store, (key, payload) -> {
+            assertEquals(snapshot.json, new JSONObject(payload).getJSONObject("evidence").getString(snapshot.id));
+            return accept(payload);
+        }, () -> now).drain(pair));
+        assertEquals(0, export().getJSONObject("evidence").length());
+    }
+
+    @Test public void failedAppendRollsBackEvidenceAndCannotCreateDanglingReference() throws Exception {
+        add("one"); EvidenceSnapshot snapshot = evidence("New evidence");
+        try { add("one", snapshot); fail("Duplicate should roll back"); } catch (android.database.SQLException expected) { }
+        assertEquals(0, export().getJSONObject("evidence").length());
+        try { store.append(pair.deviceId, event("two").put("evidenceId", snapshot.id)); fail(); }
+        catch (IOException expected) { }
+        assertEquals(1, store.count(pair.deviceId, false));
+    }
+
+    @Test public void sharedEvidenceRemainsWhileOtherDeviceReferencesIt() throws Exception {
+        EvidenceSnapshot snapshot = evidence("Shared source"); add("one", snapshot);
+        store.append("device-b", event("two").put("evidenceId", snapshot.id), snapshot);
+        store.acknowledge(pair.deviceId, store.pending(pair.deviceId), receipt(pair.deviceId, "one"), now);
+        assertEquals(snapshot.json, store.pending("device-b").get(0).evidence);
+    }
+
+    @Test public void batchBudgetIncludesEscapedEvidenceAndDeduplicatesSharedSnapshots() throws Exception {
+        String large = new String(new char[10_000]).replace("\0", "\n\"");
+        for (int i = 0; i < 100; i++) add("event-" + i, evidence(i + large));
+        List<TrackingStore.Event> batch = store.pending(pair.deviceId);
+        assertTrue(batch.size() < 100); assertTrue(batch.size() > 1);
+        String body = Delivery.body(pair.deviceId, batch);
+        assertTrue(body.getBytes(java.nio.charset.StandardCharsets.UTF_8).length < 3_000_000);
+        assertEquals(batch.size(), new JSONObject(body).getJSONObject("evidence").length());
+    }
+
+    @Test public void versionOneMigrationPreservesPayloadHeldStateAndDeliveryDeadline() throws Exception {
+        store.close();
+        java.io.File file = new java.io.File(RuntimeEnvironment.getApplication().getNoBackupFilesDir(), "ytdash-outbox.db");
+        android.database.sqlite.SQLiteDatabase.deleteDatabase(file);
+        android.database.sqlite.SQLiteDatabase db = android.database.sqlite.SQLiteDatabase.openOrCreateDatabase(file, null);
+        db.execSQL("CREATE TABLE events (event_id TEXT PRIMARY KEY, origin TEXT NOT NULL, device TEXT NOT NULL, payload TEXT NOT NULL, held INTEGER NOT NULL DEFAULT 0, error TEXT NOT NULL DEFAULT '')");
+        db.execSQL("CREATE TABLE delivery (origin TEXT NOT NULL, device TEXT NOT NULL, failures INTEGER NOT NULL DEFAULT 0, next_attempt INTEGER NOT NULL DEFAULT 0, paused INTEGER NOT NULL DEFAULT 0, last_ack INTEGER NOT NULL DEFAULT 0, acknowledged INTEGER NOT NULL DEFAULT 0, error TEXT NOT NULL DEFAULT '', PRIMARY KEY(origin,device))");
+        String payload = event("legacy").toString();
+        db.execSQL("INSERT INTO events VALUES (?,?,?,?,1,'HTTP 422')", new Object[]{"legacy", YtdashApi.ORIGIN, pair.deviceId, payload});
+        db.execSQL("INSERT INTO delivery (origin,device,next_attempt) VALUES (?,?,?)", new Object[]{YtdashApi.ORIGIN, pair.deviceId, now + 60_000});
+        db.setVersion(1); db.close();
+        store = new TrackingStore(RuntimeEnvironment.getApplication());
+        assertEquals(1, store.count(pair.deviceId, true));
+        assertEquals(now + 60_000, store.state(pair.deviceId).nextAttempt);
+        store.retryHeld(pair.deviceId);
+        assertEquals(payload, store.pending(pair.deviceId).get(0).json);
+        assertNull(store.pending(pair.deviceId).get(0).evidence);
+        EvidenceSnapshot snapshot = evidence("Post-migration"); add("new", snapshot);
+        assertEquals(2, store.count(pair.deviceId, false));
+    }
 }

@@ -246,6 +246,7 @@ public class PlaybackPresenter extends BasePresenter<PlaybackView> implements Pl
 
     @Override
     public void onMetadata(MediaItemMetadata metadata) {
+        com.ultrox.owntube.SmartTubeTracking.metadata(getContext(), getVideo(), metadata);
         process(listener -> listener.onMetadata(metadata));
     }
 

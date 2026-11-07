@@ -16,6 +16,7 @@ public final class Tracking {
     volatile DeviceCredentials.Pair pair;
     volatile String localError = "";
     volatile boolean enabled;
+    volatile EvidenceSnapshot latestEvidence;
     private long lastSchedule;
 
     public static boolean supported(Context context) {
@@ -37,12 +38,13 @@ public final class Tracking {
         });
     }
 
-    void persist(String device, JSONObject event) {
+    void persist(String device, JSONObject event, EvidenceSnapshot evidence) {
         // Copy before crossing threads. Capture time/binding never depend on whichever pairing exists later.
         String immutable = event.toString();
         disk.execute(() -> {
             try {
-                store.append(device, new JSONObject(immutable));
+                store.append(device, new JSONObject(immutable), evidence);
+                latestEvidence = evidence;
                 localError = "";
                 long now = android.os.SystemClock.elapsedRealtime();
                 if (now - lastSchedule >= 30_000 || lastSchedule == 0) {

@@ -35,10 +35,7 @@ final class Delivery {
 
     private boolean send(DeviceCredentials.Pair pair, List<TrackingStore.Event> batch) throws Exception {
         if (requests++ >= 24) return false;
-        JSONArray events = new JSONArray();
-        for (TrackingStore.Event event : batch) events.put(new JSONObject(event.json));
-        String body = new JSONObject().put("deviceId", pair.deviceId).put("events", events)
-                .put("evidence", new JSONObject()).toString();
+        String body = body(pair.deviceId, batch);
         YtdashApi.Reply reply = transport.send(pair.key, body);
         if (reply.code == 200) {
             store.acknowledge(pair.deviceId, batch, reply.body, clock.now());
@@ -57,5 +54,15 @@ final class Delivery {
         store.failure(pair.deviceId, auth ? "Device key rejected. Pair a valid or replacement key." :
                 "HTTP " + reply.code + "; events retained for retry.", auth, reply.retryAt, clock.now(), Math.random());
         return false;
+    }
+
+    static String body(String deviceId, List<TrackingStore.Event> batch) throws Exception {
+        JSONArray events = new JSONArray();
+        JSONObject evidence = new JSONObject();
+        for (TrackingStore.Event event : batch) {
+            events.put(new JSONObject(event.json));
+            if (event.evidenceId != null) evidence.put(event.evidenceId, event.evidence);
+        }
+        return new JSONObject().put("deviceId", deviceId).put("events", events).put("evidence", evidence).toString();
     }
 }

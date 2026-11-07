@@ -22,6 +22,7 @@ public final class PlayerCollector implements Player.EventListener, Application.
     private final Application application;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final WatchSegments segments;
+    private final SelectedEvidence selectedEvidence = new SelectedEvidence();
     private Player player;
     private boolean visible, seeking, awaitingSource;
     private final Runnable tick = new Runnable() {
@@ -85,6 +86,7 @@ public final class PlayerCollector implements Player.EventListener, Application.
             WatchSegments.VideoInfo video = source.current();
             boolean active = !stopped && !awaitingSource && !seeking && tracking.enabled && pair != null &&
                     video != null && !video.incognito && player.isPlaying() && !player.isPlayingAd();
+            if (active) video = selectedEvidence.attach(video, player);
             String context = host == null ? null : visible ? "foreground" : "background";
             segments.sample(new WatchSegments.Frame(SystemClock.elapsedRealtime(), System.currentTimeMillis(),
                     player.getCurrentPosition(), player.getDuration(), player.getPlaybackParameters().speed,

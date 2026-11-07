@@ -8,17 +8,23 @@ import org.json.JSONObject;
 /** Monotonic wall-time accounting. No Android/player/network dependencies. */
 public final class WatchSegments {
     public interface Sink { void persist(String deviceId, JSONObject event); }
+    public interface EvidenceSink { void persist(String deviceId, JSONObject event, EvidenceSnapshot evidence); }
 
     public static final class VideoInfo {
         public final String id, title, channel;
         public final boolean shorts, live, incognito;
+        public final EvidenceSnapshot evidence;
         public VideoInfo(String id, String title, String channel, boolean shorts, boolean live, boolean incognito) {
+            this(id, title, channel, shorts, live, incognito, null);
+        }
+        public VideoInfo(String id, String title, String channel, boolean shorts, boolean live, boolean incognito, EvidenceSnapshot evidence) {
             this.id = id;
             this.title = trim(title, 500);
             this.channel = trim(channel, 500);
             this.shorts = shorts;
             this.live = live;
             this.incognito = incognito;
+            this.evidence = evidence;
         }
     }
 
@@ -35,9 +41,10 @@ public final class WatchSegments {
         }
     }
 
-    private final Sink sink;
+    private final EvidenceSink sink;
     private Frame previous;
-    public WatchSegments(Sink sink) { this.sink = sink; }
+    public WatchSegments(Sink sink) { this.sink = (device, event, evidence) -> sink.persist(device, event); }
+    public WatchSegments(EvidenceSink sink) { this.sink = sink; }
 
     /** A boundary is a seek/source/identity discontinuity: never turn its jump into coverage. */
     public void sample(Frame next, boolean boundary) {
@@ -75,7 +82,8 @@ public final class WatchSegments {
                     event.put("coverage", new JSONArray().put(start).put(end));
                 }
             }
-            sink.persist(before.device, event);
+            if (before.video.evidence != null) event.put("evidenceId", before.video.evidence.id);
+            sink.persist(before.device, event, before.video.evidence);
         } catch (JSONException e) {
             throw new IllegalStateException("Unable to encode watch segment", e);
         }

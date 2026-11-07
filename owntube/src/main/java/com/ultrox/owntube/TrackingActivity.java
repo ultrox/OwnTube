@@ -79,6 +79,18 @@ public final class TrackingActivity extends Activity {
             message.setText("Upload requested. Network backoff and key errors still apply.");
             refreshStatus();
         });
+        button(column, "Inspect latest captured evidence", () -> {
+            EvidenceSnapshot evidence = tracking.latestEvidence;
+            if (evidence == null) { message.setText("No evidence captured in this app session yet. Play a video first."); return; }
+            TextView content = new TextView(this);
+            content.setTextIsSelectable(true);
+            content.setPadding(dp(16), dp(16), dp(16), dp(16));
+            content.setText("SHA-256: " + evidence.id + "\n" + evidence.json);
+            ScrollView evidenceScroll = new ScrollView(this);
+            evidenceScroll.addView(content);
+            new android.app.AlertDialog.Builder(this).setTitle("Captured source evidence")
+                    .setView(evidenceScroll).setPositiveButton("Close", null).show();
+        });
         button(column, "Retry held events for this device", () -> {
             DeviceCredentials.Pair pair = tracking.pair;
             if (pair == null) return;
