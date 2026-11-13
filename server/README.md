@@ -301,7 +301,42 @@ All 45 Android unit regressions, a disposable-backend HTTP contract test and the
 The ARM64 APK was installed on the Shield on 2026-11-13; versionCode 2466 and the retained app-data
 directory were verified. Post-update playback capture has not yet been checked on-device.
 
-### Current release: `owntube-compare-languages-20261113-1`
+### Current release: `owntube-recorded-language-picker-20261113-1`
+
+Deployed using `kamal app boot -c deploy/deploy.yml --version owntube-recorded-language-picker-20261113-1`.
+Container `136c64c3002a`, image
+`sha256:a3078d4d151db17c7da92147d48a91575813448a015f52547c58e017908829c2`.
+Release files: `/home/marko/releases/youtube-observer/owntube-recorded-language-picker-20261113-1/`.
+Source archive SHA-256:
+`4cc1ed40b1164515af670b4ce57d12d2e350ca94b14f422870e8e728b0ded12e`.
+
+Source `0b4baa5c9`. Places **Add language** beside **Add period** in both
+columns and uses the owner's group names in the legends. Suggestions contain
+only assessed languages with positive playback across the saved comparison
+periods and current device/person scope, independent of the selected languages.
+The shared selection remains below the periods. Saving changed periods refreshes
+the available languages.
+
+17 language-server tests, 136 mock browser checks and 52 real-local-server
+browser checks passed; desktop and phone screenshots were inspected.
+Production preservation checks matched all six frozen scopes, preserved source
+records, credentials, all 237 assessments and saved comparison revision 7;
+database integrity and foreign keys passed.
+Public HTTPS verification matched seven assets, confirmed adjacent controls and
+exact recorded-only suggestions (`bcs`, `de`, `en`, `und`), checked the phone
+layout and full row-classification picker, and left the saved configuration
+unchanged. The verification script waits for closed dialogs to be removed before
+opening another picker, avoiding duplicate-ID races in automated clicks.
+Fresh backup `before-owntube-recorded-language-picker-20261113-1` is retained at
+`/home/marko/Backups/youtube-observer/` and locally at
+`~/.local/state/youtube-observer/backups/`; verified SHA-256:
+`310d19e8af66b0d3003eaec04e874d3f7dd15c89d0710642d027793e8ff16309`.
+It includes 297,130 events, 477 evidence, 726 slices, 491 metadata versions,
+237 assessments, the TV context correction and the saved comparison.
+The stored configuration format is unchanged. Image-only rollback:
+`kamal rollback owntube-compare-languages-20261113-1 -c deploy/deploy.yml`.
+
+### Previous release: `owntube-compare-languages-20261113-1`
 
 Source `d08347beb`, deployed through
 `kamal app boot -c deploy/deploy.yml --version owntube-compare-languages-20261113-1`.

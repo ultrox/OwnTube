@@ -81,14 +81,23 @@ The Languages follow-up `owntube-languages-20261113-2` uses the same process fro
 commit `4369a6835`, with mobile wrapping and content-hashed module assets. Its
 backend binary is identical to `-1`; the same backup and image-only rollback apply.
 
-## Current selected comparison languages release
+## Current recorded-language picker release
+
+`owntube-recorded-language-picker-20261113-1`, source `0b4baa5c9`, places
+**Add language** beside **Add period** in both groups and offers only languages
+recorded in the saved comparison periods for the current device/person scope.
+136 mock, 52 real-local browser and 17 language-server checks passed.
+Release details, verified backup and image-only rollback:
+[`server/README.md`](../server/README.md#current-release-owntube-recorded-language-picker-20261113-1).
+
+## Previous selected comparison languages release
 
 `owntube-compare-languages-20261113-1`, source `d08347beb`, adds a saved language
 selection shared by both period groups, with combined and individual statistics.
 132 mock, 48 real-local browser and 17 language-server checks passed.
 The verified backup includes the existing saved comparison and 237 assessments.
 Release details and configuration-aware rollback:
-[`server/README.md`](../server/README.md#current-release-owntube-compare-languages-20261113-1).
+[`server/README.md`](../server/README.md#previous-release-owntube-compare-languages-20261113-1).
 
 ## Previous language period comparison release
 
