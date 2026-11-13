@@ -301,7 +301,45 @@ All 45 Android unit regressions, a disposable-backend HTTP contract test and the
 The ARM64 APK was installed on the Shield on 2026-11-13; versionCode 2466 and the retained app-data
 directory were verified. Post-update playback capture has not yet been checked on-device.
 
-### Current release: `owntube-video-audio-20261113-1`
+### Current release: `owntube-quick-languages-20261113-1`
+
+Source `d9e0a6b8b`, deployed with
+`kamal app boot -c deploy/deploy.yml --version owntube-quick-languages-20261113-1`.
+Container `59831beeea7b`, image
+`sha256:477ea6ec5aedcb6016f76313e237c6e864380c5b56c3165929d2653d716cac6c`.
+Source archive SHA-256:
+`ac5f947e71f120b491f761a23ad23d6241f24d81ca354292b407c5cc99c3cfb5`.
+Release files: `/home/marko/releases/youtube-observer/owntube-quick-languages-20261113-1/`.
+
+Languages rows now offer **? / DE / EN / BCS** for immediate, audited decisions
+covering the row's recorded versions in scope. Unknown is an explicit manual
+undetermined decision. BCS names Bosnian / Croatian / Serbian. Pending saves
+disable the row controls; stale revisions and failures show inline with Refresh.
+The inspector footer becomes **Save & close** after a language or note edit,
+respects the all/selected-version target and closes only after a successful save.
+An unedited inspector has **Close**, which writes nothing.
+
+108 mock browser checks and 24 real-local-server checks passed, including
+quick choices, audit/evidence preservation, stale saves, duplicate clicks,
+filter retention, both inspector targets, failures and phone layouts.
+The server executable is byte-identical to the previous release (SHA-256
+`b68f164995195153388139bc3db796ac5d7e3ab0d4d9311ffaa068c264e2eb05`).
+Public HTTPS verification passed for exact release assets, row choices,
+Save & close and the 390 px phone layout. Production checks matched all six
+frozen scopes and preserved credentials, source records and all 14 assessments;
+integrity and foreign keys passed. Reports are retained in the release directory.
+
+Fresh online backup `before-owntube-quick-languages-20261113-1` is retained under
+`/home/marko/Backups/youtube-observer/` and locally under
+`~/.local/state/youtube-observer/backups/`; SHA-256
+`78697acad9abd6f91a32b294b2b4d2629e8e7d741a84bcef835becbd92c2bcea`.
+It contains 297,130 events, 457 evidence, 703 slices, 471 metadata versions,
+3 devices, 2 people, 14 assessments and 1 context override.
+
+Image-only rollback:
+`kamal rollback owntube-video-audio-20261113-1 -c deploy/deploy.yml`.
+
+### Previous release: `owntube-video-audio-20261113-1`
 
 Source `3a4dbaec8`, deployed through
 `kamal app boot -c deploy/deploy.yml --version owntube-video-audio-20261113-1`.

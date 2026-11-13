@@ -81,7 +81,18 @@ The Languages follow-up `owntube-languages-20261113-2` uses the same process fro
 commit `4369a6835`, with mobile wrapping and content-hashed module assets. Its
 backend binary is identical to `-1`; the same backup and image-only rollback apply.
 
-## Current video History and selected-audio release
+## Current quick language controls release
+
+`owntube-quick-languages-20261113-1`, source `d9e0a6b8b`, adds immediate
+**? / DE / EN / BCS** row choices and fixes the inspector footer: edited forms
+offer **Save & close**, persisting the selected target before closing.
+108 mock and 24 real-local-server checks passed. The server executable matches
+the previous release byte-for-byte. Fresh verified online backups include the
+14 existing assessments and the TV context correction.
+Release details and rollback:
+[`server/README.md`](../server/README.md#current-release-owntube-quick-languages-20261113-1).
+
+## Previous video History and selected-audio release
 
 `owntube-video-audio-20261113-1`, source `3a4dbaec8`, groups History once per
 video across the scope, retaining visits and exact evidence underneath. It decodes
@@ -95,7 +106,7 @@ frozen baselines and preserved credentials, assessments and the TV correction.
 Chrome 0.2.1 is a separate collector update staged at its existing installed path;
 reload YouTube Observer and refresh YouTube tabs to activate it.
 Release identity, verification and image-only rollback:
-[`server/README.md`](../server/README.md#current-release-owntube-video-audio-20261113-1).
+[`server/README.md`](../server/README.md#previous-release-owntube-video-audio-20261113-1).
 
 ## Previous grouped History release
 
