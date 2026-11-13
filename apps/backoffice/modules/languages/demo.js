@@ -103,6 +103,9 @@ const RECORDS = [
     (v, t) => chrome(t, 'A house, two countries, one kitchen.', { sel: 'en', def: 'en' }), [[35, 10, 598, 0, 0]]],
   ['demo-living', 'm-cabride', 'demoCabRide23', 'Swiss rail in winter: cab ride over the pass', 'Alpine Rail Archive', ['de', 'audio-track', 'high'],
     (v, t) => android(v, t, 'Cab ride over the pass in snow.', { selected: 'de' }), [[60, 18, 4360, 0, 0]]],
+  // A long multi-word channel name: on a phone it must wrap inside the row, not widen the page.
+  ['demo-laptop', 'm-neon', 'demoNeonSign24', 'How neon signs are bent by hand, one glass tube at a time', 'Northfield Workshop Restoration and Repair Notes', ['en', 'audio-track', 'high'],
+    (v, t) => chrome(t, 'Bending glass tubes over a ribbon burner.', { sel: 'en', def: 'en' }), [[0, 15, 610, 0, 0]]],
 ];
 
 // Mirrors `baseline`: the original collector interpretation, always an estimate needing review.

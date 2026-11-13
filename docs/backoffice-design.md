@@ -341,7 +341,9 @@ own, listed apart from *unknown* (`und`), which is marked as needing a decision.
 - **Videos:** one row per recorded version on one device. Each shows the current interpretation
   (status glyph and word, plus "Needs review") beside the collector's own value, watch time with its
   context, and *Review* or *Inspect*. Status, language and search narrow rows only; the scope
-  numbers never move.
+  numbers never move. The channel · device · last-played line keeps each item whole when it fits
+  on the next line. A channel or device name longer than the row wraps inside it, never widening
+  the page.
 
 **Inspector, for one recorded version.**
 - **Scope notice:** this exact metadata version on this device; other devices, dubs and versions

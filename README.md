@@ -57,6 +57,9 @@ starting the server. It uses the same owner login, with independently scoped
 totals, video/evidence review, persisted manual classifications, and optional
 analysis providers. [Module details](docs/languages-module.md).
 
+Production: <https://ytdash.gromobran.com/modules/languages/>. Use the existing
+owner login; this page reads actual viewing records.
+
 ### Android
 
 ```sh

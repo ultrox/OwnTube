@@ -275,7 +275,44 @@ All 45 Android unit regressions, a disposable-backend HTTP contract test and the
 The ARM64 APK was installed on the Shield on 2026-11-13; versionCode 2466 and the retained app-data
 directory were verified. Post-update playback capture has not yet been checked on-device.
 
-### Current release: `compact-20261113-4` (Android guide)
+### Current release: `owntube-languages-20261113-1`
+
+Deployed from OwnTube commit `7e3b61811` on 2026-11-13 through Kamal's
+health-gated handover. Languages review is live at
+<https://ytdash.gromobran.com/modules/languages/> alongside the existing History UI.
+The module adds revisioned corrections and saved-audio analysis without changing
+original evidence, collector estimates or global viewing totals.
+
+Container `c3eeccdf826c`, image
+`sha256:b48c2fce77857c3f15c3a6b30cb6ec6cff52f620eae74524905dead5a111ced1`.
+Source archive SHA-256:
+`1284a8f663f25e79e92323922b697983f4adc6747eb643cc2069981d5bcf2497`.
+Source and verification records:
+`/home/marko/releases/youtube-observer/owntube-languages-20261113-1/`.
+
+The candidate restored a production backup and matched all six frozen full
+History responses. Production retained all original events, evidence, metadata,
+people, device credentials and viewing identities; integrity and foreign-key
+checks passed. Six historical-cutoff summaries match before deployment. New
+uploads continued during verification; pre-restart paging snapshots correctly
+expire when the ingestion generation advances. Languages and History agree on
+watch totals and foreground/background/unspecified time.
+
+Verified online backup `before-owntube-languages-20261113-1` exists under
+`/home/marko/Backups/youtube-observer/` and
+`~/.local/state/youtube-observer/backups/` on the Mac, with the owner key.
+Database SHA-256:
+`c52c13cbf16febf22d7914661ca0ee3eb43b59cc5fc50ae81c85a0b07c448b13`.
+Both copies passed integrity, foreign-key, hash and count checks: 297,128 events,
+444 evidence records, 662 viewing slices, 458 metadata versions, 3 devices,
+2 people. The new assessment table started empty; no fictional fixtures or test
+classifications were added to production. No external analyzer is configured.
+
+Image-only rollback, preserving the current volume:
+`kamal rollback compact-20261113-4 -c deploy/deploy.yml` from the OwnTube root.
+The previous image and stopped container remain available.
+
+### Previous release: `compact-20261113-4` (Android guide)
 
 Deployed on 2026-11-13 through Kamal, container `903e7e621052`, image
 `sha256:8d2985f0a198d0fa0320cc307fb0bc1dbf2e38e811dcb1cd6b9f2d1445bc1649`.
@@ -339,7 +376,7 @@ Uses the same setup as Tixbee: `marko@hserver`, a remote AMD64 build, the SSH-fo
 registry, and the shared Kamal proxy behind Cloudflare Tunnel. Run from the repository root:
 
 ```sh
-kamal deploy -c youtube-observer/config/deploy.yml
+kamal deploy -c deploy/deploy.yml
 ```
 
 The first release (`production-20261106-1`) was built directly on hserver after the

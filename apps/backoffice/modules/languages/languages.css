@@ -225,7 +225,9 @@ textarea.input { resize: vertical; min-height: 64px; font-family: var(--font-con
 }
 .vrow__title button:hover { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
 .meta { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 7px; margin-top: 4px; color: var(--ink-2); font-size: 13px; line-height: 1.4; }
-.meta > * { white-space: nowrap; }
+/* Items move to the next line whole when they fit there; one longer than the row (a long channel
+   or device name) wraps inside it instead of widening the page. */
+.meta > *, .ins__meta > * { min-width: 0; overflow-wrap: anywhere; }
 .meta > :not(:last-child)::after { content: "·"; margin-left: 7px; color: var(--ink-3); }
 .assess { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-top: 7px; font-size: 13.5px; }
 .assess__lang { display: inline-flex; align-items: baseline; gap: 6px; font-weight: 600; }

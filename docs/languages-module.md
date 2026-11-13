@@ -76,6 +76,10 @@ The production image packages the module alongside the existing history UI. The
 old UI remains available during the broader backoffice migration. No module code
 is loaded or queried just to view global History.
 
+The production build gives CSS and the complete JavaScript import graph
+content-hashed filenames, so a release loads matching assets through browser/CDN
+caches. The design preview continues to serve the original source filenames.
+
 This is a built-in module with explicit UI/API/storage boundaries. A dynamic
 plugin system is unnecessary for this first release.
 

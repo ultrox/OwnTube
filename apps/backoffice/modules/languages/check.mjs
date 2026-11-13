@@ -39,7 +39,16 @@ async function startMock() {
   const { createDemoApi } = await import(path.join(DIR, 'demo.js'));
   const api = await createDemoApi({ external: true });
   const KEY = 'correct horse battery';
-  const mock = { fail: null, expire: false, external: false, xss: false, requests: [] };
+  const mock = { fail: null, expire: false, external: false, xss: false, long: false, requests: [] };
+  // Worst case for phone wrapping: an unbroken 60-character channel token and a long device label.
+  const longRow = () => ({
+    deviceId: 'demo-laptop', deviceLabel: 'Laptop in the guest apartment upstairs (Chrome profile two)', metadataId: 'mock-long', videoId: 'longLong001',
+    title: 'Restoration notes', channel: 'Restoration_and_repair_notes_from_a_small_workshop_in_the_alps', seconds: 120,
+    foregroundSeconds: 100, backgroundSeconds: 20, unspecifiedSeconds: 0, lastWatched: Date.now() - 120000, evidenceId: null,
+    recorded: { lang: 'en', source: 'collector-source-name-that-is-unusually-long-and-unbroken', conf: 'medium' },
+    assessment: { lang: 'en', status: 'estimated', source: 'collector:collector-source-name-that-is-unusually-long-and-unbroken', confidence: 'medium', reason: 'Original collector estimate.' },
+    revision: 0, needsReview: true,
+  });
   const xssText = JSON.stringify({ schemaVersion: 1, algorithmVersion: 'language-v2', title: '<img src=x onerror="window.__langXss=4">', description: '</pre><script>window.__langXss=5</script> & <b>text</b>', descriptionSource: 'videoDetails.shortDescription', descriptionTruncated: false, selectedAudioLanguage: '', defaultAudioLanguage: '', captions: [] });
   const xssRow = () => ({
     deviceId: 'demo-laptop', deviceLabel: 'Laptop', metadataId: 'mock-xss', videoId: 'xssXss00001', title: '<img src=x onerror="window.__langXss=1"> Hostile title',
@@ -77,12 +86,17 @@ async function startMock() {
           const data = await api.languages(Object.fromEntries(url.searchParams));
           if (!mock.external) data.providers = data.providers.filter((p) => p.id !== 'external');
           if (mock.xss) data.videos.unshift(xssRow());
+          if (mock.long) data.videos.unshift(longRow());
           return send(res, 200, data);
         }
         if (url.pathname === '/api/modules/languages/evidence') {
           if (url.searchParams.get('metadata') === 'mock-xss') {
             const r = xssRow();
             return send(res, 200, { videoId: r.videoId, title: r.title, deviceId: r.deviceId, metadataId: r.metadataId, evidenceId: r.evidenceId, evidenceText: xssText, evidence: JSON.parse(xssText), recorded: r.recorded, assessment: r.assessment, revision: 0, history: [{ revision: 1, action: 'manual', lang: 'en', status: 'confirmed', source: 'manual', confidence: 'human', reason: '<script>window.__langXss=6</script>', note: '<img src=x onerror="window.__langXss=7">', createdAt: Date.now() }], historyLimit: 100, historyHasMore: true });
+          }
+          if (url.searchParams.get('metadata') === 'mock-long') {
+            const r = longRow();
+            return send(res, 200, { videoId: r.videoId, title: r.title, deviceId: r.deviceId, metadataId: r.metadataId, evidenceId: null, evidenceText: null, evidence: null, recorded: r.recorded, assessment: r.assessment, revision: 0, history: [], historyLimit: 100, historyHasMore: false });
           }
           return send(res, 200, await api.evidence(url.searchParams.get('device'), url.searchParams.get('metadata')));
         }
@@ -359,6 +373,56 @@ try {
     await p.click('[data-key="f:days:30"]');
     ok(await p.waitFor(() => !!document.getElementById('owner-key')), 'an expired session returns to sign-in');
     ok(await signIn(), 'signing in again restores the view');
+
+    console.log('Phone width with long real-world text');
+    // The production overflow: a long channel name in a review row could not wrap (nowrap) and
+    // pushed the page 5 px wide at 390 px. Same sequence as the production check: review filter,
+    // open and close the first inspector, then 390 × 844 at scale 1 and two animation frames.
+    const overflowAt390 = async () => {
+      await p.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: false });
+      return p.eval(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(
+        [...document.querySelectorAll('body *')].filter((e) => e.getBoundingClientRect().right > innerWidth + 1)
+          .map((e) => `${e.tagName.toLowerCase()}.${String(e.className).trim().replace(/\s+/g, '.')} “${e.textContent.trim().slice(0, 40)}” right ${Math.round(e.getBoundingClientRect().right)}`),
+      )))));
+    };
+    await p.size(1440, 900);
+    await p.click('[data-key="f:days:7"]');
+    await p.click('[data-key="f:status:review"]');
+    ok(await p.waitFor(() => [...document.querySelectorAll('[data-videos] .meta')].some((m) => m.textContent.includes('Northfield Workshop Restoration and Repair Notes'))), 'fixture: a review row with a long multi-word channel name is listed');
+    await p.click('[data-videos] .vrow [data-action="open"]');
+    await p.waitFor(() => !!document.querySelector('#dlg[open] [data-assessment]'));
+    await p.key('Escape', 27);
+    let over = await overflowAt390();
+    ok(over.length === 0, `390 px after the inspector: nothing wider than the viewport ${over.length ? JSON.stringify(over) : ''}`);
+    // Fully visible = the whole value, inside its row (not just inside the viewport), on more than one line.
+    const contained = (rowSel, text) => p.eval((sel, t) => {
+      const row = document.querySelector(sel);
+      const s = row && [...row.querySelectorAll('.meta > span')].find((x) => x.textContent.startsWith(t));
+      if (!s) return 'missing';
+      const r = s.getBoundingClientRect(); const body = row.querySelector('.vrow__body').getBoundingClientRect();
+      const cs = getComputedStyle(s); const lh = cs.lineHeight.endsWith('px') ? parseFloat(cs.lineHeight) : parseFloat(cs.lineHeight) * parseFloat(cs.fontSize);
+      return { full: s.textContent.startsWith(t), inside: r.left >= body.left - 0.5 && r.right <= body.right + 0.5, lines: Math.round(r.height / lh) };
+    }, rowSel, text);
+    const neon = await contained('[data-row="demo-laptop:m-neon"]', 'Northfield Workshop Restoration and Repair Notes');
+    ok(neon.full && neon.inside && neon.lines >= 2, `the long channel name wraps inside its row and stays fully visible ${JSON.stringify(neon)}`);
+    await control({ long: true });
+    await p.size(1440, 900);
+    await p.click('[data-key="f:status:all"]');
+    await p.click('[data-key="f:status:review"]');
+    await p.waitFor(() => !!document.querySelector('[data-row="demo-laptop:mock-long"]'));
+    over = await overflowAt390();
+    ok(over.length === 0, `390 px with an unbroken 60-character channel and a long device label: nothing overflows ${over.length ? JSON.stringify(over) : ''}`);
+    const token = await contained('[data-row="demo-laptop:mock-long"]', 'Restoration_and_repair_notes_from_a_small_workshop_in_the_alps');
+    const label = await contained('[data-row="demo-laptop:mock-long"]', 'Laptop in the guest apartment upstairs (Chrome profile two)');
+    ok(token.full && token.inside && token.lines >= 2 && label.full && label.inside, `the unbroken channel token and long device label stay whole and inside the row ${JSON.stringify({ token, label })}`);
+    await p.eval(() => document.querySelector('[data-row="demo-laptop:mock-long"]').scrollIntoView({ block: 'start' }));
+    await p.shot('mock-phone-long-rows');
+    await p.eval(() => document.querySelector('[data-key="open:demo-laptop:mock-long"]').click());
+    await p.waitFor(() => !!document.querySelector('#dlg[open] [data-assessment]'));
+    ok(await p.eval(() => { const d = document.getElementById('dlg'); const m = d.querySelector('.ins__meta'); return d.scrollWidth <= d.clientWidth + 1 && m.textContent.includes('Restoration_and_repair_notes_from_a_small_workshop_in_the_alps') && m.getBoundingClientRect().right <= d.getBoundingClientRect().right; }), 'the inspector at 390 px wraps the same long values instead of scrolling sideways');
+    await p.shot('mock-phone-long-inspector');
+    await p.key('Escape', 27);
+    await control({ long: false });
 
     console.log('Phone and demo');
     await p.size(390, 844, true);

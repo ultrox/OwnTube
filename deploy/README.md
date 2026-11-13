@@ -57,3 +57,20 @@ environment/secret store, not the web bundle. Without them, saved-audio-metadata
 analysis and manual corrections remain available. See
 [`docs/languages-module.md`](../docs/languages-module.md) for the bounded provider
 contract. No external service is configured by this repository.
+
+## OwnTube production cutover — 2026-11-13
+
+Release `owntube-languages-20261113-1` was built on hserver from committed
+OwnTube source `7e3b61811`, tagged
+`localhost:5555/youtube-observer:owntube-languages-20261113-1`, then started using:
+
+```sh
+kamal app boot -c deploy/deploy.yml --version owntube-languages-20261113-1
+```
+
+This uses the existing server-local build path documented in `server/README.md`;
+the local-registry transfer path was not needed. Git archives supply tracked
+server/backoffice/deploy sources, excluding local data and credentials. The actual
+AMD64 image passed runtime-user asset checks and a restored-production-copy
+comparison before handover. Backups, image identity and rollback are recorded in
+[`server/README.md`](../server/README.md#current-release-owntube-languages-20261113-1).

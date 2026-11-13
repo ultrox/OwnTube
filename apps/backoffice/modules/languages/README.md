@@ -70,7 +70,7 @@ node apps/backoffice/modules/languages/check.mjs
 node apps/backoffice/modules/languages/check.mjs --live http://127.0.0.1:3211 --token-file <admin-token>
 ```
 
-- **Mock (47 assertions).** An in-process mock of the contract on an ephemeral loopback port, with
+- **Mock (53 assertions).** An in-process mock of the contract on an ephemeral loopback port, with
   auth, recorded requests and injected failures, drives the real `api.js` in isolated headless
   Chromium. It covers:
   - the sign-in gate and wrong key
@@ -80,6 +80,9 @@ node apps/backoffice/modules/languages/check.mjs --live http://127.0.0.1:3211 --
   - the analysis lock, reset, provider choice and stale 409 → refresh
   - a server error and retry, and session expiry
   - hostile titles, reasons, notes and evidence rendering as text
+  - long channel and device names at 390 px: a multi-word name, an unbroken 60-character token
+    and a long device label wrap inside the row and the inspector, with nothing wider than the
+    viewport (the production overflow of release `-1`)
   - the phone layout, and demo labelling with zero API calls
 - **Live (14).** Requires a loopback URL. It runs the same UI against a real local server seeded
   with `tests/seed-dev.mjs`:

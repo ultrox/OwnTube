@@ -44,3 +44,27 @@ async function copyModule(source, destination) {
   }
 }
 await copyModule('modules', 'dist/modules');
+
+// Version the complete module graph: an updated import must also change the
+// entry URL, so browser/CDN caches cannot mix releases.
+const languageRoot = 'dist/modules/languages';
+async function versionLanguageAsset(file, contents) {
+  const hash = createHash('sha256').update(contents).digest('hex').slice(0, 16);
+  const versioned = file.replace(/(\.[^.]+)$/, `.${hash}$1`);
+  await fs.writeFile(`${languageRoot}/${versioned}`, contents);
+  return versioned;
+}
+let languageScript = await fs.readFile(`${languageRoot}/languages.js`, 'utf8');
+for (const file of ['api.js', 'demo.js']) {
+  const name = await versionLanguageAsset(file, await fs.readFile(`${languageRoot}/${file}`));
+  languageScript = languageScript.replaceAll(`./${file}`, `./${name}`);
+}
+let languageHtml = await fs.readFile(`${languageRoot}/index.html`, 'utf8');
+for (const [file, contents] of [
+  ['languages.js', languageScript],
+  ['languages.css', await fs.readFile(`${languageRoot}/languages.css`)],
+]) {
+  const name = await versionLanguageAsset(file, contents);
+  languageHtml = languageHtml.replaceAll(`"${file}"`, `"${name}"`);
+}
+await fs.writeFile(`${languageRoot}/index.html`, languageHtml);
