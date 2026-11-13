@@ -400,6 +400,23 @@ own, listed apart from *unknown* (`und`), which is marked as needing a decision.
 
   After a save the same version stays selected.
 
+**Compare periods.** A second view for two saved period groups, read top to bottom as a short
+report.
+- **Setup band:** names, saved periods, *+ Add period* beside *+ Add language*, and the shared
+  language chips. The date editor stays folded until asked for, so the result leads.
+- **The lead:** one Charter sentence naming the higher group and its per-day difference, then both
+  rates as bars on one scale with the difference hatched. Groups have two identity colours (indigo
+  and amber, `--cmp-a`/`--cmp-b`) that never mean good or bad, and neither group is assumed to be
+  the baseline. A percentage appears only when the lower rate is above zero.
+- **Comparability:** one cell per selected calendar day, dashed cells for the days the shorter
+  group lacks, today hatched. It states the gap and the denominator and claims nothing about
+  confidence or cause.
+- **By language:** paired bars on one shared scale with the higher group and difference per row.
+- **Behind the averages:** the plain ruled totals.
+
+Every figure is also text; pictures carry a text equivalent; nothing animates. Details are in the
+module's `README.md`.
+
 **Demo, never as a fallback.** `?demo=1` loads a separate in-memory adapter with fictional data,
 behind a permanent strip, and makes no API calls. Live failures show the server's error and *Try
 again*. The design preview links to the demo through a `modules → ../modules` symlink, so there is
