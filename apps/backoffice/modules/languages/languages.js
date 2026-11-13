@@ -18,13 +18,15 @@ const PAGE_SIZE = 20;
 const DAYS = [7, 30, 90];
 const STATUSES = [['all', 'All'], ['review', 'Needs review'], ['confirmed', 'Confirmed'], ['estimated', 'Estimated']];
 const SPECIAL = { und: 'Unknown', mul: 'Mixed languages', zxx: 'No speech' };
-const COMMON = ['de', 'en', 'sr', 'hr', 'bs', 'fr', 'it', 'es', 'pt', 'nl', 'pl', 'ru', 'uk', 'tr', 'ar', 'hi', 'ja', 'ko', 'zh'];
+const COMMON = ['de', 'en', 'bcs', 'sr', 'hr', 'bs', 'fr', 'it', 'es', 'pt', 'nl', 'pl', 'ru', 'uk', 'tr', 'ar', 'hi', 'ja', 'ko', 'zh'];
+const QUICK_LANGS = [['und', '?'], ['de', 'DE'], ['en', 'EN'], ['bcs', 'BCS']];
 const LANG_CODE = /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/;
 const displayNames = (() => { try { return new Intl.DisplayNames(['en'], { type: 'language' }); } catch { return null; } })();
 
 function langName(code) {
   if (!code) return 'Unknown';
   if (SPECIAL[code]) return SPECIAL[code];
+  if (code === 'bcs') return 'Bosnian / Croatian / Serbian';
   try {
     const name = displayNames?.of(code);
     return name && name !== code ? name : code;
@@ -108,6 +110,7 @@ const state = {
   loading: false,
   error: null,
   dialog: null,
+  quick: new Map(),
 };
 let generation = 0;
 let linkedMetadata = new URLSearchParams(location.hash.replace(/^#/, '')).get('metadata');
@@ -193,6 +196,7 @@ function readable(data) {
 }
 
 function signedOut(message = '') {
+  state.quick.clear();
   state.auth = 'signedOut';
   state.data = null;
   state.login = { busy: false, error: message };
@@ -555,12 +559,31 @@ function videoRow(g) {
         <h3 class="vrow__title"><button type="button" data-action="open" data-id="${esc(id)}" data-key="open:${esc(id)}">${esc(title)}</button></h3>
         <p class="meta">${g.channel ? `<span>${esc(g.channel)}</span>` : ''}<span>${esc(devices.length > 3 ? `${devices.length} devices` : devices.join(', '))}</span>${g.lastWatched ? `<span>last played ${esc(ago(g.lastWatched))}</span>` : ''}${n > 1 ? `<span data-version-count>${n} recorded versions</span>` : ''}</p>
         <p class="assess">${groupLangHTML(g)}${g.needsReview ? '<span class="flag-review">Needs review</span>' : ''}${narrowed && n > 1 && matched && matched < n ? `<span class="why" data-matched>${matched} of ${n} versions match</span>` : ''}</p>
+        ${quickLanguagesHTML(g)}
       </div>
       <div class="vrow__side">
         <p class="nums"><span><b>${esc(spent(g.seconds))}</b> watched</span>${ctx ? `<span class="nums__ctx">${esc(ctx)}</span>` : ''}</p>
         <button type="button" class="btn btn--sm ${g.needsReview ? 'btn--review' : ''}" data-action="open" data-id="${esc(id)}" data-key="act:${esc(id)}">${g.needsReview ? 'Review' : 'Inspect'}<span class="vh"> ${esc(title)}</span></button>
       </div>
     </li>`;
+}
+
+function quickLanguagesHTML(g) {
+  const id = String(g.id);
+  const job = state.quick.get(id);
+  const langs = groupLangs(g);
+  const current = langs.length === 1 ? langs[0].lang : null;
+  const scope = g.versions.length === 1 ? 'this recorded version' : `all ${g.versions.length} versions in this scope`;
+  const disabled = job?.busy || job?.refresh || state.loading || state.error;
+  return `<div class="quick-language" aria-busy="${!!job?.busy}">
+    <div class="seg" role="group" aria-label="Set language for ${esc(scope)}">
+      ${QUICK_LANGS.map(([code, label]) => `<button type="button" data-action="quick-language" data-id="${esc(id)}" data-lang="${code}" data-key="quick:${esc(id)}:${code}"
+        aria-pressed="${current === code}" aria-label="${esc(langName(code))}" title="Set ${esc(scope)} to ${esc(langName(code))}" ${disabled ? 'disabled' : ''}>${label}</button>`).join('')}
+    </div>
+    <span class="why">${g.versions.length > 1 ? `All ${g.versions.length} versions` : 'Set language'}</span>
+    ${job ? `<span class="${job.error ? 'flag-review' : 'why'}" data-quick-status role="${job.error ? 'alert' : 'status'}">${esc(job.text)}</span>` : ''}
+    ${job?.refresh ? `<button type="button" class="link-btn" data-action="quick-refresh" data-id="${esc(id)}" data-key="quick-refresh:${esc(id)}" ${state.loading ? 'disabled' : ''}>Refresh</button>` : ''}
+  </div>`;
 }
 
 /* ------------------------------------------------------------------ inspector */
@@ -577,7 +600,7 @@ async function openInspector(id, opener, selected) {
   if (!group) return;
   state.dialog = {
     id, group, selected: selected || versionKey(group.versions[0]), target: 'all', request: 0,
-    data: null, loading: true, error: null, alert: null, busy: false,
+    data: null, loading: true, error: null, alert: null, busy: false, dirty: false,
     raw: 'exact', rawOpen: false, openerKey: opener?.getAttribute?.('data-key') || null,
     form: { lang: null, other: '', note: '', provider: providerList()[0].id },
   };
@@ -668,7 +691,7 @@ function inspectorHTML() {
       <h2 id="dlg-title"><span class="label" style="display:block;margin-bottom:6px" aria-hidden="true">Language · this video</span><span class="vh">Language for </span>${esc(title)}</h2>
       <button type="button" class="icon-btn" data-action="close" data-key="dlg:close" aria-label="Close">${ICON.close}</button>
     </div>`;
-  const foot = `<div class="dialog__foot"><span class="why">${DEMO ? 'Demo data · nothing is saved to a server' : 'Saved evidence · not a fresh YouTube lookup'}</span><button type="button" class="btn btn--sm" data-action="close" data-key="dlg:done">Done</button></div>`;
+  const foot = `<div class="dialog__foot"><span class="why">${DEMO ? 'Demo data · nothing is saved to a server' : 'Saved evidence · not a fresh YouTube lookup'}</span><button type="button" class="btn btn--sm ${d.dirty ? 'btn--primary' : ''}" data-action="done" data-key="dlg:done" ${d.busy || (d.dirty && (d.loading || !d.data)) ? 'disabled' : ''}>${d.busy ? 'Saving…' : d.dirty ? 'Save & close' : 'Close'}</button></div>`;
   const meta = `<p class="ins__meta">${g.channel ? `<span>${esc(g.channel)}</span>` : ''}<span class="mono">${esc(g.videoId || '')}</span><span>${esc(devices.join(', '))}</span><span data-version-count>${esc(versionsText(n))}</span><span>${esc(spent(g.seconds))} watched</span></p>`;
 
   // What a decision here changes, in one sentence.
@@ -722,20 +745,20 @@ function formHTML(g, d) {
   return `<form class="ins__form" data-form="manual" novalidate>
       <div class="ins__row">
         <div><label class="label" for="f-lang">Spoken language</label>
-          <select class="select" id="f-lang" data-action="form-lang" data-key="ins:lang">
+          <select class="select" id="f-lang" data-action="form-lang" data-key="ins:lang" ${busy ? 'disabled' : ''}>
             <optgroup label="Languages">${COMMON.map(option).join('')}</optgroup>
             <optgroup label="Not one spoken language">${['mul', 'zxx', 'und'].map(option).join('')}</optgroup>
             <option value="__other" ${isOther ? 'selected' : ''}>Other code…</option>
           </select></div>
         <div ${isOther ? '' : 'hidden'}><label class="label" for="f-other">Language code</label>
-          <input class="input" id="f-other" maxlength="35" spellcheck="false" autocomplete="off" placeholder="e.g. pt-BR" value="${esc(otherValue)}" data-key="ins:other"></div>
+          <input class="input" id="f-other" maxlength="35" spellcheck="false" autocomplete="off" placeholder="e.g. pt-BR" value="${esc(otherValue)}" data-key="ins:other" ${busy ? 'disabled' : ''}></div>
       </div>
       <div><label class="label" for="f-note">Note · why (recommended)</label>
-        <textarea class="input" id="f-note" rows="2" maxlength="500" placeholder="What you heard, e.g. German dub, original is English" data-key="ins:note">${esc(d.form.note)}</textarea></div>
+        <textarea class="input" id="f-note" rows="2" maxlength="500" placeholder="What you heard, e.g. German dub, original is English" data-key="ins:note" ${busy ? 'disabled' : ''}>${esc(d.form.note)}</textarea></div>
       ${n > 1 ? `<div><span class="label" id="f-target">Apply to</span>
         <div class="seg ins__target" role="group" aria-labelledby="f-target">
-          <button type="button" aria-pressed="${d.target === 'all'}" data-action="target" data-value="all" data-key="ins:target:all">All ${n} versions</button>
-          <button type="button" aria-pressed="${d.target === 'one'}" data-action="target" data-value="one" data-key="ins:target:one">Selected version only</button>
+          <button type="button" aria-pressed="${d.target === 'all'}" data-action="target" data-value="all" data-key="ins:target:all" ${busy ? 'disabled' : ''}>All ${n} versions</button>
+          <button type="button" aria-pressed="${d.target === 'one'}" data-action="target" data-value="one" data-key="ins:target:one" ${busy ? 'disabled' : ''}>Selected version only</button>
         </div></div>` : ''}
       <div class="ins__actions">
         <button type="submit" class="btn btn--primary" data-key="ins:save" ${busy ? 'disabled' : ''}>${n === 1 ? 'Save classification' : all ? `Save for all ${n} versions` : 'Save for this version'}</button>
@@ -912,6 +935,46 @@ function renderDialog() {
 
 /* ------------------------------------------------------------------ actions */
 
+// Same atomic, revision-checked manual decision as the inspector, directly from a row.
+async function quickLanguage(id, lang) {
+  const g = state.data?.videos.find((g) => String(g.id) === id);
+  if (!g || state.loading || state.error || state.quick.get(id)?.busy || state.quick.get(id)?.refresh
+    || !QUICK_LANGS.some(([code]) => code === lang)) return;
+  const job = { busy: true, text: 'Saving…' };
+  state.quick.set(id, job);
+  render();
+  try {
+    await api.assessBulk({
+      videoId: g.videoId,
+      targets: g.versions.map((v) => ({ deviceId: v.deviceId, metadataId: v.metadataId, baseRevision: Number(v.revision) || 0 })),
+      action: 'manual', lang,
+    });
+    if (state.quick.get(id) !== job) return;
+    job.text = `Saved · ${langName(lang)}`;
+    await load({ keepPage: true });
+    say(`${g.title || g.videoId}: ${job.text}.`);
+  } catch (error) {
+    if (state.quick.get(id) !== job) return;
+    if (error instanceof ApiError && error.status === 401) { signedOut('Your session ended. Sign in again.'); return; }
+    job.error = true;
+    job.refresh = true;
+    job.text = error instanceof ApiError && error.status === 409
+      ? 'Nothing was saved. This video changed; refresh before choosing again.'
+      : `${error.message || 'Could not save.'} Refresh to check the saved language.`;
+  } finally {
+    if (state.quick.get(id) === job) {
+      job.busy = false;
+      render();
+    }
+  }
+}
+
+async function refreshQuickLanguage(id) {
+  const job = state.quick.get(id);
+  await load({ keepPage: true });
+  if (!state.error && state.quick.get(id) === job) { state.quick.delete(id); render(); }
+}
+
 function readLang() {
   const sel = $('#f-lang');
   if (!sel) return null;
@@ -921,7 +984,7 @@ function readLang() {
 
 // Classify or reset every version of the video at once (one atomic request carrying each
 // version's expected revision), or only the selected version. Analysis is always that version's.
-async function assess(action) {
+async function assess(action, { close = false } = {}) {
   const d = state.dialog;
   if (!d?.data || d.busy) return;
   const g = d.group;
@@ -972,11 +1035,15 @@ async function assess(action) {
       text = `${words[action]}: ${langName(a.lang)} (${a.lang || 'und'}), ${STATUS_WORD[a.status] || a.status || 'updated'}. Revision ${res?.revision ?? ''}.`;
     }
     d.alert = { kind: 'ok', text };
-    if (action !== 'analyze') d.form.note = '';
-    d.busy = false;
+    state.quick.delete(d.id);
+    if (action !== 'analyze') { d.form.note = ''; d.dirty = false; }
     await refreshGroup();
+    if (state.dialog !== d) return;
+    d.busy = false;
+    renderDialog();
     say(text);
-    $('#dlg [data-key="ins:alert"]')?.focus();
+    if (close) closeDialog();
+    else $('#dlg [data-key="ins:alert"]')?.focus();
   } catch (error) {
     if (state.dialog !== d) return;
     d.busy = false;
@@ -991,6 +1058,13 @@ async function assess(action) {
     renderDialog();
     $('#dlg [data-key="ins:alert"]')?.focus();
   }
+}
+
+function markFormDirty() {
+  if (!state.dialog) return;
+  state.dialog.dirty = true;
+  const button = $('#dlg [data-key="dlg:done"]');
+  if (button) { button.textContent = 'Save & close'; button.classList.add('btn--primary'); }
 }
 
 let liveRegionTimer = null;
@@ -1019,7 +1093,10 @@ document.addEventListener('click', (e) => {
     case 'clear': f.language = 'all'; f.status = 'all'; f.query = ''; f.page = 1; load(); break;
     case 'retry': load({ keepPage: true }); break;
     case 'open': openInspector(el.dataset.id, el); break;
+    case 'quick-language': quickLanguage(el.dataset.id, el.dataset.lang); break;
+    case 'quick-refresh': refreshQuickLanguage(el.dataset.id); break;
     case 'close': closeDialog(); break;
+    case 'done': if (state.dialog?.dirty) assess('manual', { close: true }); else closeDialog(); break;
     case 'analyze': assess('analyze'); break;
     case 'reset': assess('reset'); break;
     case 'ins-refresh': if (state.dialog) { state.dialog.alert = null; refreshGroup(); } break;
@@ -1047,6 +1124,7 @@ document.addEventListener('change', (e) => {
     d.rawOpen = false;
     loadVersion();
   } else if (t.dataset.action === 'form-lang' && state.dialog) {
+    markFormDirty();
     state.dialog.form.lang = t.value;
     state.dialog.form.note = $('#f-note')?.value || '';
     renderDialog();
@@ -1065,8 +1143,10 @@ document.addEventListener('input', (e) => {
     clearTimeout(queryTimer);
     queryTimer = setTimeout(() => { state.filters.query = t.value.slice(0, 200); state.filters.page = 1; load(); }, 300);
   } else if (t.id === 'f-other' && state.dialog) {
+    markFormDirty();
     state.dialog.form.other = t.value;
   } else if (t.id === 'f-note' && state.dialog) {
+    markFormDirty();
     state.dialog.form.note = t.value;
   }
 });

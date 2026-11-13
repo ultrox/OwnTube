@@ -113,7 +113,11 @@ async function startMock() {
           return send(res, 200, await api.evidence(url.searchParams.get('device'), url.searchParams.get('metadata')));
         }
         if (url.pathname === '/api/modules/languages/assessment') return send(res, 200, await api.assess(body));
-        if (url.pathname === '/api/modules/languages/assessment/bulk') return send(res, 200, await api.assessBulk(body));
+        if (url.pathname === '/api/modules/languages/assessment/bulk') {
+          if (mock.saveDelay) await sleep(mock.saveDelay);
+          if (mock.fail === 'save500') return send(res, 500, { error: 'Could not save classification.' });
+          return send(res, 200, await api.assessBulk(body));
+        }
       } catch (error) {
         return send(res, error.status || 500, { error: error.message });
       }
@@ -497,6 +501,102 @@ try {
     ok(await p.waitFor(() => !!document.getElementById('owner-key')), 'an expired session returns to sign-in');
     ok(await signIn(), 'signing in again restores the view');
 
+    console.log('Quick row languages');
+    const quickGroup = async () => (await inPage('/api/modules/languages', { days: 7, group: 'video', query: 'demoWeekly05' })).videos[0];
+    const quickBefore = await quickGroup();
+    const originalEvidence = await inPage('/api/modules/languages/evidence', { device: quickBefore.versions[0].deviceId, metadata: quickBefore.versions[0].metadataId });
+    ok(await p.eval(() => [...document.querySelectorAll('[data-row="demoWeekly05"] [data-action="quick-language"]')].map(b => b.textContent).join(' ') === '? DE EN BCS'), 'each row offers ?, DE, EN and BCS');
+    const quickDone = () => p.waitFor(() => {
+      const row = document.querySelector('[data-row="demoWeekly05"]');
+      return row?.querySelector('.quick-language')?.getAttribute('aria-busy') === 'false'
+        && row.querySelector('[data-quick-status]')?.textContent.startsWith('Saved');
+    });
+    for (const lang of ['und', 'de', 'en', 'bcs']) {
+      const before = await quickGroup();
+      await requests();
+      await p.click(`[data-key="quick:demoWeekly05:${lang}"]`);
+      ok(await quickDone(), `quick ${lang} saves without opening an inspector`);
+      const writes = (await requests()).filter(r => r.method === 'POST');
+      ok(writes.length === 1 && writes[0].path.endsWith('/assessment/bulk')
+        && writes[0].body.lang === lang && writes[0].body.action === 'manual'
+        && JSON.stringify(writes[0].body.targets) === JSON.stringify(before.versions.map(v => ({ deviceId: v.deviceId, metadataId: v.metadataId, baseRevision: v.revision }))),
+      `quick ${lang} is one revision-checked decision for the row's five versions`);
+      const after = await quickGroup();
+      ok(after.versions.every(v => v.assessment.lang === lang && v.assessment.source === 'manual'
+        && v.assessment.status === (lang === 'und' ? 'undetermined' : 'confirmed'))
+        && await p.eval(code => !document.querySelector('#dlg').open
+          && document.querySelector(`[data-key="quick:demoWeekly05:${code}"]`).getAttribute('aria-pressed') === 'true', lang),
+      `quick ${lang} updates every version and highlights the saved choice`);
+    }
+    const evidenceAfter = await inPage('/api/modules/languages/evidence', { device: quickBefore.versions[0].deviceId, metadata: quickBefore.versions[0].metadataId });
+    ok(evidenceAfter.evidenceText === originalEvidence.evidenceText
+      && evidenceAfter.history.length === originalEvidence.history.length + 4
+      && (await ledgerSeconds()) === g7.seconds, 'quick changes are audited, preserve exact evidence and leave total watch time unchanged');
+    await p.eval(() => document.querySelector('[data-row="demoWeekly05"]').scrollIntoView({ block: 'center' }));
+    await p.shot('mock-quick-languages');
+    const beforeConflict = await quickGroup();
+    await fetch(`${BASE}/__mock/bump`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(beforeConflict.versions[0]) });
+    await p.click('[data-key="quick:demoWeekly05:en"]');
+    ok(await p.waitFor(() => /Nothing was saved/.test(document.querySelector('[data-row="demoWeekly05"] [data-quick-status]')?.textContent || '')),
+      'a quick stale revision reports failure inline');
+    const conflicted = await quickGroup();
+    ok(conflicted.versions.slice(1).every(v => v.assessment.lang === 'bcs'), 'a stale quick change cannot partially overwrite other versions');
+    await p.click('[data-key="quick-refresh:demoWeekly05"]');
+    await p.waitFor(() => !document.querySelector('[data-row="demoWeekly05"] [data-quick-status]'));
+    await control({ saveDelay: 600 });
+    await requests();
+    await p.eval(() => {
+      document.querySelector('[data-key="quick:demoWeekly05:de"]').click();
+      document.querySelector('[data-key="quick:demoWeekly05:en"]').click();
+    });
+    ok(await p.eval(() => [...document.querySelectorAll('[data-row="demoWeekly05"] [data-action="quick-language"]')].every(b => b.disabled)), 'quick buttons disable while a save is pending');
+    await quickDone();
+    ok((await requests()).filter(r => r.method === 'POST').length === 1, 'rapid repeated clicks produce only one save');
+    await control({ saveDelay: 0, fail: 'save500' });
+    await p.click('[data-key="quick:demoWeekly05:en"]');
+    ok(await p.waitFor(() => /Could not save classification/.test(document.querySelector('[data-row="demoWeekly05"] [data-quick-status]')?.textContent || ''))
+      && (await quickGroup()).versions.every(v => v.assessment.lang === 'de'), 'failed saves show an inline error without changing the language');
+    await control({ fail: null });
+    await p.click('[data-key="quick-refresh:demoWeekly05"]');
+    await p.waitFor(() => !document.querySelector('[data-row="demoWeekly05"] [data-quick-status]'));
+    await p.click('[data-key="quick:demoWeekly05:und"]');
+    await quickDone();
+    await p.click('[data-key="f:status:review"]');
+    await p.click('[data-key="quick:demoWeekly05:bcs"]');
+    ok(await p.waitFor(() => !document.querySelector('[data-row="demoWeekly05"]'))
+      && await p.eval(() => document.querySelector('[data-key="f:status:review"]').getAttribute('aria-pressed') === 'true'),
+      'confirming from Needs review removes the resolved row and keeps the filter');
+    await p.click('[data-key="f:status:all"]');
+
+    console.log('Inspector Save & close');
+    await p.click('[data-key="act:demoWeekly05"]');
+    await p.waitFor(() => !!document.querySelector('#dlg [data-assessment]'));
+    await requests();
+    await p.click('[data-key="dlg:done"]');
+    ok(await p.eval(() => !document.querySelector('#dlg').open)
+      && !(await requests()).some(r => r.method === 'POST'), 'Close without edits makes no assessment');
+    await p.click('[data-key="act:demoWeekly05"]');
+    await p.waitFor(() => !!document.querySelector('#dlg [data-assessment]'));
+    await p.select('#f-lang', 'de');
+    ok(await p.eval(() => document.querySelector('[data-key="dlg:done"]').textContent === 'Save & close'), 'editing the language turns the footer into Save & close');
+    await control({ fail: 'save500' });
+    await p.click('[data-key="dlg:done"]');
+    ok(await p.waitFor(() => document.querySelector('#dlg').open && document.querySelector('#dlg [data-alert]')?.dataset.alert === 'bad')
+      && await p.eval(() => document.querySelector('#f-lang').value === 'de'), 'a failed footer save keeps the inspector open with the edited language');
+    await control({ fail: null });
+    await p.click('[data-key="dlg:done"]');
+    ok(await p.waitFor(() => !document.querySelector('#dlg').open)
+      && (await quickGroup()).versions.every(v => v.assessment.lang === 'de'), 'Save & close persists German for every version before closing');
+    await p.click('[data-key="act:demoWeekly05"]');
+    await p.waitFor(() => !!document.querySelector('#dlg [data-assessment]'));
+    const footerVersion = await p.eval(() => document.querySelector('#f-version').value);
+    await p.click('[data-key="ins:target:one"]');
+    await p.select('#f-lang', 'en');
+    await p.click('[data-key="dlg:done"]');
+    await p.waitFor(() => !document.querySelector('#dlg').open);
+    ok((await quickGroup()).versions.every(v => v.assessment.lang === (`${v.deviceId}:${v.metadataId}` === footerVersion ? 'en' : 'de')),
+      'Save & close respects Selected version only');
+
     console.log('Phone width with long real-world text');
     // The production overflow: a long channel name in a review row could not wrap (nowrap) and
     // pushed the page 5 px wide at 390 px. Same sequence as the production check: review filter,
@@ -633,6 +733,24 @@ try {
     ok(!laptop || laptop.assessment.lang !== 'de' || laptop.assessment.source !== 'manual', 'the laptop’s version keeps its own language');
     await p.shot('live-inspector');
     await p.key('Escape', 27);
+    // Quick controls use the real server's audited bulk endpoint too.
+    await p.eval(() => { const i = document.getElementById('f-query'); i.value = 'fxDeskDerby'; i.dispatchEvent(new Event('input', { bubbles: true })); });
+    await p.waitFor(() => !!document.querySelector('[data-row="fxDeskDerby"]'));
+    for (const lang of ['bcs', 'und']) {
+      await p.click(`[data-key="quick:fxDeskDerby:${lang}"]`);
+      ok(await p.waitFor(() => document.querySelector('[data-row="fxDeskDerby"] .quick-language')?.getAttribute('aria-busy') === 'false'
+        && document.querySelector('[data-row="fxDeskDerby"] [data-quick-status]')?.textContent.startsWith('Saved')), `live quick ${lang} finishes inline`);
+      const changed = (await inPage('/api/modules/languages', { days: 30, group: 'video', query: 'fxDeskDerby' })).videos[0];
+      ok(changed.versions.every(v => v.assessment.lang === lang && v.assessment.source === 'manual'),
+        `live quick ${lang} saves both versions through the real API`);
+    }
+    await p.click('[data-key="act:fxDeskDerby"]');
+    await p.waitFor(() => !!document.querySelector('#dlg [data-assessment]'));
+    await p.select('#f-lang', 'de');
+    await p.click('[data-key="dlg:done"]');
+    ok(await p.waitFor(() => !document.querySelector('#dlg').open)
+      && (await inPage('/api/modules/languages', { days: 30, group: 'video', query: 'fxDeskDerby' })).videos[0].versions.every(v => v.assessment.lang === 'de'),
+      'live Save & close persists the selected language before closing');
     await p.shot('live-desktop');
   }
 } catch (error) {

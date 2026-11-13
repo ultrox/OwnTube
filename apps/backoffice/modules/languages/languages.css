@@ -241,6 +241,10 @@ textarea.input { resize: vertical; min-height: 64px; font-family: var(--font-con
 .flag-review { font: 11.5px/1.3 var(--font-data); color: var(--review-ink); }
 .recorded { font-size: 12.5px; color: var(--ink-3); }
 .vrow__side { display: grid; justify-items: end; align-content: start; gap: 8px; }
+.quick-language { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin-top: 9px; }
+.quick-language .seg { flex-shrink: 0; }
+.quick-language .seg button { min-width: 38px; min-height: 34px; padding: 7px 10px; font-family: var(--font-data); }
+.quick-language [data-quick-status] { overflow-wrap: anywhere; }
 .nums { display: grid; justify-items: end; gap: 3px; font: 12px/1.2 var(--font-data); color: var(--ink-3); white-space: nowrap; }
 .nums b { color: var(--ink); font-weight: 400; }
 .nums__ctx { max-width: 30ch; white-space: normal; text-align: right; font-size: 11.5px; line-height: 1.35; }

@@ -50,8 +50,14 @@ The build copies `*.html|css|js|svg|woff2` to `dist/modules/languages/` and skip
   selected audio language starts as that language, *Estimated* with high confidence, and needs no
   review. Otherwise it starts from the collector's estimate.
 - **Decisions, in the inspector of one video:**
+  - Rows offer **? / DE / EN / BCS** for immediate audited classification of every
+    recorded version in that row's scope. `?` explicitly marks the language unknown;
+    BCS means Bosnian / Croatian / Serbian (`bcs`). The saved choice is highlighted.
+    Pending saves disable the row's buttons; failures stay inline, with Refresh.
   - The form opens on the existing manual choice, or else the most-watched known language. One
     *Save* or *Reset* covers **all N recorded versions in this scope**.
+  - The inspector footer says **Close** until the language or note is edited, then
+    **Save & close**. It saves using the selected target and closes only on success.
   - That is one atomic request, `POST /api/modules/languages/assessment/bulk`, listing every version
     with its expected revision. If any version changed meanwhile, the server refuses it (409),
     nothing is saved, and *Refresh this video* re-reads the group; your note survives.
@@ -98,7 +104,7 @@ node apps/backoffice/modules/languages/check.mjs
 node apps/backoffice/modules/languages/check.mjs --live http://127.0.0.1:3211 --token-file <admin-token>
 ```
 
-- **Mock (83 assertions).** An in-process mock of the contract, served by `demo.js` on an ephemeral
+- **Mock.** An in-process mock of the contract, served by `demo.js` on an ephemeral
   loopback port with auth, recorded requests and injected failures, drives the real `api.js` in
   isolated headless Chromium. It covers:
   - the sign-in gate and wrong key; exact request parameters (`group=video`); filters never change
@@ -116,9 +122,11 @@ node apps/backoffice/modules/languages/check.mjs --live http://127.0.0.1:3211 --
   - the single-version flow (exact body, analysis lock, reset to the collector, analysis of the
     selected version); provider choice;
   - errors and expiry; hostile text, including an older version's title in the picker;
+  - quick language choices, audit/evidence preservation, stale revisions, duplicate clicks,
+    save failures, filtered-row removal, and inspector Save & close for both targets;
   - a server without grouping;
   - long names at 390 px, the phone layout, and demo labelling with zero API calls.
-- **Live (19).** Requires a loopback URL. It runs the same UI against a real local server seeded
+- **Live.** Requires a loopback URL. It runs the same UI against a real local server seeded
   with `tests/seed-dev.mjs` and the History desk's fictional fixtures:
   - ledger and video groups match the API;
   - a fictional two-version video: one decision on both, a real stale-version 409 with nothing
