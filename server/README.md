@@ -301,7 +301,22 @@ All 45 Android unit regressions, a disposable-backend HTTP contract test and the
 The ARM64 APK was installed on the Shield on 2026-11-13; versionCode 2466 and the retained app-data
 directory were verified. Post-update playback capture has not yet been checked on-device.
 
-### Current release: `owntube-quick-languages-20261113-1`
+### Current release: `owntube-youtube-links-20261113-1`
+
+Source `8bc544547`, deployed through
+`kamal app boot -c deploy/deploy.yml --version owntube-youtube-links-20261113-1`.
+Container `af6e3558a999`, image
+`sha256:41a3cf78740117610e6d1becb5c42c92fabe65ff4bd783bc94450bbe7e4a6fc7`.
+Adds **Open in YouTube ↗** beside the Languages row choices and in the inspector.
+Links open a new tab with `noopener noreferrer`, retaining filters and draft
+edits. JavaScript syntax, build, and targeted local/public browser checks passed,
+including actual new-tab opening from both links and 390 px layouts.
+The backend build layer is unchanged from the previous release.
+
+Image-only rollback:
+`kamal rollback owntube-quick-languages-20261113-1 -c deploy/deploy.yml`.
+
+### Previous release: `owntube-quick-languages-20261113-1`
 
 Source `d9e0a6b8b`, deployed with
 `kamal app boot -c deploy/deploy.yml --version owntube-quick-languages-20261113-1`.

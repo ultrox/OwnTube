@@ -81,7 +81,15 @@ The Languages follow-up `owntube-languages-20261113-2` uses the same process fro
 commit `4369a6835`, with mobile wrapping and content-hashed module assets. Its
 backend binary is identical to `-1`; the same backup and image-only rollback apply.
 
-## Current quick language controls release
+## Current YouTube links release
+
+`owntube-youtube-links-20261113-1`, source `8bc544547`, adds **Open in YouTube ↗**
+to Languages rows and the inspector. Local and public browser checks verified
+new-tab opening, retained filters/draft edits and phone layouts.
+Release details and rollback:
+[`server/README.md`](../server/README.md#current-release-owntube-youtube-links-20261113-1).
+
+## Previous quick language controls release
 
 `owntube-quick-languages-20261113-1`, source `d9e0a6b8b`, adds immediate
 **? / DE / EN / BCS** row choices and fixes the inspector footer: edited forms
@@ -90,7 +98,7 @@ offer **Save & close**, persisting the selected target before closing.
 the previous release byte-for-byte. Fresh verified online backups include the
 14 existing assessments and the TV context correction.
 Release details and rollback:
-[`server/README.md`](../server/README.md#current-release-owntube-quick-languages-20261113-1).
+[`server/README.md`](../server/README.md#previous-release-owntube-quick-languages-20261113-1).
 
 ## Previous video History and selected-audio release
 
