@@ -155,6 +155,14 @@ impl Analytics {
                 facts.push(fact);
             }
         }
+        // Correct attribution after clipping legacy intervals using their original context.
+        // Applying it earlier would prevent matching those intervals to the saved samples.
+        let overrides = crate::playback::overrides(db)?;
+        for fact in &mut facts {
+            if overrides.contains_key(&fact.device) {
+                fact.context = 0;
+            }
+        }
         Ok(Self { facts })
     }
     pub fn row_count(&self) -> u64 {

@@ -26,6 +26,7 @@ public class PlayerCollectorTest {
     Activity activity;
     Tracking tracking;
     PlayerCollector collector;
+    Player player;
     Player.EventListener listener;
     long position;
     boolean playing = true, ad;
@@ -36,7 +37,7 @@ public class PlayerCollectorTest {
         tracking = Tracking.get(activity);
         tracking.disk.submit(() -> { }).get();
         tracking.pair = new DeviceCredentials.Pair("device-a", "test-key", "", ""); tracking.enabled = true;
-        Player player = (Player) Proxy.newProxyInstance(Player.class.getClassLoader(), new Class<?>[]{Player.class}, (proxy, method, args) -> {
+        player = (Player) Proxy.newProxyInstance(Player.class.getClassLoader(), new Class<?>[]{Player.class}, (proxy, method, args) -> {
             switch (method.getName()) {
                 case "isPlaying": return playing;
                 case "isPlayingAd": return ad;
@@ -96,5 +97,21 @@ public class PlayerCollectorTest {
         second(2000);
         assertEquals("foreground", new JSONObject(tracking.store.pending("device-a").get(0).json).getString("playbackContext"));
         assertEquals("background", new JSONObject(tracking.store.pending("device-a").get(1).json).getString("playbackContext"));
+    }
+
+    @Test public void playerAttachedBeforeFirstDrawDefaultsToForegroundWithoutAStartCallback() throws Exception {
+        collector.detach();
+        activity.getWindow().getDecorView().setVisibility(android.view.View.INVISIBLE);
+        assertFalse(activity.getWindow().getDecorView().isShown());
+        collector = new PlayerCollector(activity,
+                () -> new WatchSegments.VideoInfo("abcdefghijk", "Test", "Channel", false, false, false),
+                () -> ViewingRecordsTest.BASE + android.os.SystemClock.elapsedRealtime());
+        collector.attach(player);
+        // The activity may already have started before the collector registered.
+        shadowOf(Looper.getMainLooper()).idle();
+        second(1000);
+        JSONObject recorded = new JSONObject(tracking.store.pending("device-a").get(0).json);
+        assertEquals("foreground", recorded.getString("playbackContext"));
+        assertEquals(1, recorded.getDouble("seconds"), .001);
     }
 }

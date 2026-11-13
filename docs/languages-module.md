@@ -8,12 +8,17 @@ separate from playback collection, global viewing history and feed curation.
 - Period, device and person define the watch-time totals. Language, review status,
   and text search only filter the paged observation list.
 - Background playback counts. Foreground, background and unspecified always sum
-  to the same total as the unmodified viewing read model.
-- One row is an exact stored metadata version of a video on a device. A video
-  heard with different audio can appear in separate rows.
-- Corrections cover observations matching that device/version across history,
-  including outside the visible date range. They do not apply to every dub, every
-  device or every future metadata version of the video.
+  to the same total as the shared viewing read model. Audited device playback
+  corrections affect attribution consistently across History and Languages.
+- One row is one video, combining all its stored metadata versions and selected
+  devices in scope. Saved versions and their exact evidence live in the inspector.
+  Mixed audio/assessment summaries stay visibly mixed.
+- One manual confirmation, undetermined choice or reset covers all current versions
+  in that row atomically. Decisions cover those device/version identities across
+  history, including outside the visible date range. They do not establish a rule
+  for future audio versions or devices outside the selected scope.
+- Language/status/text filters match any version but retain the whole scoped video
+  group and its time. Grouping precedes pagination.
 
 ## Storage and decisions
 
@@ -28,8 +33,17 @@ Automatic results are always estimates. Reset records the action and restores th
 original collector interpretation. Clients submit `baseRevision`; stale edits and
 in-flight analyzer results return 409 rather than overwrite a newer correction.
 Automatic analysis cannot replace a manual choice without an explicit reset.
+Grouped review sends each version's expected revision. A conflict in any target
+rolls back the entire action; the user refreshes and reviews the updated group.
+Automatic analysis remains selected-version-only.
 
 ## Evidence and analysis
+
+Unreviewed records automatically use a usable selected-audio language from
+digest-verified saved evidence. This works for historical and incoming observations,
+without an Analyze click or fabricated manual audit entry. These high-confidence
+estimates do not require review. Explicit saved assessments and resets win over the
+automatic fallback. Original collector fields and mismatched evidence stay intact.
 
 The module serves exact saved evidence text with its SHA-256 ID, its parsed view,
 the original collector estimate and the assessment history. The history response

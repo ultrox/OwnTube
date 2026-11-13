@@ -48,6 +48,26 @@ for (const days of [7,30,90]) for (const scope of scopes) {
     close(history[field],legacy[field],`Legacy ${field}`);
     close(history[field],languages[field],`Languages ${field}`);
   }
+  const grouped=await get('/api/modules/languages',{...params,group:'video'});
+  for (const field of [...fields,'reviewSeconds','confirmedSeconds','estimatedSeconds']) {
+    close(grouped[field],languages[field],`Grouped Languages ${field}`);
+  }
+  assert.deepEqual(grouped.languages,languages.languages);
+  const videos=[...grouped.videos];
+  for (let page=2;page<=grouped.pages;page++) {
+    videos.push(...(await get('/api/modules/languages',{...params,group:'video',page})).videos);
+  }
+  assert.equal(videos.length,grouped.count);
+  assert.equal(new Set(videos.map(v=>v.videoId)).size,videos.length);
+  assert.equal(videos.length,history.videoCount);
+  assert.equal(videos.reduce((n,v)=>n+v.versionCount,0),languages.count);
+  for (const field of fields) close(videos.reduce((n,v)=>n+v[field],0),history[field],`Grouped page ${field}`);
+  for (const video of videos) {
+    assert.equal(video.versions.length,video.versionCount);
+    assert.equal(video.matchedVersionCount,video.versionCount);
+    for (const version of video.versions) assert.equal(version.videoId,video.videoId);
+    for (const field of fields) close(video.versions.reduce((n,v)=>n+v[field],0),video[field],`Grouped version ${field}`);
+  }
   assert.equal(history.videoCount,legacy.videoCount);
   const rows=[...history.rows];
   for (let page=2;page<=history.pages;page++) {
@@ -105,4 +125,4 @@ for (const days of [7,30,90]) for (const scope of scopes) {
   checks++;
 }
 database.close();
-console.log(`History parity: ${checks} period/scope combinations, ${evidenceChecks} exact evidence versions, ${searchRows} paged search rows; legacy/Language totals, daily sums, IDs and filter invariance passed. ${historicalDigestMismatches.size} pre-existing saved evidence digest mismatches preserved.`);
+console.log(`History parity: ${checks} period/scope combinations, ${evidenceChecks} exact evidence versions, ${searchRows} paged search rows; legacy/Language totals, grouped videos/versions across pages, daily sums, IDs and filter invariance passed. ${historicalDigestMismatches.size} pre-existing saved evidence digest mismatches preserved.`);

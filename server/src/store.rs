@@ -737,8 +737,9 @@ fn history_page(db: &Connection, mut snapshot: Value, view: &View) -> Result<Val
 }
 pub(crate) fn dashboard_metadata(db: &Connection) -> Result<(Vec<Value>, Vec<Value>)> {
     let mut q = db.prepare("SELECT d.id,d.label,COALESCE(p.name,''),d.revoked,d.last_seen,d.person_id FROM devices d LEFT JOIN people p ON p.id=d.person_id ORDER BY d.created")?;
-    let devices = q.query_map([], |r| Ok(json!({"id":r.get::<_,String>(0)?,"label":r.get::<_,String>(1)?,"person":r.get::<_,String>(2)?,"revoked":r.get::<_,bool>(3)?,"lastSeen":r.get::<_,Option<i64>>(4)?,"personId":r.get::<_,Option<String>>(5)?})))?
+    let mut devices = q.query_map([], |r| Ok(json!({"id":r.get::<_,String>(0)?,"label":r.get::<_,String>(1)?,"person":r.get::<_,String>(2)?,"revoked":r.get::<_,bool>(3)?,"lastSeen":r.get::<_,Option<i64>>(4)?,"personId":r.get::<_,Option<String>>(5)?})))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
+    crate::playback::annotate(db, &mut devices)?;
     let mut q = db.prepare("SELECT p.id,p.name,(SELECT COUNT(*) FROM devices d WHERE d.person_id=p.id) FROM people p ORDER BY p.name COLLATE NOCASE")?;
     let people = q.query_map([], |r| Ok(json!({"id":r.get::<_,String>(0)?,"name":r.get::<_,String>(1)?,"deviceCount":r.get::<_,i64>(2)?,"seconds":0.,"videoCount":0})))?
         .collect::<rusqlite::Result<Vec<_>>>()?;

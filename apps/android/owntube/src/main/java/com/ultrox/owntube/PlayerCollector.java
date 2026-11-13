@@ -48,7 +48,10 @@ public final class PlayerCollector implements Player.EventListener, Application.
         tracking = Tracking.get(context);
         host = activity(context);
         application = (Application) context.getApplicationContext();
-        visible = host != null && host.getWindow().getDecorView().isShown();
+        // The TV player can attach before its activity's first frame is drawn.
+        // A not-yet-shown decor view is not evidence of background playback.
+        // Start foreground; an observed host stop switches subsequent audio to background.
+        visible = true;
         viewings = new ViewingRecords(tracking::persist);
         segments = new WatchSegments(viewings::add);
     }

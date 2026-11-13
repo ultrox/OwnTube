@@ -435,3 +435,130 @@ async fn history_routes_require_owner_and_validate_snapshot_pairs() {
     assert_eq!(body["count"], 0);
     assert_eq!(body["daily"].as_array().unwrap().len(), 7);
 }
+
+#[tokio::test]
+async fn device_foreground_correction_preserves_evidence_time_and_other_devices() {
+    let s = seed().await;
+    ingest(
+        &s,
+        "tv",
+        vec![viewing("tv-background", "tv-view", 20., "background")],
+        Default::default(),
+    )
+    .await;
+    ingest(
+        &s,
+        "browser",
+        vec![viewing(
+            "browser-background",
+            "browser-view",
+            10.,
+            "background",
+        )],
+        Default::default(),
+    )
+    .await;
+    let original = s.export_viewings(0).await.unwrap();
+    let before = watched(&s, json!({})).await;
+    let set = |context: Value| {
+        serde_json::from_value(json!({
+            "context":context,"reason":"Owner confirmed this TV is foreground"
+        }))
+        .unwrap()
+    };
+    s.correct_playback_context("tv".into(), set(json!("foreground")))
+        .await
+        .unwrap();
+    let corrected = watched(&s, json!({})).await;
+    assert_eq!(corrected["seconds"], before["seconds"]);
+    assert_eq!(corrected["foregroundSeconds"], 20.);
+    assert_eq!(corrected["backgroundSeconds"], 10.);
+    assert_eq!(s.export_viewings(0).await.unwrap(), original);
+    let tv = corrected["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["deviceId"] == "tv")
+        .unwrap();
+    assert_eq!(tv["contextOverride"]["context"], "foreground");
+    let stale = s
+        .history(
+            filters(json!({"generation":before["generation"],"until":before["until"]})),
+            chrono_tz::UTC,
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(stale.0, StatusCode::GONE);
+    let languages = s
+        .module_languages(
+            serde_json::from_value(json!({})).unwrap(),
+            chrono_tz::Europe::Zurich,
+        )
+        .await
+        .unwrap();
+    let dashboard = s
+        .dashboard(7, "".into(), "".into(), chrono_tz::Europe::Zurich)
+        .await
+        .unwrap();
+    for field in [
+        "seconds",
+        "foregroundSeconds",
+        "backgroundSeconds",
+        "unspecifiedSeconds",
+    ] {
+        assert_eq!(corrected[field], languages[field]);
+        assert_eq!(corrected[field], dashboard[field]);
+    }
+    // Later uploads from the installed collector obey the same owner correction.
+    ingest(
+        &s,
+        "tv",
+        vec![viewing("next-tv", "next-tv", 5., "background")],
+        Default::default(),
+    )
+    .await;
+    assert_eq!(watched(&s, json!({})).await["foregroundSeconds"], 25.);
+    // Reset is appended, returning all original context without touching collector records.
+    s.correct_playback_context("tv".into(), set(Value::Null))
+        .await
+        .unwrap();
+    let reset = watched(&s, json!({})).await;
+    assert_eq!(reset["foregroundSeconds"], 0.);
+    assert_eq!(reset["backgroundSeconds"], 35.);
+    let audit = s
+        .read(|db| {
+            Ok(
+                db.query_row("SELECT COUNT(*) FROM device_context_overrides", [], |r| {
+                    r.get::<_, i64>(0)
+                })?,
+            )
+        })
+        .await
+        .unwrap();
+    assert_eq!(audit, 2);
+
+    let app = crate::router(
+        App {
+            store: s,
+            admin_hash: Arc::new(hash("admin-key")),
+            secure_cookie: false,
+            timezone: chrono_tz::UTC,
+        },
+        ".".into(),
+    );
+    let result = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/devices/tv/playback-context")
+                .header("Authorization", "Bearer tv-key")
+                .header("Content-Type", "application/json")
+                .body(Body::from(
+                    r#"{"context":"foreground","reason":"not owner"}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(result.status(), StatusCode::UNAUTHORIZED);
+}

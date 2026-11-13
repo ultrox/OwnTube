@@ -1,7 +1,8 @@
 # History and Searches v1
 
-Owner-authenticated, read-only endpoints. Original collector interpretation is
-shown here; optional Languages assessments do not change History.
+Owner-authenticated read endpoints. Original collector language interpretation is
+shown here; optional Languages assessments do not change History. Playback context
+can carry an explicit audited owner correction.
 
 ## Watched
 
@@ -33,7 +34,7 @@ Row:
  videoId,title,channel,isShort,durationSeconds,evidenceId,
  recorded:{lang,source,conf},date,firstWatched,lastWatched,seconds,
  foregroundSeconds,backgroundSeconds,unspecifiedSeconds,
- coveredSeconds,coveragePercent,coverageComplete,rowKind}
+ coveredSeconds,coveragePercent,coverageComplete,rowKind,contextOverride}
 ```
 
 Native `rowKind:"viewing-version"` groups the same recorded viewing, exact
@@ -88,7 +89,7 @@ No watch time or coverage is attached to a search.
 
 Both list endpoints return:
 ```
-devices:[{id,label,personId,person,kind,searchCapability}]
+devices:[{id,label,personId,person,kind,searchCapability,contextOverride}]
 people:[{id,name}]
 ```
 
@@ -104,3 +105,28 @@ collectors, not a promise of future capture.
 
 Existing session/login/logout and device management stay unchanged. These routes
 never mutate history, evidence, language assessments or curation.
+
+## Owner playback-context correction
+
+`POST /api/devices/{id}/playback-context`
+
+```
+{context:"foreground"|null,reason:"Owner's reason"}
+```
+
+Owner authentication is required; device credentials cannot call this route.
+Only `foreground` or null (reset) is accepted, with a nonblank reason up to 1000
+bytes. Returns `{deviceId,revision,context}`; nonexistent devices return 404.
+The append-only `device_context_overrides` table stores device, revision, context,
+reason and creation time. The latest null entry disables the correction.
+
+An active correction reattributes all existing and future watch facts from that
+device to foreground, after original-context legacy overlap clipping. History,
+Languages and the legacy dashboard share this effective attribution. Total seconds,
+coverage, original events, slices, metadata and saved evidence are unchanged.
+Applying/resetting advances the viewing generation, invalidating old History
+snapshots. Other devices are unaffected.
+
+`contextOverride` is null or `{context:"foreground",reason,revision,created}`.
+Inspectors label corrected attribution and retain access to original evidence.
+Reset appends a revision and restores the collector's original context everywhere.

@@ -29,8 +29,10 @@ OwnTube now requires Android 6+ for Keystore-backed AES; the upstream variants r
 - Pause, buffer, seek, source, speed and visibility transitions split intervals. Watch time is
   elapsed wall time; 2× speed does not double it. Gaps over 20 seconds are not extrapolated.
 - Coverage is attached only for continuous plausible positions with a known non-live duration.
-  Seek jumps never contribute coverage. Unknown context is omitted; started/stopped player-host
-  activities distinguish foreground/background. Incognito playback is excluded.
+   Seek jumps never contribute coverage. A known TV player host defaults to foreground,
+   even before its first frame is drawn; an observed activity stop marks continued audio
+   as background, and a start restores foreground. Unknown hosts omit context.
+   Incognito playback is excluded.
 - Records split at 15-minute UTC boundaries and metadata/evidence/language/context changes.
   Coverage is a merged array of ranges; unknown coverage is `[]`. Replays add time, not duplicate
   coverage. Each accumulator seals before 501 disjoint ranges or an invalid clock-span change;

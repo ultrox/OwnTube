@@ -817,6 +817,7 @@ function contextHTML(r, tz) {
         ['Covered', `<span data-ev-covered>${covered}</span>`],
       ])}
       <p class="ev__note" data-ev-scope>${scope} ${meaning}; neither proves attention. Covered counts each part of the video once; replays add watched time only.</p>
+      ${r.contextOverride?.context === 'foreground' ? `<p class="ev__note" data-context-correction>Foreground by owner correction for this device. ${esc(r.contextOverride.reason)} Original collector records are retained.</p>` : ''}
     </section>`;
 }
 

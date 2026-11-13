@@ -93,10 +93,12 @@ pub struct Filters {
     #[serde(default)]
     query: String,
     page: Option<usize>,
+    group: Option<String>,
 }
 impl Filters {
     fn validate(&self) -> Result<()> {
         if ![7, 30, 90].contains(&self.days.unwrap_or(7))
+            || self.group.as_deref().is_some_and(|g| g != "video")
             || self.page == Some(0)
             || self.query.chars().count() > 200
             || self.device.len() > 200
@@ -133,6 +135,23 @@ pub struct Change {
     #[serde(default)]
     note: String,
     provider: Option<String>,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BulkTarget {
+    device_id: String,
+    metadata_id: String,
+    base_revision: i64,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BulkChange {
+    video_id: String,
+    targets: Vec<BulkTarget>,
+    action: String,
+    lang: Option<String>,
+    #[serde(default)]
+    note: String,
 }
 impl Change {
     fn validate(&self) -> Result<()> {
@@ -209,7 +228,21 @@ fn latest(
         .optional()?;
     match row {
         Some((revision, payload, action)) => Ok((revision, decode(&payload)?, action)),
-        None => Ok((0, baseline(meta), "collector".into())),
+        None => {
+            // Interpret existing and incoming saved audio without requiring a review
+            // click. Explicit assessment revisions above always take precedence.
+            if let Some(text) = evidence_text(db, meta)? {
+                if meta.evidence_id.as_deref() == Some(hash(&text).as_str()) {
+                    if let Ok(evidence) = serde_json::from_str::<Value>(&text) {
+                        let assessment = saved_audio(&evidence);
+                        if assessment.lang != "und" {
+                            return Ok((0, assessment, "automatic".into()));
+                        }
+                    }
+                }
+            }
+            Ok((0, baseline(meta), "collector".into()))
+        }
     }
 }
 fn evidence_text(db: &Connection, meta: &Metadata) -> Result<Option<String>> {
@@ -257,18 +290,128 @@ impl Row {
     }
 }
 
+fn grouped_video(rows: &[Row], devices: &[Value], matched: usize) -> Value {
+    let newest = &rows[0];
+    let versions: Vec<_> = rows
+        .iter()
+        .map(|row| {
+            let mut value = row.json();
+            value["contextOverride"] = devices
+                .iter()
+                .find(|d| d["id"] == row.device)
+                .map(|d| d["contextOverride"].clone())
+                .unwrap_or(Value::Null);
+            value
+        })
+        .collect();
+    let device_ids: BTreeSet<_> = rows.iter().map(|r| r.device.as_str()).collect();
+    let selected: Vec<_> = devices
+        .iter()
+        .filter(|d| device_ids.contains(d["id"].as_str().unwrap()))
+        .map(|d| json!({"id":d["id"],"label":d["label"],"contextOverride":d["contextOverride"]}))
+        .collect();
+    let common = |key: &str, fallback: &str| {
+        let first = &versions[0]["assessment"][key];
+        if versions.iter().all(|v| &v["assessment"][key] == first) {
+            first.clone()
+        } else {
+            json!(fallback)
+        }
+    };
+    let common_recorded = |key: &str, fallback: &str| {
+        let first = &versions[0]["recorded"][key];
+        if versions.iter().all(|v| &v["recorded"][key] == first) {
+            first.clone()
+        } else {
+            json!(fallback)
+        }
+    };
+    json!({"id":newest.meta.video_id,"videoId":newest.meta.video_id,"title":newest.meta.title,
+        "channel":newest.meta.channel,"seconds":rows.iter().map(Row::seconds).sum::<f64>(),
+        "foregroundSeconds":rows.iter().map(|r| r.context[0]).sum::<f64>(),
+        "backgroundSeconds":rows.iter().map(|r| r.context[1]).sum::<f64>(),
+        "unspecifiedSeconds":rows.iter().map(|r| r.context[2]).sum::<f64>(),
+        "lastWatched":newest.last,"devices":selected,
+        "deviceLabel":selected.iter().filter_map(|d|d["label"].as_str()).collect::<Vec<_>>().join(" · "),
+        "versionCount":rows.len(),"matchedVersionCount":matched,
+        "assessment":{"lang":common("lang","mul"),"status":common("status","mixed"),
+            "source":common("source","mixed"),"confidence":common("confidence","mixed"),
+            "reason":"Summary of saved versions in this scope. Evidence remains specific to each version."},
+        "recorded":{"lang":common_recorded("lang","mul"),"source":common_recorded("source","mixed"),
+            "conf":common_recorded("conf","mixed")},
+        "needsReview":rows.iter().any(|r|r.assessment.review()),"versions":versions})
+}
+
 impl Store {
+    pub async fn language_bulk_change(&self, input: BulkChange) -> Result<Value> {
+        if input.targets.is_empty()
+            || input.targets.len() > 1000
+            || !["manual", "reset"].contains(&input.action.as_str())
+            || input.video_id.is_empty()
+            || input.video_id.len() > 200
+        {
+            return Err(invalid(
+                "Choose one video and 1–1000 saved versions to confirm or reset",
+            ));
+        }
+        let mut identities = BTreeSet::new();
+        for target in &input.targets {
+            if !identities.insert((&target.device_id, &target.metadata_id)) {
+                return Err(invalid("Repeated version in grouped assessment"));
+            }
+            Change {
+                device_id: target.device_id.clone(),
+                metadata_id: target.metadata_id.clone(),
+                base_revision: target.base_revision,
+                action: input.action.clone(),
+                lang: input.lang.clone(),
+                note: input.note.clone(),
+                provider: None,
+            }
+            .validate()?;
+        }
+        self.run(move |db| {
+            let tx = db.transaction()?;
+            let mut versions = Vec::new();
+            for target in &input.targets {
+                let meta = metadata(&tx,&target.device_id,&target.metadata_id)?;
+                if meta.video_id != input.video_id {
+                    return Err(invalid("Every version must belong to the selected video"));
+                }
+                let (revision,_,_) = latest(&tx,&target.device_id,&target.metadata_id,&meta)?;
+                if revision != target.base_revision {
+                    return Err(conflict("A version changed. Refresh the video before saving; nothing was changed."));
+                }
+                let assessment = if input.action == "reset" { baseline(&meta) } else {
+                    let lang = language(input.lang.as_deref().unwrap()).unwrap();
+                    Assessment { status:if lang=="und" {"undetermined"} else {"confirmed"}.into(),
+                        lang,source:"manual".into(),confidence:"human".into(),
+                        reason:"Owner classification applied to this video's selected recorded versions together.".into() }
+                };
+                let next=revision+1;
+                tx.execute("INSERT INTO language_assessments VALUES(?,?,?,?,?,?,?)",
+                    params![target.device_id,target.metadata_id,next,input.action,
+                        serde_json::to_string(&assessment).unwrap(),input.note.trim(),now()])?;
+                versions.push(json!({"deviceId":target.device_id,"metadataId":target.metadata_id,
+                    "revision":next,"assessment":assessment}));
+            }
+            tx.commit()?;
+            Ok(json!({"ok":true,"updated":versions.len(),"versions":versions}))
+        }).await
+    }
+
     pub async fn module_languages(&self, filter: Filters, tz: chrono_tz::Tz) -> Result<Value> {
         filter.validate()?;
         self.sync_legacy().await?;
         self.read(move |db| {
             let days = filter.days.unwrap_or(7);
             let window = Window::new(days,now(),i64::MAX,tz);
-            let devices: Vec<Value> = db.prepare(
+            let mut devices: Vec<Value> = db.prepare(
                 "SELECT d.id,d.label,d.person_id,COALESCE(p.name,'') FROM devices d LEFT JOIN people p ON p.id=d.person_id ORDER BY d.created,d.id")?
                 .query_map([], |r| Ok(json!({"id":r.get::<_,String>(0)?,"label":r.get::<_,String>(1)?,
                     "personId":r.get::<_,Option<String>>(2)?,"person":r.get::<_,String>(3)?})))?
                 .collect::<rusqlite::Result<_>>()?;
+            crate::playback::annotate(db, &mut devices)?;
             let people: Vec<Value> = db.prepare("SELECT id,name FROM people ORDER BY name,id")?
                 .query_map([],|r| Ok(json!({"id":r.get::<_,String>(0)?,"name":r.get::<_,String>(1)?})))?
                 .collect::<rusqlite::Result<_>>()?;
@@ -310,7 +453,7 @@ impl Store {
             }
             let query = filter.query.trim().to_lowercase();
             let wanted = filter.language.as_deref().filter(|s| *s != "all").and_then(language);
-            let mut rows: Vec<_> = rows.into_values().filter(|r| {
+            let matches = |r: &Row| {
                 wanted.as_ref().is_none_or(|l| r.assessment.lang == *l)
                 && match filter.status.as_deref().unwrap_or("all") {
                     "review" => r.assessment.review(),
@@ -318,9 +461,29 @@ impl Store {
                     status => r.assessment.status == status,
                 }
                 && (query.is_empty() || format!("{} {} {}",r.meta.title,r.meta.channel.as_deref().unwrap_or(""),r.meta.video_id).to_lowercase().contains(&query))
-            }).collect();
+            };
+            let mut rows: Vec<_> = rows.into_values().collect();
             rows.sort_by(|a,b| b.last.total_cmp(&a.last).then(a.device.cmp(&b.device)).then(a.metadata_id.cmp(&b.metadata_id)));
-            let count = rows.len();
+            let mut items: Vec<Value> = if filter.group.as_deref() == Some("video") {
+                let mut groups: BTreeMap<String,Vec<Row>> = BTreeMap::new();
+                for row in rows { groups.entry(row.meta.video_id.clone()).or_default().push(row); }
+                groups.into_values().filter_map(|versions| {
+                    let matched = versions.iter().filter(|r| matches(r)).count();
+                    (matched > 0).then(|| grouped_video(&versions,&devices,matched))
+                }).collect()
+            } else {
+                rows.iter().filter(|r| matches(r)).map(|row| {
+                    let mut value = row.json();
+                    value["contextOverride"] = devices.iter().find(|d|d["id"]==row.device)
+                        .map(|d|d["contextOverride"].clone()).unwrap_or(Value::Null);
+                    value
+                }).collect()
+            };
+            items.sort_by(|a,b|b["lastWatched"].as_f64().unwrap().total_cmp(&a["lastWatched"].as_f64().unwrap())
+                .then(a["videoId"].as_str().cmp(&b["videoId"].as_str()))
+                .then(a["deviceId"].as_str().cmp(&b["deviceId"].as_str()))
+                .then(a["metadataId"].as_str().cmp(&b["metadataId"].as_str())));
+            let count = items.len();
             let pages = count.div_ceil(20).max(1);
             let page = filter.page.unwrap_or(1).min(pages);
             Ok(json!({"seconds":context.iter().sum::<f64>(),"foregroundSeconds":context[0],
@@ -330,7 +493,7 @@ impl Store {
                 "languages":langs.into_iter().map(|(lang,(seconds,videos))| json!({"lang":lang,"seconds":seconds,"videoCount":videos.len()})).collect::<Vec<_>>(),
                 "reviewSeconds":review,"confirmedSeconds":confirmed,"estimatedSeconds":estimated,
                 "count":count,"page":page,"pages":pages,
-                "videos":rows.iter().skip((page-1)*20).take(20).map(Row::json).collect::<Vec<_>>(),
+                "videos":items.into_iter().skip((page-1)*20).take(20).collect::<Vec<_>>(),
                 "providers":providers()}))
         }).await
     }
@@ -556,6 +719,15 @@ pub async fn assess(
     };
     // A second revision check inside the transaction protects edits made during API latency.
     Ok(Json(app.store.language_change(input, analyzed).await?))
+}
+
+pub async fn assess_bulk(
+    State(app): State<App>,
+    headers: HeaderMap,
+    Json(input): Json<BulkChange>,
+) -> Result<Json<Value>> {
+    owner(&app, &headers).await?;
+    Ok(Json(app.store.language_bulk_change(input).await?))
 }
 
 #[cfg(test)]

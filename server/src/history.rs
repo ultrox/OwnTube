@@ -173,6 +173,7 @@ impl Row {
             "seconds":self.seconds(),"foregroundSeconds":self.context[0],"backgroundSeconds":self.context[1],
             "unspecifiedSeconds":self.context[2],"coveredSeconds":covered,"coveragePercent":percent,
             "coverageComplete":self.coverage_complete,
+            "contextOverride":self.device["contextOverride"],
             "rowKind":if self.viewing_id.is_some() {"viewing-version"} else {"legacy-day"}
         })
     }

@@ -19,6 +19,7 @@ mod languages;
 #[cfg(test)]
 mod legacy_analytics;
 mod metrics;
+mod playback;
 mod snapshots;
 
 #[derive(Clone)]
@@ -401,6 +402,14 @@ fn router(app: App, public: PathBuf) -> Router {
         .route("/api/ingest", post(ingest))
         .route("/api/dashboard", get(dashboard))
         .route("/api/history", get(history::watched))
+        .route(
+            "/api/modules/languages/assessment/bulk",
+            post(languages::assess_bulk),
+        )
+        .route(
+            "/api/devices/{id}/playback-context",
+            post(playback::correct),
+        )
         .route("/api/history/searches", get(history::searches))
         .route("/api/history/evidence", get(history::evidence))
         .route("/api/languages", get(languages))

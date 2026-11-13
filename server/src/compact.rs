@@ -51,7 +51,10 @@ pub fn initialize(db: &Connection) -> rusqlite::Result<()> {
         CREATE INDEX IF NOT EXISTS viewing_slices_device ON viewing_slices(device,bucket);
         CREATE INDEX IF NOT EXISTS viewing_slices_recent ON viewing_slices(origin,last DESC);
         CREATE INDEX IF NOT EXISTS viewing_slices_activity ON viewing_slices(device,origin,last DESC);
-        CREATE INDEX IF NOT EXISTS viewing_slices_viewing ON viewing_slices(device,viewing_id);")
+        CREATE INDEX IF NOT EXISTS viewing_slices_viewing ON viewing_slices(device,viewing_id);
+        CREATE TABLE IF NOT EXISTS device_context_overrides(device TEXT NOT NULL REFERENCES devices(id),
+            revision INTEGER NOT NULL,context TEXT CHECK(context IS NULL OR context='foreground'),
+            reason TEXT NOT NULL,created INTEGER NOT NULL,PRIMARY KEY(device,revision));")
 }
 
 fn parse<T: serde::de::DeserializeOwned>(text: &str) -> rusqlite::Result<T> {
