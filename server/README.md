@@ -301,7 +301,45 @@ All 45 Android unit regressions, a disposable-backend HTTP contract test and the
 The ARM64 APK was installed on the Shield on 2026-11-13; versionCode 2466 and the retained app-data
 directory were verified. Post-update playback capture has not yet been checked on-device.
 
-### Current release: `owntube-period-comparison-20261113-1`
+### Current release: `owntube-compare-languages-20261113-1`
+
+Source `d08347beb`, deployed through
+`kamal app boot -c deploy/deploy.yml --version owntube-compare-languages-20261113-1`.
+Container `5a4d8d852bce`, image
+`sha256:98b7f06c791b1101e62a54a96f76c637ffc48487276ccda15917d81ad8d38e21`.
+Source archive SHA-256:
+`4b66e8581961dd1feac7350e09e8a34fb0d64203ddb0b9ccd77a1d816cd66156`.
+Release files: `/home/marko/releases/youtube-observer/owntube-compare-languages-20261113-1/`.
+
+Adds a searchable, saved **Languages to compare** selection shared by both
+period groups. Chosen languages have removable chips; results include only those
+languages and a combined row with differences. **Use all languages** restores
+the complete comparison. Selected totals, context, review and active days follow
+the selection; calendar-day denominators remain fixed and shares stay relative
+to all scoped watch time. Older saved configurations default to all languages.
+17 language server tests, 132 mock and 48 real-local-server browser checks passed.
+Public HTTPS checks matched all seven assets/imports, required owner auth, opened
+the shared language picker and passed the phone layout. Production checks matched
+six frozen scopes and preserved source records, credentials, all 237 assessments
+and the saved comparison at revision 7 byte-for-byte. Integrity and foreign keys
+passed; verification saved no production language or comparison decisions.
+
+Fresh online backup `before-owntube-compare-languages-20261113-1` is retained under
+`/home/marko/Backups/youtube-observer/` and locally under
+`~/.local/state/youtube-observer/backups/`; verified SHA-256:
+`470eeaf26528b6bdbbc02f06edaacdb50168e71b1d42c0c05d2251c5e2f7cc1a`.
+It includes 297,130 events, 475 evidence, 722 slices, 489 metadata versions,
+237 assessments, the TV context correction and the owner's saved comparison.
+
+Image-only rollback that retains every saved payload:
+`kamal rollback owntube-youtube-links-20261113-1 -c deploy/deploy.yml`.
+That release ignores the comparison table (the comparison UI is temporarily
+unavailable). The intermediate period-comparison server strictly decodes its
+configuration and cannot read a payload saved with `selectedLanguages`; do not
+roll back to it after saving the new field without a configuration compatibility
+change. Keep the data volume and saved selections intact.
+
+### Previous release: `owntube-period-comparison-20261113-1`
 
 Source `08599ce56`, deployed through
 `kamal app boot -c deploy/deploy.yml --version owntube-period-comparison-20261113-1`.

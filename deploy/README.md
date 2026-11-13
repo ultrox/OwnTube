@@ -81,7 +81,16 @@ The Languages follow-up `owntube-languages-20261113-2` uses the same process fro
 commit `4369a6835`, with mobile wrapping and content-hashed module assets. Its
 backend binary is identical to `-1`; the same backup and image-only rollback apply.
 
-## Current language period comparison release
+## Current selected comparison languages release
+
+`owntube-compare-languages-20261113-1`, source `d08347beb`, adds a saved language
+selection shared by both period groups, with combined and individual statistics.
+132 mock, 48 real-local browser and 17 language-server checks passed.
+The verified backup includes the existing saved comparison and 237 assessments.
+Release details and configuration-aware rollback:
+[`server/README.md`](../server/README.md#current-release-owntube-compare-languages-20261113-1).
+
+## Previous language period comparison release
 
 `owntube-period-comparison-20261113-1`, source `08599ce56`, adds a saved two-group
 **Compare periods** view and a searchable **Other…** language picker. Dates combine
@@ -91,7 +100,7 @@ checks passed, with server coverage for DST, cumulative/legacy measurements,
 manual precedence, context correction, persistence, scope and conflicts.
 The verified fresh backup includes 237 existing language assessments.
 Release details and rollback:
-[`server/README.md`](../server/README.md#current-release-owntube-period-comparison-20261113-1).
+[`server/README.md`](../server/README.md#previous-release-owntube-period-comparison-20261113-1).
 
 ## Previous YouTube links release
 
