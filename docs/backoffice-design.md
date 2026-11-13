@@ -1,9 +1,14 @@
 # OwnTube backoffice — design
 
-Status: design prototype, November 2026. Runnable at `apps/backoffice/design-preview/`
-(`pnpm --dir apps/backoffice preview:design` → http://127.0.0.1:4187/). Sample data, browser storage
-only, no backend. The prototype is the visual and behavioural spec; the production backoffice will be
-rebuilt in Elm against the server.
+Status, November 2026. The design prototype runs at `apps/backoffice/design-preview/`
+(`pnpm --dir apps/backoffice preview:design` → http://127.0.0.1:4187/), with sample data and browser
+storage only. It remains the visual and behavioural spec, especially for curation.
+
+Production pages are built from it as vanilla ES modules on the server's APIs:
+- the **History desk** at `/` (§15);
+- the **Languages** module at `/modules/languages/` (§14).
+
+The previous Elm dashboard stays at `/legacy/` for device management and pairing.
 
 ## 1. What it is for
 
@@ -14,17 +19,22 @@ numbers. AI curation is planned but does not exist, so the UI does not pretend i
 
 ## 2. What it replaces
 
-The ytdash (Observer) dashboard UI is to be retired once History reads the server. **The server and
-its APIs stay**: ingestion and receipts, cumulative viewing records, evidence snapshots, device
-keys/pairing (`GET /api/device`), diagnostics (`/api/diagnostics`, `/api/metrics/client`). Only the
-screens change. History must reach parity on these before ytdash goes:
+History now reads the server. The History desk (§15) is the backoffice root, and the ytdash
+(Observer) dashboard has moved to `/legacy/`. Device management stays there until a **Devices** page
+replaces it. **The server and its APIs stay**:
+- ingestion and receipts;
+- cumulative viewing records and evidence snapshots;
+- device keys and pairing (`GET /api/device`);
+- diagnostics (`/api/diagnostics`, `/api/metrics/client`).
+
+Only the screens change. History had to reach parity on these:
 
 | Required | In the backoffice |
 | --- | --- |
-| What played, watch time, distinct videos, average per calendar day, 7/30/90 days, per device | History · Watched, its ledger and day totals (§8) |
-| Background playback, never hidden | Every play row shows its foreground/on-tab vs background split, with unspecified kept separate. The ledger has one split sentence for the period (§8). |
-| Past YouTube searches | History · Searches (§8). Chrome only; TVs say "not recorded". |
-| Evidence behind a watched video | The **Evidence** inspector on every play (§8a). |
+| What played, watch time, distinct videos, average per calendar day, 7/30/90 days, per device | History · Watched, its ledger and day totals (§8, §15) |
+| Background playback, never hidden | Every entry shows its foreground/on-tab vs background split, with unspecified kept separate. The ledger has one split sentence for the period (§8, §15). |
+| Past YouTube searches | History · Searches (§8, §15). Browsers record searches. Known TVs say "not recorded", and unidentified devices make no claim. |
+| Evidence behind a watched video | The **Evidence** inspector on every entry (§8a, §15). |
 | Languages breakdown | The **Languages** module (§14). It goes further than ytdash: review, manual classification, saved-evidence analysis and an audit. |
 
 Not carried over yet, by decision rather than oversight: Videos/Shorts share, completed viewings,
@@ -144,30 +154,36 @@ Period. Each view opens with its ledger.
 | Distinct videos | Video IDs with any recorded playback in the scope, each counted once. |
 | Per calendar day | Watched ÷ **every** calendar day in the period (7/30/90, including today and days without playback). The divisor is printed ("÷ 7 calendar days"); dividing by active days is never done. |
 
-- **Scope:** period and device set every number, including each day's total. The text filter only
-  narrows rows; the ledger says so, and a day shows "2 of 4 plays shown" while filtering.
-- **Playback context.** Every play splits into foreground (or on-tab), background and unspecified.
+- **Scope:** period, device and person set every number, including each day's total. The text
+  filter only narrows rows; the ledger says so, and a day shows "2 of 4 entries match" while
+  filtering.
+- **Playback context.** Every entry splits into foreground (or on-tab), background and unspecified.
   The three always add up to Watched, and the check asserts it for every row and scope.
   - Naming follows the source. Chrome reports *on-tab* (tab visible); OwnTube on Android TV reports
-    *foreground* (player activity in front). An all-devices scope says "on-tab or foreground".
+    *foreground* (player activity in front). Production takes the source from the server's device
+    `kind`; mixed or unidentified scopes say "on-tab / foreground".
   - Neither proves attention.
   - Records without context (older collectors, legacy rows) are *unspecified*, never assumed
     foreground.
   - The ledger adds one sentence ("Of that: 4 h 28 min on-tab or foreground · 55 min background ·
     29 min unspecified"), not a chart.
-  - Scope: a History row is one play and its split is that play's. ytdash's video rows aggregate
-    per person, video and range, so the label always names the scope it shows.
-- **Searches.** The count is every search in the period on the selected device(s). The list shows
-  the latest 20 of them, which mirrors the server today. When there are more, the page says "Listing
-  the latest 20 of 26" and the count still covers all 26. The filter only narrows the listed rows and
-  says "2 of the 19 listed searches match". A search row has time, query and device · source, and no
-  seconds, coverage or context. Searches come only from Chrome (recorded when a YouTube results page
-  opens; repeats within 5 s are ignored). For a TV the count is "—" with "not recorded on TVs", never 0.
-- **Calendar days:** the preview uses the browser's time zone (named in the ledger). The real API
-  must compute days in the server's `TIMEZONE` (default `Europe/Zurich`, as Observer does today) and
-  return the range and divisor with the totals, so the UI never guesses. Sample plays are attributed
-  to the day they started; real viewing records are already split at 15-minute UTC boundaries, so
-  cross-midnight playback lands on the right day.
+  - Scope: a History entry is one recorded viewing of one version on one device and day, and its
+    split is that entry's. Older collectors' records are one entry per version, device and day
+    (*Recorded that day*). ytdash's video rows aggregated per person, video and range, so the label
+    always names the scope it shows.
+- **Searches.** The count is every search in the period on the selected device(s). A search row has
+  time, query and device, and no seconds, coverage or context. Searches come from the browser
+  collector (recorded when a YouTube results page opens; repeats within 5 s are ignored). A known TV
+  shows "—" with "not recorded on TVs", never 0.
+  - **Production** pages through all of them, 20 at a time, with the filter applied on the server
+    across every search ("8 of 33 searches match").
+  - **The prototype** still mirrors the old dashboard: it lists the latest 20, says "Listing the latest
+    20 of 26", and filters only the listed rows.
+- **Calendar days** are the server's. The API computes them in its `TIMEZONE` (default
+  `Europe/Zurich`) and returns each entry's `date`, the range and the divisor. The desk groups by that
+  date and shows times in that zone, whatever the browser's zone is. (The prototype uses the browser's
+  zone, named in its ledger.) Viewing records are split at 15-minute UTC boundaries and grouped per
+  local date, so cross-midnight playback lands on both days.
 - Empty days mean "no recorded playback", not proof that nothing was watched. The History side note
   and this definition keep that wording.
 
@@ -250,10 +266,12 @@ blocks become labelled examples.
 
 ## 11. Integration path
 
-**Elm (`apps/backoffice`).** Keep the tokens and class names. Split views as `Curation.Index`,
-`Curation.List`, `Curation.Monitor`, `Item`, `Publish`, `History` (with `History.Ledger`), and
-`Ui.Tokens`. Port the behaviour, not the vanilla code. The state shape (draft document, revisions,
-diff) maps directly to Elm types.
+**Production pages.** History (§15) and Languages (§14) were built as vanilla ES modules rather than
+in Elm. They keep the prototype's tokens and class names, and port its behaviour.
+
+**Elm (`apps/backoffice`)** remains a possible structure for curation. Keep the tokens and class
+names. Split views as `Curation.Index`, `Curation.List`, `Curation.Monitor`, `Item`, `Publish` and
+`Ui.Tokens`. The state shape (draft document, revisions, diff) maps directly to Elm types.
 
 **Server (`server/`, Rust + SQLite).** Proposed additions, with JSON Schemas in `contracts/`:
 
@@ -267,30 +285,31 @@ diff) maps directly to Elm types.
 - Metadata: the server resolves pasted IDs (pending → resolved / unavailable) for title, channel, duration.
 - Feed preview: the TV reports the rows it showed (feed snapshot). Until that exists, the monitor shows
   curated rows plus the last snapshot, never invented rows.
-- History: `GET /api/history?days=7&device=…` → `{ range{start,end,days,timeZone}, totals{watchedSeconds,
-  foregroundSeconds, backgroundSeconds, unspecifiedSeconds, distinctVideos, perCalendarDaySeconds},
-  days[{date, watchedSeconds, plays[…]}] }`. This is computed by the server from the existing viewing
-  records; plays are paginated, and totals never depend on the page. Each play needs its own
-  context split. `viewing_slices.context` already holds it, and `/api/viewings/{device}/{id}` returns
-  one record. The dashboard's `recent` list gives per-viewing rows with a `detailUrl` but no split.
-- Devices need a **collector kind** (Chrome or OwnTube TV), stored at pairing or inferred from what a
-  device has sent, so the UI can say which devices record searches and context.
+- History: **done**. `GET /api/history`, `/api/history/searches` and `/api/history/evidence`
+  ([`contracts/history.md`](../contracts/history.md)) are computed from the existing viewing records.
+  - They return scope totals, per-day totals and entries with their own context split and coverage.
+  - The responses are paged through a snapshot (`generation`/`before` + `until`), and totals never
+    depend on the page.
+- Device **collector kind**: **done**. `devices[].kind` (`browser`, `tv`, `mixed`, `unknown`) and
+  `searchCapability` are inferred from saved collector evidence and recorded searches, never from
+  labels.
 
-**Wiring limits found in the current server** (`server/src/store.rs`, dashboard query):
+**Wiring limits found in the old dashboard query** (`server/src/store.rs`). The History endpoints
+resolve most of them:
 
-- **Searches.** `searchCount` counts every search event in the window and scope. `searches` is
-  the latest 20, ordered `t DESC, seq DESC`, each `{ query, t, person, device, timeLabel }`. The window
-  is local midnight `days − 1` ago in the server `TIMEZONE`, up to now, with the same device/person
-  filters as playback. To list more than 20, add a cursor (`before=t,seq`) and a server-side text
-  filter. Until then the UI filters only the loaded rows and says so. Search events also carry a
-  trigram language estimate, and the first result opened within 30 minutes is linked through the
-  watch event's `searchId`. Neither is returned yet, so neither is shown.
-- **Evidence.** Snapshots are stored as exact strings in `evidence(id, payload)` with `id = SHA-256(payload)`.
-  Dashboard video rows return `evidenceId` plus the snapshot *parsed* to an object, and ytdash re-encodes
-  it for display. To show and verify the exact text, the API must also return the stored string
-  (`evidenceText`). Only the snapshot attached to a row is returned. A list of a video's snapshots
-  (`GET /api/videos/{id}/evidence` → `{ evidenceId, collector, firstSeen, lastSeen }[]`) doesn't exist
-  yet, so the inspector shows only the play's own snapshot.
+- **Searches.** The dashboard listed only the latest 20 searches and returned neither a cursor nor a
+  server-side filter.
+  - **Resolved:** `/api/history/searches` pages with `before` + `until`, filters every search on the
+    server, returns per-day counts, and includes each search's trigram language estimate.
+  - **Still not returned:** the link from a search to the first result opened within 30 minutes (the
+    watch event's `searchId`), so it isn't shown.
+- **Evidence.** Snapshots are stored as exact strings in `evidence(id, payload)` with
+  `id = SHA-256(payload)`.
+  - **Resolved:** `/api/history/evidence` returns the stored string (`evidenceText`) with the parsed
+    snapshot, so the inspector shows and checks the exact text. A stored text that doesn't match its
+    ID is shown as a mismatch, never rewritten; the production copy has two such historical records.
+  - **Still missing:** a list of a video's snapshots (`GET /api/videos/{id}/evidence`), so the
+    inspector shows only the entry's own snapshot.
 - **Context.** Today's dashboard returns foreground/background/unspecified totals per person, video
   and range. The per-play split above is new surface, not new data.
 
@@ -316,8 +335,11 @@ curation, it covers:
 - The phone layout and focus return, and the schema-1 to schema-2 state migration (draft edits kept).
 - The Languages link: the preview serves the module's own files.
 
-The production Languages module and its own checks live in `apps/backoffice/modules/languages/`
-(§14). Screenshots go to the OS temp directory, not the repository.
+Production pages live next to the preview, each with its own checks:
+- the Languages module in `apps/backoffice/modules/languages/` (§14);
+- the History desk in `apps/backoffice/desk/` (§15).
+
+Screenshots go to the OS temp directory, not the repository.
 
 ## 14. Languages module
 
@@ -366,10 +388,64 @@ behind a permanent strip, and makes no API calls. Live failures show the server'
 again*. The design preview links to the demo through a `modules → ../modules` symlink, so there is
 one implementation.
 
-**Open contract questions.**
-1. `devices[].kind` (`browser`/`tv`), so context can say "on-tab" or "foreground" instead of
-   "on-tab/foreground".
-2. `needsReview` is currently true for every non-manual row, including high-confidence audio-track
-   estimates. If that's intended, *Needs review* equals all unconfirmed time.
-3. A `code` on 409 errors (stale vs manual lock) would allow precise wording. The UI currently shows
-   the server's message.
+**Contract decisions.**
+1. **Device kind.** The Languages contract doesn't carry `devices[].kind` yet, so context reads
+   "on-tab/foreground". The module switches to "on-tab" or "foreground" by itself once it does.
+   History's devices already carry it.
+2. **Review.** Conservative review is intentional: collector estimates always need review. A
+   high-confidence re-analysis of the selected audio label clears it.
+3. **409 errors.** The server's 409 message is enough for now. A structured `code` (stale revision vs
+   manual lock) may come later.
+
+**Navigation.** Live, the masthead reads History (`../../#/history`) · Languages, with a quiet
+*Legacy* link to the old dashboard. The demo keeps the preview's navigation.
+
+## 15. History desk
+
+The backoffice root (`/`) in production. It shows **History · Watched** (`#/history`) and
+**History · Searches** (`#/history/searches`) on live data, in the prototype's design (§6, §8, §8a).
+It targets [`contracts/history.md`](../contracts/history.md). Files, routes and checks are described
+in `apps/backoffice/desk/README.md`.
+
+**What changed from the prototype, and why.**
+- **No curation.** There are no *Suggest*, *Block channel* or curation marks, and no Curation nav
+  item; curation integration is the next milestone. There is no demo mode; the preview keeps the
+  sample data.
+- **Entries, not plays.** A native entry is one recorded viewing of one version on one device and
+  day. Older collectors saved samples without a visit identity, so their entries are one version per
+  device and day and read **Recorded that day**; nothing invents distinct plays.
+- **Times.** The time column shows each entry's first and last recorded playback as one range
+  (`13:02–15:20`), because neither end is a session start or end. Rows are sorted by the latest
+  recording, so the range's end follows the list. The inspector words it the same way. For
+  older-collector entries it gives the first and latest samples.
+- **Coverage** is the union within the entry; replays add watched time only. When some slices have
+  no ranges, the row says "at least 80% covered". Without a percentage it shows seconds, and with
+  neither it says "coverage not recorded". The thumbnail bar has a dotted end when partial and is
+  drawn in ink when there is no thumbnail.
+- **Searches** are complete and server-filtered, with per-day counts. Capability comes from the
+  server: a known TV is "not recorded", an unidentified device makes no claim, and a mixed scope gets
+  a source note naming each group. A quiet language code, estimated from the query text, appears
+  only when it is known.
+
+**Scope, snapshots and honesty about loading.**
+- Period, device and person are shared by both views; each view keeps its own filter. Person and
+  device narrow together.
+- Paging and filtering read one server snapshot. *Refresh*, a scope change or a 410 starts a new one
+  at page 1. After a 410 the page says the saved list is no longer available and shows current
+  records.
+- Old figures never stay on screen under a new scope's labels, and a slower, older answer never
+  replaces a newer one.
+
+**Ledger.** The ledger is the prototype's: Watched, Distinct videos and Per calendar day
+(÷ every calendar day). It ends with the "Of that" context sentence and the scope note. Its dateline
+ends with the snapshot time ("As of 14:32") and a quiet *Refresh*.
+
+**Layout.** The filter column stays in view while the list scrolls. On phones the heading and the
+Watched/Searches switch come first, device and person sit side by side, and the inspector is a
+bottom sheet. Long channel, device, title and query text wraps inside its row; a 390 px sweep of
+every page of the production copy found nothing wider than the screen.
+
+**Checked against real data** (an isolated, read-only production copy):
+- The ledger matches the API for 7 and 90 days.
+- In 90 days, 417 of 465 entries are older-collector days.
+- Both historical digest mismatches show as "Does not match", with the exact stored text.

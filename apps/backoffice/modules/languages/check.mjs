@@ -241,6 +241,7 @@ try {
     const first = (await requests()).filter((r) => r.path === '/api/modules/languages');
     ok(first.length >= 1 && JSON.stringify(first.at(-1).query) === JSON.stringify({ days: '7', device: '', person: '', language: 'all', status: 'all', query: '', page: '1' }), 'first request carries the contract’s default parameters');
     ok(await p.eval(() => document.getElementById('demo').hidden && !/Demo data|Sample data/.test(document.body.textContent)), 'live mode shows no demo or sample labels');
+    ok(await p.eval(() => document.querySelector('#nav [data-nav="history"]')?.getAttribute('href') === '../../#/history' && document.querySelector('#nav [data-nav="languages"]')?.getAttribute('aria-current') === 'page' && document.querySelector('[data-key="mast:legacy"]')?.getAttribute('href') === '../../legacy/'), 'live navigation leads to the History desk and the legacy dashboard');
 
     console.log('Scope and filters');
     const api7 = await inPage('/api/modules/languages', { days: 7, device: '', person: '', language: 'all', status: 'all', query: '', page: 1 });

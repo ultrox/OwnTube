@@ -22,7 +22,8 @@ for (const file of ['style.css', 'dashboard.js', 'init.js']) {
   await fs.writeFile(`dist/${versioned}`, contents);
   html = html.replace(`/${file}`, `/${versioned}`);
 }
-await fs.writeFile('dist/index.html', html);
+await fs.mkdir('dist/legacy', { recursive: true });
+await fs.writeFile('dist/legacy/index.html', html);
 const diagnostics = await fs.readFile('dist/diagnostics.js');
 const diagnosticsName = `diagnostics.${createHash('sha256').update(diagnostics).digest('hex').slice(0, 16)}.js`;
 await fs.writeFile(`dist/${diagnosticsName}`, diagnostics);
@@ -68,3 +69,23 @@ for (const [file, contents] of [
   languageHtml = languageHtml.replaceAll(`"${file}"`, `"${name}"`);
 }
 await fs.writeFile(`${languageRoot}/index.html`, languageHtml);
+
+// The live History desk owns the root; the existing Elm dashboard stays at
+// /legacy/. Hash dependencies before their importer to invalidate the full graph.
+async function versionDeskAsset(file, contents) {
+  const hash = createHash('sha256').update(contents).digest('hex').slice(0, 16);
+  const versioned = file.replace(/(\.[^.]+)$/, `.${hash}$1`);
+  await fs.writeFile(`dist/${versioned}`, contents);
+  return versioned;
+}
+const deskApi = await versionDeskAsset('api.js', await fs.readFile('desk/api.js'));
+const deskScript = (await fs.readFile('desk/desk.js', 'utf8')).replaceAll('./api.js', `./${deskApi}`);
+let deskHtml = await fs.readFile('desk/index.html', 'utf8');
+for (const [file, contents] of [
+  ['desk.js', deskScript],
+  ['desk.css', await fs.readFile('desk/desk.css')],
+]) {
+  const name = await versionDeskAsset(file, contents);
+  deskHtml = deskHtml.replaceAll(`"${file}"`, `"${name}"`);
+}
+await fs.writeFile('dist/index.html', deskHtml);

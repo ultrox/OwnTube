@@ -70,7 +70,7 @@ node apps/backoffice/modules/languages/check.mjs
 node apps/backoffice/modules/languages/check.mjs --live http://127.0.0.1:3211 --token-file <admin-token>
 ```
 
-- **Mock (53 assertions).** An in-process mock of the contract on an ephemeral loopback port, with
+- **Mock (54 assertions).** An in-process mock of the contract on an ephemeral loopback port, with
   auth, recorded requests and injected failures, drives the real `api.js` in isolated headless
   Chromium. It covers:
   - the sign-in gate and wrong key

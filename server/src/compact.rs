@@ -27,6 +27,7 @@ pub struct Metadata {
 #[derive(Clone, Debug)]
 pub struct Fact {
     pub legacy: bool,
+    pub viewing_id: String,
     pub latest_end: f64,
     pub device: String,
     pub bucket: i64,
@@ -167,6 +168,7 @@ pub fn import_rows(db: &Connection, rows: &[(i64, String, String)]) -> rusqlite:
             let id = format!("legacy-{bucket}-{ctx}-{meta_id}");
             let fact = groups.entry((device.clone(), id)).or_insert_with(|| Fact {
                 legacy: true,
+                viewing_id: format!("legacy-{}", meta.video_id),
                 latest_end: next,
                 device: device.clone(),
                 bucket,
@@ -355,7 +357,7 @@ pub fn facts(
     until: i64,
     coverage: bool,
 ) -> rusqlite::Result<Vec<Fact>> {
-    let mut query=db.prepare("SELECT s.device,s.bucket,m.payload,s.context,s.seconds,s.first,s.last,s.latest_t,s.latest_order,CASE WHEN ? THEN s.ranges ELSE '[]' END,s.origin,s.latest_end FROM viewing_slices s JOIN video_metadata m ON m.id=s.metadata_id WHERE s.bucket>=? AND s.bucket<?")?;
+    let mut query=db.prepare("SELECT s.device,s.bucket,m.payload,s.context,s.seconds,s.first,s.last,s.latest_t,s.latest_order,CASE WHEN ? THEN s.ranges ELSE '[]' END,s.origin,s.latest_end,s.viewing_id FROM viewing_slices s JOIN video_metadata m ON m.id=s.metadata_id WHERE s.bucket>=? AND s.bucket<?")?;
     let rows = query
         .query_map(
             params![coverage, since.div_euclid(BUCKET_MS) * BUCKET_MS, until],
@@ -373,6 +375,7 @@ pub fn facts(
                     ranges: parse(&r.get::<_, String>(9)?)?,
                     legacy: r.get::<_, String>(10)? == "legacy",
                     latest_end: r.get(11)?,
+                    viewing_id: r.get(12)?,
                 })
             },
         )?

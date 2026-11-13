@@ -14,6 +14,7 @@ use tower_http::services::ServeDir;
 
 mod analytics;
 mod compact;
+mod history;
 mod languages;
 #[cfg(test)]
 mod legacy_analytics;
@@ -399,6 +400,9 @@ fn router(app: App, public: PathBuf) -> Router {
         .route("/api/devices/{id}/revoke", post(revoke_device))
         .route("/api/ingest", post(ingest))
         .route("/api/dashboard", get(dashboard))
+        .route("/api/history", get(history::watched))
+        .route("/api/history/searches", get(history::searches))
+        .route("/api/history/evidence", get(history::evidence))
         .route("/api/languages", get(languages))
         .route("/api/language-videos", get(language_videos))
         .route("/api/modules/languages", get(languages::dashboard))

@@ -6,7 +6,8 @@ Run container builds from the OwnTube repository root:
 docker build -f deploy/Dockerfile -t youtube-observer:local .
 ```
 
-The image includes the Rust server, built history UI and Languages module. Android and the Chrome
+The image includes the Rust server, live History/Searches desk at `/`, legacy Elm dashboard
+at `/legacy/`, and Languages module. Android and the Chrome
 extension are separate artifacts. The curation design preview is not included.
 
 ## Local container check
@@ -17,7 +18,8 @@ pnpm check:docker
 ```
 
 This creates a disposable container and volume, verifies non-root execution,
-login and persistence across container recreation, then removes its own resources.
+hashed runtime assets/imports, authenticated APIs, login and persistence across
+container recreation, then removes its own resources.
 
 ## Compose
 

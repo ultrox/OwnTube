@@ -57,7 +57,7 @@ try {
       observation.page=await page.eval(()=>({title:document.title,text:document.body?.innerText.slice(0,1500)})).catch(()=>null);
     }
   }
-  const ui=await browser.newPage(origin+'/');await ui.type('#owner-key',key);await ui.click('button','Sign in');await ui.waitFor('#watch-total');await ui.setSize(1280,1000);
+  const ui=await browser.newPage(origin+'/legacy/');await ui.type('#owner-key',key);await ui.click('button','Sign in');await ui.waitFor('#watch-total');await ui.setSize(1280,1000);
   fs.mkdirSync('artifacts',{recursive:true});await ui.screenshot('artifacts/live-dashboard.png');
   report.passed=report.videos.every(v=>v.passed);
 } catch(error) {report.error=error.message;report.passed=false;}

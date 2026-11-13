@@ -9,6 +9,7 @@ RUN pnpm install --frozen-lockfile --ignore-scripts
 COPY apps/backoffice/elm.json apps/backoffice/build.mjs ./
 COPY apps/backoffice/history history
 COPY apps/backoffice/modules modules
+COPY apps/backoffice/desk desk
 RUN pnpm build
 
 FROM rust:1.94-bookworm AS rust

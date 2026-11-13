@@ -40,7 +40,7 @@ test('sign-in is independent of slow history; Observer and Languages retain sepa
       if(hold) pending.push(request.requestId);
       else void ui.s.send('Fetch.continueRequest',{requestId:request.requestId});
     });
-    await ui.goto(origin+'/');await ui.type('#owner-key',admin);await ui.click('button','Sign in');
+    await ui.goto(origin+'/legacy/');await ui.type('#owner-key',admin);await ui.click('button','Sign in');
     await waitFor(()=>pending.length===1);
     await ui.waitFor('#observer-panel','You’re signed in');
     assert.equal(await ui.count('#owner-key'),0,'The login form closes before history finishes');
@@ -51,7 +51,7 @@ test('sign-in is independent of slow history; Observer and Languages retain sepa
     await ui.click('#observer-tab');await ui.waitFor('#watch-total','1m 35s');
 
     // A restored owner session should also bypass the Welcome back form during slow loading.
-    hold=true;await ui.goto(origin+'/');await waitFor(()=>pending.length===1);
+    hold=true;await ui.goto(origin+'/legacy/');await waitFor(()=>pending.length===1);
     await ui.waitFor('#observer-panel','You’re signed in');assert.equal(await ui.count('#owner-key'),0);
     await waitFor(()=>ui.eval(()=>document.body.textContent.includes('Loading took too long. Please try again.')),{timeout:12000,message:'bounded history timeout'});
     hold=false;await ui.s.send('Fetch.continueRequest',{requestId:pending.shift()}).catch(()=>{});

@@ -1,6 +1,6 @@
 # OwnTube server (YouTube Observer)
 
-A small, single-owner YouTube record: **Chrome collector → Rust + SQLite → Elm dashboard**.
+A small, single-owner YouTube record: **Chrome / Android collectors → Rust + SQLite → OwnTube backoffice**.
 Watch time is the primary measurement. Cumulative viewing records retain titles, descriptions,
 detector evidence, playback context and merged coverage for future analysis.
 
@@ -25,7 +25,7 @@ cargo run --locked
 1. Open **http://127.0.0.1:3210**.
 2. Sign in using the contents of `server/data/admin-token` (relative to the repository root). The server creates this file
    on first run with owner-only permissions. `ADMIN_TOKEN` can supply a key instead (24+ characters).
-3. Add people (for example yourself, your wife and your sister), then create labelled devices assigned
+3. Open **Legacy** (`/legacy/`) to add people, then create labelled devices assigned
    to each person. Each browser installation gets its own device key; a person can have many devices.
 4. Load `apps/chrome-extension/dist/` unpacked at `chrome://extensions`.
 5. In its popup, open **Server & pairing → Open connection settings**. In that normal tab, enter
@@ -34,11 +34,33 @@ cargo run --locked
    Accept Chrome's server-access permission if prompted. **Saved connection** confirms persistence;
    the key field is deliberately blank after saving/reopening, rather than displaying your stored key.
 6. Refresh open YouTube tabs. Watch a regular video or Short; uploads run roughly every 30 seconds.
-   The live dashboard refreshes every 15 seconds. **Upload now** starts a bounded drain immediately.
+   History uses an explicit **Refresh** to preserve the list while reading. **Upload now** in the
+   collector starts a bounded drain immediately.
 
 ### People and history
 
-The dashboard has two independent views: **Observer** for viewing statistics, history and device
+The production web build serves **History** at `/#/history` and **Searches** at
+`/#/history/searches`. The editorial desk reads `/api/history`, `/api/history/searches`
+and exact-version `/api/history/evidence`; see [the contract](../contracts/history.md).
+Period/person/device define totals. Text narrows records across all pages without changing
+those totals. Watch time separates foreground, background and unspecified contexts.
+Native entries group recorded viewing ID, metadata version, device and server calendar date.
+Legacy entries say **Recorded that day** because the collector saved no visit identity.
+Coverage describes the entry's recorded media ranges, with partial/missing coverage labelled.
+Searches pages expose every saved query, rather than only the latest twenty.
+
+Paging and text changes preserve the snapshot pair; changing scope or **Refresh** starts
+a new snapshot. If viewing records changed, History reloads page one with a notice.
+Devices are described by their observed collector evidence, never guessed from labels.
+The independent **Languages** module remains at `/modules/languages/` with its own filters
+and audited corrections. History shows the original collector estimate.
+
+The existing Elm dashboard remains at `/legacy/` for device/person management and previous
+views. The following sections describing Observer tabs/charts apply to that legacy dashboard.
+The desk and Languages ship content-hashed CSS and JavaScript import graphs.
+Diagnostics and the Android integration guide retain their root paths.
+
+The legacy dashboard has two independent views: **Observer** for viewing statistics, history and device
 management, and **Languages** for a watch-time breakdown by recorded language estimate. Languages
 has its own person/device/date filters, percentage bars and a selectable one-language-versus-the-rest
 comparison. Switching views preserves each view's filters; only the active view refreshes automatically.
@@ -229,8 +251,10 @@ pages, pass the first response's `snapshotSeq` as `before` and its `until`. The 
 are `query` (up to 200 characters), `kind` (`all`/`video`/`short`), and `sort` (`recent`/`watch`/`title`).
 `historyCount` counts person/video rows before history filters; `filteredCount` counts matching rows
 and determines pagination. Each row has a stable `historyId`, `personId`, and person label.
-`shortSeconds`/`regularSeconds`, daily format totals, `activeDays`, `searchCount`, and the latest 20
-`searches` cover the full person/device/date scope. Evidence is loaded only for the returned page.
+This legacy `/api/dashboard` response includes `shortSeconds`/`regularSeconds`, daily format totals,
+`activeDays`, full-scope `searchCount`, and the latest 20 `searches`. The new
+`/api/history/searches` pages through every saved query; see [History's contract](../contracts/history.md).
+Evidence is loaded only for the returned page.
 `foregroundSeconds`, `backgroundSeconds`, and `unspecifiedSeconds` partition `seconds` at dashboard,
 daily and person/video-row levels. History filters and pagination do not change the dashboard partition.
 Device rotation returns `{deviceId,token}`; copy that key immediately.
@@ -530,5 +554,20 @@ seven-day soak test or a signed-in-session guarantee.
 
 Container smoke check: build with `docker build -f deploy/Dockerfile -t youtube-observer:local .`
 from the repository root, then run `pnpm --dir server check:docker`. This checks non-root
-startup, served dashboard, login, and preservation of devices and sessions after recreating a container
+startup, hashed History assets/imports, the legacy page, authenticated History/Searches/Languages
+APIs, login, and preservation of devices and sessions after recreating a container
 with the same volume. The test removes only its own temporary container and volume.
+
+History parity on an isolated production copy:
+`node server/tooling/check-history-parity.mjs http://127.0.0.1:3212 /path/to/copy/admin-token`.
+The key file must sit beside that copy's `observer.sqlite3`. It compares all 7/30/90-day
+person/device scopes with legacy and Languages totals, checks every page/daily sum,
+compares saved searches and exact evidence text directly with SQLite, and reports
+pre-existing digest mismatches without changing their records.
+
+Post-release browser smoke:
+`node server/tooling/check-history-public.mjs https://ytdash.gromobran.com /path/to/admin-token /path/to/screenshots`.
+It checks public root HTML against the local build and verifies hashed dependencies,
+sign-in/session restoration, real History/Searches, evidence, stable filter totals,
+phone layouts and the legacy/Languages pages. Only session login writes; third-party
+thumbnail requests are blocked during the check.

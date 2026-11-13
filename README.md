@@ -9,7 +9,7 @@ repository. Each component uses its own normal build tools and dependencies.
 | --- | --- |
 | [`apps/android/`](apps/android/README.md) | SmartTube-derived native TV app, Gradle modules, and pinned upstream submodules |
 | [`apps/chrome-extension/`](apps/chrome-extension/README.md) | Browser playback collector and durable upload queue |
-| [`apps/backoffice/`](apps/backoffice/README.md) | Web interface: existing viewing history and the new curation design |
+| [`apps/backoffice/`](apps/backoffice/README.md) | Live History/Searches, independent Languages, and the curation design preview |
 | [`server/`](server/README.md) | Rust HTTP API, SQLite storage/migrations, authentication, integration checks |
 | [`contracts/`](contracts/README.md) | Cross-client API documentation and compatibility boundaries |
 | [`deploy/`](deploy/README.md) | Container build and deployment configuration |
@@ -40,6 +40,13 @@ Load `apps/chrome-extension/dist/` as an unpacked extension in a disposable Chro
 profile for development. Existing installed collectors retain their own pairing
 and queue; changing an unpacked extension's directory can change its identity.
 
+### History and Searches
+
+The root opens the live History desk; `/#/history/searches` shows all saved
+searches with pagination and filtering. Totals follow period/person/device scope;
+text filters only narrow the list. The original dashboard and device management
+remain at `/legacy/`.
+
 ### Backoffice design preview
 
 ```sh
@@ -47,7 +54,7 @@ pnpm --dir apps/backoffice preview:design
 ```
 
 Open <http://127.0.0.1:4187>. This independently styled prototype is separate from
-the existing history UI and server build.
+the live History desk and server build.
 
 ### Languages module
 

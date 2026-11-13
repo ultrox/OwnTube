@@ -21,10 +21,12 @@ exercise the actual extension and history UI against a disposable local database
 The historical executable name `youtube-observer` remains for operational
 compatibility.
 
-**Backoffice (`apps/backoffice`)** owns the web UI. The existing Elm history UI and
-the new curation design have separate sources and styling. The production build
-serves the history UI and the independent Languages module at
-`/modules/languages/`; the broader curation preview runs independently with local data.
+**Backoffice (`apps/backoffice`)** owns the web UI. The live editorial History/Searches
+desk (`desk/`) uses standalone ES modules at the root. The existing Elm dashboard
+(`history/`) remains at `/legacy/` for device management and previous views.
+Languages is independent at `/modules/languages/`; the broader curation preview
+runs independently with local data. Runtime JS import graphs and CSS have
+content-addressed URLs. History's read-only API contract lives in `contracts/history.md`.
 
 **Languages** owns its UI, filters, API and append-only assessment table. Corrections
 target one recorded metadata version on one device; they do not rewrite evidence

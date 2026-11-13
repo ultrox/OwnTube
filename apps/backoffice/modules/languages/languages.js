@@ -185,16 +185,16 @@ function renderChrome() {
     strip.innerHTML = `<span class="demo__tag">Demo</span><span class="demo__msg"><b>Sample data in this browser.</b> Nothing here comes from or goes to the server. Corrections reset on reload.</span>`;
   }
   // Demo runs inside the design preview, so its navigation mirrors the preview. Live, the module
-  // links back to the backoffice home; the parent app decides its own navigation.
+  // sits beside the History desk at the backoffice root; the old dashboard lives at /legacy/.
   $('#nav').innerHTML = DEMO
     ? `<a class="nav__link" href="../../#/curation">Curation</a><a class="nav__link" href="../../#/history">History</a><a class="nav__link" href="./?demo=1" aria-current="page">Languages</a>`
-    : `<a class="nav__link" href="../../">Backoffice</a><a class="nav__link" href="./" aria-current="page">Languages</a>`;
+    : `<a class="nav__link" href="../../#/history" data-nav="history">History</a><a class="nav__link" href="./" aria-current="page" data-nav="languages">Languages</a>`;
   renderMastEnd();
 }
 function renderMastEnd() {
-  $('#mast-end').innerHTML = !DEMO && state.auth === 'signedIn'
-    ? '<button type="button" class="btn btn--sm btn--quiet" data-action="logout" data-key="mast:logout">Sign out</button>'
-    : '';
+  if (DEMO) { $('#mast-end').innerHTML = ''; return; }
+  $('#mast-end').innerHTML = `<a class="btn btn--sm btn--quiet" href="../../legacy/" title="The previous dashboard, with devices and pairing" data-key="mast:legacy">Legacy</a>${state.auth === 'signedIn'
+    ? '<button type="button" class="btn btn--sm btn--quiet" data-action="logout" data-key="mast:logout">Sign out</button>' : ''}`;
 }
 
 /* ------------------------------------------------------------------ render */

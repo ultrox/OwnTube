@@ -18,3 +18,5 @@
 !apps/backoffice/history/**
 !apps/backoffice/modules/
 !apps/backoffice/modules/**
+!apps/backoffice/desk/
+!apps/backoffice/desk/**

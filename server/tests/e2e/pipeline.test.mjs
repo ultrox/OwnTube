@@ -121,7 +121,7 @@ test('Chrome capture → offline queue → lost acknowledgement → restart → 
     assert.ok(!JSON.stringify(exported).includes('private-id'));assert.ok(!JSON.stringify(exported).includes('session_token'));
     assert.equal(first.videos.length,2);assert.ok(first.videos.some(v=>v.evidence?.description?.length>0));
     await stop();await start();assert.equal((await dashboard()).seconds,first.seconds);
-    const ui=await browser.newPage(origin+'/');await ui.type('#owner-key',admin);await ui.click('button','Sign in');
+    const ui=await browser.newPage(origin+'/legacy/');await ui.type('#owner-key',admin);await ui.click('button','Sign in');
     await ui.waitFor('#watch-total');
     assert.equal(await ui.count('.video'),0,'History starts collapsed, keeping statistics prominent');
     assert.equal(await ui.count('.day-bar'),7);
@@ -206,7 +206,7 @@ test('Chrome capture → offline queue → lost acknowledgement → restart → 
     await ui.setSize(390,844);await ui.eval(()=>window.scrollTo(0,0));
     assert.equal(await ui.eval(()=>document.documentElement.scrollWidth<=innerWidth),true,'Mobile dashboard must not overflow horizontally');
     await ui.screenshot('artifacts/dashboard-mobile.png');
-    await ui.goto(origin+'/');await ui.waitFor('#watch-total');await ui.waitFor('button','Dark theme');
+    await ui.goto(origin+'/legacy/');await ui.waitFor('#watch-total');await ui.waitFor('button','Dark theme');
     assert.equal(ui.dialogs.length,0);
   } finally {
     if(browser) await browser.close();
