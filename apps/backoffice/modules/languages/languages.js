@@ -448,6 +448,13 @@ function videosHTML(d) {
 }
 
 const realVideoId = (id) => typeof id === 'string' && /^[A-Za-z0-9_-]{11}$/.test(id);
+function youtubeLinkHTML(g, location) {
+  if (!realVideoId(g.videoId) || DEMO) return '';
+  return `<a class="btn btn--sm btn--quiet" href="https://www.youtube.com/watch?v=${esc(g.videoId)}"
+    target="_blank" rel="noopener noreferrer" data-youtube-link data-key="youtube:${location}:${esc(g.id)}"
+    aria-label="Open ${esc(g.title || g.videoId)} in YouTube (new tab)">Open in YouTube <span aria-hidden="true">↗</span></a>`;
+}
+
 function thumbHTML(videoId) {
   const img = realVideoId(videoId) && !DEMO
     ? `<img src="https://i.ytimg.com/vi/${esc(videoId)}/mqdefault.jpg" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-thumb>`
@@ -581,6 +588,7 @@ function quickLanguagesHTML(g) {
         aria-pressed="${current === code}" aria-label="${esc(langName(code))}" title="Set ${esc(scope)} to ${esc(langName(code))}" ${disabled ? 'disabled' : ''}>${label}</button>`).join('')}
     </div>
     <span class="why">${g.versions.length > 1 ? `All ${g.versions.length} versions` : 'Set language'}</span>
+    ${youtubeLinkHTML(g, 'row')}
     ${job ? `<span class="${job.error ? 'flag-review' : 'why'}" data-quick-status role="${job.error ? 'alert' : 'status'}">${esc(job.text)}</span>` : ''}
     ${job?.refresh ? `<button type="button" class="link-btn" data-action="quick-refresh" data-id="${esc(id)}" data-key="quick-refresh:${esc(id)}" ${state.loading ? 'disabled' : ''}>Refresh</button>` : ''}
   </div>`;
@@ -692,7 +700,7 @@ function inspectorHTML() {
       <button type="button" class="icon-btn" data-action="close" data-key="dlg:close" aria-label="Close">${ICON.close}</button>
     </div>`;
   const foot = `<div class="dialog__foot"><span class="why">${DEMO ? 'Demo data · nothing is saved to a server' : 'Saved evidence · not a fresh YouTube lookup'}</span><button type="button" class="btn btn--sm ${d.dirty ? 'btn--primary' : ''}" data-action="done" data-key="dlg:done" ${d.busy || (d.dirty && (d.loading || !d.data)) ? 'disabled' : ''}>${d.busy ? 'Saving…' : d.dirty ? 'Save & close' : 'Close'}</button></div>`;
-  const meta = `<p class="ins__meta">${g.channel ? `<span>${esc(g.channel)}</span>` : ''}<span class="mono">${esc(g.videoId || '')}</span><span>${esc(devices.join(', '))}</span><span data-version-count>${esc(versionsText(n))}</span><span>${esc(spent(g.seconds))} watched</span></p>`;
+  const meta = `<p class="ins__meta">${g.channel ? `<span>${esc(g.channel)}</span>` : ''}<span class="mono">${esc(g.videoId || '')}</span><span>${esc(devices.join(', '))}</span><span data-version-count>${esc(versionsText(n))}</span><span>${esc(spent(g.seconds))} watched</span>${youtubeLinkHTML(g, 'inspector')}</p>`;
 
   // What a decision here changes, in one sentence.
   const all = d.target === 'all' || n === 1;

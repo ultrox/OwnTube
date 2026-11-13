@@ -39,6 +39,8 @@ The build copies `*.html|css|js|svg|woff2` to `dist/modules/languages/` and skip
   - **Time:** the row's watched time and context are the sum over all its versions.
   - **Meta:** it names every device the versions played on and, when there is more than one,
     "N recorded versions".
+  - **Open in YouTube ↗:** a direct link beside the quick language choices, also in the
+    inspector, opens the video in a new tab while keeping the current filters and edits.
   - **Filters:** a filter keeps a whole video when any of its versions matches, and says "2 of 7
     versions match".
   - **Language line:** the shared language and status, with a quiet note of where it comes from
