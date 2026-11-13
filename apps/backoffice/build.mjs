@@ -45,6 +45,11 @@ async function copyModule(source, destination) {
   }
 }
 await copyModule('modules', 'dist/modules');
+await copyModule('shared', 'dist/shared');
+const versionsSource = await fs.readFile('shared/recorded-versions.js');
+const versionsName = `recorded-versions.${createHash('sha256').update(versionsSource).digest('hex').slice(0, 16)}.js`;
+await fs.writeFile(`dist/shared/${versionsName}`, versionsSource);
+const sharedImports = (source) => source.replaceAll('/shared/recorded-versions.js', `/shared/${versionsName}`);
 
 // Version the complete module graph: an updated import must also change the
 // entry URL, so browser/CDN caches cannot mix releases.
@@ -55,7 +60,7 @@ async function versionLanguageAsset(file, contents) {
   await fs.writeFile(`${languageRoot}/${versioned}`, contents);
   return versioned;
 }
-let languageScript = await fs.readFile(`${languageRoot}/languages.js`, 'utf8');
+let languageScript = sharedImports(await fs.readFile(`${languageRoot}/languages.js`, 'utf8'));
 for (const file of ['api.js', 'demo.js']) {
   const name = await versionLanguageAsset(file, await fs.readFile(`${languageRoot}/${file}`));
   languageScript = languageScript.replaceAll(`./${file}`, `./${name}`);
@@ -79,7 +84,7 @@ async function versionDeskAsset(file, contents) {
   return versioned;
 }
 const deskApi = await versionDeskAsset('api.js', await fs.readFile('desk/api.js'));
-const deskScript = (await fs.readFile('desk/desk.js', 'utf8')).replaceAll('./api.js', `./${deskApi}`);
+const deskScript = sharedImports(await fs.readFile('desk/desk.js', 'utf8')).replaceAll('./api.js', `./${deskApi}`);
 let deskHtml = await fs.readFile('desk/index.html', 'utf8');
 for (const [file, contents] of [
   ['desk.js', deskScript],

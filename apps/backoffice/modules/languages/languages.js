@@ -2,6 +2,7 @@
 // Live by default. `?demo` loads an in-memory sample adapter instead, behind a permanent demo strip;
 // demo mode makes no /api requests and live mode never contains sample data.
 import { ApiError, liveApi } from './api.js';
+import { versionKey, findVersion, versionPickerHTML, savedEvidence, EvidenceDigests } from '/shared/recorded-versions.js';
 
 const params = new URLSearchParams(location.search);
 const DEMO = params.has('demo');
@@ -109,6 +110,7 @@ const state = {
   dialog: null,
 };
 let generation = 0;
+let linkedMetadata = new URLSearchParams(location.hash.replace(/^#/, '')).get('metadata');
 
 function readFilters() {
   const h = new URLSearchParams(location.hash.replace(/^#/, ''));
@@ -132,6 +134,7 @@ function writeFilters() {
   if (f.language !== 'all') h.set('language', f.language);
   if (f.status !== 'all') h.set('status', f.status);
   if (f.page > 1) h.set('page', f.page);
+  if (linkedMetadata) h.set('metadata', linkedMetadata);
   const next = h.toString();
   if (location.hash.replace(/^#/, '') !== next) history.replaceState(null, '', `${location.pathname}${location.search}${next ? `#${next}` : ''}`);
 }
@@ -156,7 +159,19 @@ async function load({ keepPage = false } = {}) {
     if (error instanceof ApiError && error.status === 401) return signedOut();
     state.error = error.message || 'Languages could not be loaded.';
   } finally {
-    if (mine === generation) { state.loading = false; render(); }
+    if (mine === generation) {
+      state.loading = false;
+      render();
+      if (!state.error && linkedMetadata) {
+        const group = state.data?.videos.find((g) => g.versions.some((v) => v.metadataId === linkedMetadata));
+        if (group) {
+          const version = group.versions.find((v) => v.metadataId === linkedMetadata);
+          linkedMetadata = null;
+          writeFilters();
+          openInspector(String(group.id), null, versionKey(version));
+        }
+      }
+    }
   }
 }
 
@@ -445,7 +460,6 @@ function recordedText(r) {
 
 /* ------------------------------------------------------------------ video groups */
 
-const versionKey = (v) => `${v.deviceId}:${v.metadataId}`;
 const groupDevices = (g) => (Array.isArray(g.devices) && g.devices.length ? g.devices : [{ id: '', label: g.deviceLabel }]).map((d) => d.label || 'Device');
 const versionsText = (n) => (n === 1 ? '1 recorded version' : `${n} recorded versions`);
 
@@ -558,11 +572,11 @@ const providerList = () => {
 
 // The inspector holds one video group. Its classification applies to every version in the group
 // by default; evidence, audit and analysis belong to the selected version (newest first).
-async function openInspector(id, opener) {
+async function openInspector(id, opener, selected) {
   const group = state.data?.videos?.find((g) => String(g.id) === id);
   if (!group) return;
   state.dialog = {
-    id, group, selected: versionKey(group.versions[0]), target: 'all',
+    id, group, selected: selected || versionKey(group.versions[0]), target: 'all', request: 0,
     data: null, loading: true, error: null, alert: null, busy: false,
     raw: 'exact', rawOpen: false, openerKey: opener?.getAttribute?.('data-key') || null,
     form: { lang: null, other: '', note: '', provider: providerList()[0].id },
@@ -573,7 +587,7 @@ async function openInspector(id, opener) {
   await loadVersion();
 }
 
-const selectedVersion = (d) => d.group.versions.find((v) => versionKey(v) === d.selected) || d.group.versions[0];
+const selectedVersion = (d) => findVersion(d.group, d.selected);
 
 // The language a new decision starts from: an existing manual choice, else the most-watched known
 // language, so one click never records "unknown" over a language some version already names.
@@ -590,20 +604,22 @@ async function loadVersion() {
   if (!d) return;
   const v = selectedVersion(d);
   const key = versionKey(v);
+  const request = ++d.request;
+  d.data = null;
   d.loading = true;
   d.error = null;
   renderDialog();
   try {
     const data = await api.evidence(v.deviceId, v.metadataId);
-    if (state.dialog !== d || d.selected !== key) return;
+    if (state.dialog !== d || d.selected !== key || d.request !== request) return;
     d.data = data;
     if (d.form.lang == null) d.form.lang = defaultLang(d.group);
   } catch (error) {
-    if (state.dialog !== d || d.selected !== key) return;
+    if (state.dialog !== d || d.selected !== key || d.request !== request) return;
     if (error instanceof ApiError && error.status === 401) { signedOut(); return; }
     d.error = error.message;
   } finally {
-    if (state.dialog === d && d.selected === key) { d.loading = false; renderDialog(); }
+    if (state.dialog === d && d.selected === key && d.request === request) { d.loading = false; renderDialog(); }
   }
 }
 
@@ -736,9 +752,7 @@ function versionHTML(d, v) {
   const tz = state.data?.timezone;
   const index = g.versions.indexOf(v);
   const label = (x, i) => `${i === 0 ? 'Newest · ' : ''}${when(x.lastWatched, tz)} · ${x.deviceLabel || 'device'} · ${langName(x.assessment?.lang)} (${x.assessment?.lang || 'und'}), ${(STATUS_WORD[x.assessment?.status] || x.assessment?.status || '').toLowerCase()}${x.title && x.title !== g.title ? ` · “${x.title}”` : ''}`;
-  const picker = n > 1
-    ? `<label class="vh" for="f-version">Recorded version</label>
-       <select class="select" id="f-version" data-action="version" data-key="ins:version">${g.versions.map((x, i) => `<option value="${esc(versionKey(x))}" ${x === v ? 'selected' : ''}>${esc(label(x, i))}</option>`).join('')}</select>` : '';
+  const picker = versionPickerHTML(g, d.selected, label);
   const facts = `<p class="why ins__vmeta" data-version-meta>${esc(v.deviceLabel || 'Device')} · last played ${esc(when(v.lastWatched, tz))} · ${esc(spent(v.seconds))} watched · <span class="mono" title="Recorded metadata version">version ${esc(String(v.metadataId || '').slice(0, 12))}</span>${v.title && v.title !== g.title ? ` · saved title “${esc(v.title)}”` : ''}</p>`;
   let inner;
   if (!d.data) {
@@ -805,8 +819,7 @@ function alertHTML(al) {
 
 /* Saved evidence: source values, the detector's estimate and the exact saved text. */
 function evidenceHTML(data) {
-  const ev = data.evidence && typeof data.evidence === 'object' ? data.evidence : null;
-  const text = typeof data.evidenceText === 'string' ? data.evidenceText : null;
+  const { evidence: ev, text } = savedEvidence(data);
   if (!ev && !text) {
     return `<section class="ins__section" aria-labelledby="ins-ev"><h3 class="label" id="ins-ev">Saved evidence</h3>
       <p>${notRecorded('no source snapshot was saved with this version')}</p></section>`;
@@ -871,25 +884,14 @@ function evidenceHTML(data) {
 
 // Re-hash the exact saved text in this browser. Results are kept per ID and exact text, and are only
 // written into an inspector still showing that same snapshot (versions can be switched meanwhile).
-const digests = new Map();
-const digestKey = (id, text) => `${id}\n${text}`;
+const digests = new EvidenceDigests();
 const digestText = (id, text) => ({
   match: '<span class="ok">Matches</span> <span class="why">SHA-256 recomputed in this browser</span>',
   mismatch: '<span class="bad">Does not match</span> <span class="why">the saved text differs from what this ID names; it is shown exactly as stored</span>',
   unavailable: notRecorded('can’t be checked here (needs a secure context)'),
-})[digests.get(digestKey(id, text))] || '<span class="why">Checking…</span>';
+})[digests.get(id, text)] || '<span class="why">Checking…</span>';
 async function checkDigest(text, id) {
-  const key = digestKey(id, text);
-  if (digests.has(key)) return;
-  if (!globalThis.crypto?.subtle) { digests.set(key, 'unavailable'); return; }
-  digests.set(key, 'pending');
-  try {
-    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-    const hex = [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
-    digests.set(key, hex === String(id).toLowerCase() ? 'match' : 'mismatch');
-  } catch {
-    digests.set(key, 'unavailable');
-  }
+  await digests.check(id, text);
   const d = state.dialog;
   const el = $('#dlg [data-digest]');
   if (el && d?.data?.evidenceId === id && d.data.evidenceText === text) el.innerHTML = digestText(id, text);

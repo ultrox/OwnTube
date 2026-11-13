@@ -167,8 +167,8 @@ Period. Each view opens with its ledger.
     foreground.
   - The ledger adds one sentence ("Of that: 4 h 28 min on-tab or foreground · 55 min background ·
     29 min unspecified"), not a chart.
-  - Scope: a History entry is one recorded viewing of one version on one device and day, and its
-    split is that entry's. Older collectors' records are one entry per version, device and day
+  - Scope: a History entry is one recorded viewing of one video on one device and day, and its
+    split includes all saved metadata versions. Older collectors' records are one entry per video, device and day
     (*Recorded that day*). ytdash's video rows aggregated per person, video and range, so the label
     always names the scope it shows.
 - **Searches.** The count is every search in the period on the selected device(s). A search row has
@@ -222,10 +222,10 @@ Rules carried from ytdash and the collectors:
   - A failed getter (`mappingError`) is stated, with the partial values kept.
 - **Captions are a track list, not a transcript.** Caption text isn't saved, and the inspector says
   so. Android's excluded translation options are counted, not listed.
-- **Revisions.** Each play keeps the snapshot saved with it. The same video can carry different
-  snapshots on different plays (in the sample, a TV snapshot and a later Chrome snapshot with a
-  revised description). The server keeps them all. The inspector shows this play's snapshot and says
-  there is no revision browser yet.
+- **Revisions.** Each recorded version keeps its exact saved snapshot. Production History groups
+  versions within the same viewing; its inspector selects among them, newest first. Languages
+  groups by video and shares the version picker, identities and digest verification. Entry playback
+  totals remain separate from selected-version evidence. The prototype retains sample snapshots.
 - **No snapshot** (for example an older collector): the inspector says so, shows the play record's
   title, channel and ID, and infers nothing else.
 - **Untrusted text.** Titles, descriptions and raw JSON are inserted only as escaped text. The
@@ -428,8 +428,8 @@ in `apps/backoffice/desk/README.md`.
 - **No curation.** There are no *Suggest*, *Block channel* or curation marks, and no Curation nav
   item; curation integration is the next milestone. There is no demo mode; the preview keeps the
   sample data.
-- **Entries, not plays.** A native entry is one recorded viewing of one version on one device and
-  day. Older collectors saved samples without a visit identity, so their entries are one version per
+- **Entries, not plays.** A native entry is one recorded viewing of one video on one device and
+  day, including all metadata versions. Older collectors saved samples without a visit identity, so their entries are one video per
   device and day and read **Recorded that day**; nothing invents distinct plays.
 - **Times.** The time column shows each entry's first and last recorded playback as one range
   (`13:02–15:20`), because neither end is a session start or end. Rows are sorted by the latest

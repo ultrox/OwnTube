@@ -34,20 +34,37 @@ Row:
  videoId,title,channel,isShort,durationSeconds,evidenceId,
  recorded:{lang,source,conf},date,firstWatched,lastWatched,seconds,
  foregroundSeconds,backgroundSeconds,unspecifiedSeconds,
- coveredSeconds,coveragePercent,coverageComplete,rowKind,contextOverride}
+ coveredSeconds,coveragePercent,coverageComplete,rowKind,contextOverride,
+ versionCount,versions:[...version rows...]}
 ```
 
-Native `rowKind:"viewing-version"` groups the same recorded viewing, exact
-metadata version, device and local date across bucket/context slices. Different
-metadata/evidence versions and dates remain separate. `viewingId` is recorded.
-Legacy `rowKind:"legacy-day"` groups metadata/device/date because legacy samples
-have no reliable visit identity; `viewingId:null`. Label these **Recorded that
-day**, not separate plays. Times describe recorded bounds, not inferred attention
-or a reconstructed session start. Coverage is the union within this row; replays
-increase elapsed time without increasing already-covered media. `coveredSeconds`
-and percent are null if no ranges were recorded; percent is also null without a
-usable duration. It is capped at 100 for display. `coverageComplete:false` means
-some contributing slices have no ranges: present available coverage as partial.
+Native `rowKind:"viewing"` groups the same recorded viewing, video, device and
+local date across **all metadata versions** and bucket/context slices. A metadata
+update is not another visit. Distinct recorded viewing IDs, devices, videos and
+dates remain separate. Group IDs exclude metadata identity and stay stable as
+more versions arrive. `viewingId` is recorded, never inferred from timing.
+Legacy `rowKind:"legacy-day"` groups video/device/date because legacy samples have
+no reliable visit identity; `viewingId:null`. Label these **Recorded that day**,
+not separate plays.
+
+Grouping happens before pagination and daily/count summaries. Text matches any
+version's title/channel/video ID and retains the entire entry and its time.
+`versions` contains every contributing device/metadata version, newest playback
+first (metadata ID breaks ties), and `versionCount` names its size. Each nested
+version has the former row shape above, without `versions`/`versionCount`; native
+versions use `rowKind:"viewing-version"`. Title/channel/duration/metadataId/evidenceId
+and `recorded` on the entry describe the latest version, not a synthesized
+classification of every version. Evidence inspectors explicitly select a nested
+version; exact saved text and Languages links use that version's identity.
+
+Times describe recorded bounds, not inferred attention or reconstructed session
+start. Entry time/context sums its versions. Coverage is the **union across all
+versions**; overlapping ranges and replays never inflate unique coverage.
+`coveredSeconds` and percent are null if no ranges were recorded; percent is also
+null without a usable latest duration. It is capped at 100 for display.
+`coverageComplete:false` means some contributing slices have no ranges: present
+available coverage as partial. Inspectors distinguish whole-entry time/coverage
+from the selected version's evidence and time.
 
 ## Evidence
 

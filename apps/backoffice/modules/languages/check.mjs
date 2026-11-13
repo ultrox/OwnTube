@@ -119,6 +119,10 @@ async function startMock() {
       }
       return send(res, 404, { error: 'Not found' });
     }
+    if (url.pathname === '/shared/recorded-versions.js') {
+      res.writeHead(200, { 'Content-Type': 'text/javascript', 'Cache-Control': 'no-store' });
+      return fs.createReadStream(path.join(DIR, '../../shared/recorded-versions.js')).pipe(res);
+    }
     const rel = url.pathname.replace(/^\/modules\/languages\/?/, '') || 'index.html';
     const file = path.join(DIR, rel);
     if (!url.pathname.startsWith('/modules/languages/') || !file.startsWith(DIR) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) { res.writeHead(404); return res.end('not found'); }

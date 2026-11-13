@@ -117,7 +117,7 @@ class Page {
 // Serve this folder's runtime files at "/" and pass everything else (the API, Languages, legacy)
 // to the live server, so cookies and paths behave as in production.
 async function startProxy(target) {
-  const files = { '/': 'index.html', '/index.html': 'index.html', '/desk.css': 'desk.css', '/desk.js': 'desk.js', '/api.js': 'api.js' };
+  const files = { '/': 'index.html', '/index.html': 'index.html', '/desk.css': 'desk.css', '/desk.js': 'desk.js', '/api.js': 'api.js', '/shared/recorded-versions.js': '../shared/recorded-versions.js' };
   const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript' };
   const server = http.createServer((req, res) => {
     const file = files[new URL(req.url, 'http://proxy').pathname];
@@ -223,11 +223,11 @@ try {
     ok(cov['w-t1'] === '83% covered' && cov['w-t5'] === 'at least 40% covered' && cov['w-t3'] === '15 min covered' && cov['w-t6'] === 'coverage not recorded' && cov['w-t10'] === '<1% covered', `coverage wording: complete, partial (“at least”), no duration, not recorded, under 1% ${JSON.stringify(cov)}`);
     ok(await p.eval(() => !!document.querySelector('[data-row="w-t1"] .art__cov') && !!document.querySelector('[data-row="w-t5"] .art__cov--partial') && !document.querySelector('[data-row="w-t3"] .art__cov')), 'the thumbnail bar appears only with a percentage, with a dotted end when partial');
     ok((await text('[data-row="w-t4"] .art__badge')) === 'SHORT · 0:58', 'a Short carries its badge and duration');
-    ok(await p.eval(() => !!document.querySelector('[data-row="w-y2"]') && !!document.querySelector('[data-row="w-y3"]') && document.querySelector('[data-row="w-y2"] .hrow__title').textContent !== document.querySelector('[data-row="w-y3"] .hrow__title').textContent), 'a metadata change mid-viewing gives two entries, one per version');
+    ok(await p.eval(() => !!document.querySelector('[data-row="w-y2"]') && !document.querySelector('[data-row="w-y3"]') && Number(document.querySelector('[data-row="w-y2"]').dataset.s) === 1500), 'a metadata change stays in one entry with all watched time');
     ok(await p.eval(() => window.__deskXss === undefined && document.querySelector('[data-row="w-t6"] .hrow__title').textContent.includes('<img src=x') && !document.querySelector('img[src="x"]')), 'hostile titles and channels show literally and never run');
 
     console.log('Paging through one snapshot');
-    ok(/43 recorded entries · page 1 of 3/.test(await text('[data-status]')), 'the status counts every entry in scope and the pages');
+    ok(/42 recorded entries · page 1 of 3/.test(await text('[data-status]')), 'the status counts every entry in scope and the pages');
     ok(/continues on the next page/.test(await text(`.day[data-date="${dayN(1)}"] .day__head`)), 'a day split by the page says it continues on the next page');
     await requests();
     await p.click('[data-key="page:next"]');
@@ -242,17 +242,17 @@ try {
     ok(fq?.query === 'derby' && fq.page === '1' && fq.generation === String(api7.generation) && fq.until === String(api7.until), 'filtering keeps the snapshot pair and starts at page 1');
     const apiDerby = await inPage('/api/history', { days: 7, device: '', person: '', query: 'derby', page: 1, generation: api7.generation, until: api7.until });
     ok(Number(await p.eval(() => document.querySelector('[data-ledger]').dataset.seconds)) === api7.seconds, 'filtering never changes the scope numbers');
-    ok(apiDerby.filteredCount === 3 && (await text('[data-status]')).startsWith('3 of 43 recorded entries match derby') && /2 of 12 entries match/.test(await text('.day__head')), 'the status and day headers say how many entries match');
+    ok(apiDerby.filteredCount === 2 && (await text('[data-status]')).startsWith('2 of 42 recorded entries match derby') && /1 of 11 entries match/.test(await text('.day__head')), 'the status and day headers count grouped entries');
     await p.eval(() => { const i = document.getElementById('f-q'); i.value = 'no such words'; i.dispatchEvent(new Event('input', { bubbles: true })); });
     await sleep(500); await settled();
     ok(/Nothing in this period matches/.test(await text('[data-empty="filter"]')), 'no match says so and offers to clear the filter');
     await p.click('[data-key="clear-q"]');
     await settled();
-    ok((await p.eval(() => document.getElementById('f-q').value)) === '' && /43 recorded entries/.test(await text('[data-status]')), 'clearing the filter restores the list');
+    ok((await p.eval(() => document.getElementById('f-q').value)) === '' && /42 recorded entries/.test(await text('[data-status]')), 'clearing the filter restores the list');
     await control({ slow: [{ path: '/api/history', when: { query: 'lathe' }, ms: 1000 }] });
     await p.eval(() => { const i = document.getElementById('f-q'); i.value = 'lathe'; i.dispatchEvent(new Event('input', { bubbles: true })); });
     await sleep(550);
-    ok(await p.eval(() => { const s = document.querySelector('[data-status]')?.textContent || ''; return /updating/.test(s) && !/lathe/.test(s) && /^43 recorded entries/.test(s); }), 'while a new filter loads, the status keeps describing the rows on screen');
+    ok(await p.eval(() => { const s = document.querySelector('[data-status]')?.textContent || ''; return /updating/.test(s) && !/lathe/.test(s) && /^42 recorded entries/.test(s); }), 'while a new filter loads, the status keeps describing the rows on screen');
     await settled();
     await control({ slow: [] });
     await p.eval(() => { const i = document.getElementById('f-q'); i.value = ''; i.dispatchEvent(new Event('input', { bubbles: true })); });
@@ -324,7 +324,7 @@ try {
     await settled();
     req = (await requests()).filter((r) => r.path === '/api/history');
     ok(req.length >= 2 && req[0].query.page === '3' && req[0].query.generation === String(before410.generation) && req.at(-1).query.page === '1' && !('generation' in req.at(-1).query), 'a 410 drops the pair and reloads page 1 from current records');
-    ok(/no longer available/.test(await text('[data-notice]') || '') && /44 recorded entries · page 1/.test(await text('[data-status]')) && !!(await p.eval(() => document.querySelector('[data-row^="w-new-"]'))), 'the notice says the saved list is gone, and the new upload is now counted');
+    ok(/no longer available/.test(await text('[data-notice]') || '') && /43 recorded entries · page 1/.test(await text('[data-status]')) && !!(await p.eval(() => document.querySelector('[data-row^="w-new-"]'))), 'the notice says the saved list is gone, and the new upload is now counted');
     ok(/no longer available/.test(await p.eval(() => document.getElementById('sr').textContent)), 'the restart is announced');
 
     console.log('Searches');
@@ -407,9 +407,9 @@ try {
     ok(JSON.stringify(lastOf(req, '/api/history/evidence')?.query) === JSON.stringify({ device: 'd-laptop', metadata: 'm-mockLaptop1-chrome1' }), 'the inspector asks for exactly this entry’s device and version');
     ok(await p.eval(() => document.activeElement?.dataset.key === 'dlg:close'), 'focus starts on Close');
     ok(await p.eval(() => { const q = (k) => Number(document.querySelector(`#dlg [data-ev-${k}]`)?.dataset[`ev${k[0].toUpperCase()}${k.slice(1)}`]); return q('fg') === 1200 && q('bg') === 300 && q('un') === 0 && q('total') === 1500; }), 'the context facts are this entry’s');
-    ok(/19:40–20:05 first and last recorded playback, not when a session started or ended/.test(await text('#dlg [data-ev-recorded]')) && /one recorded viewing of this version/.test(await text('#dlg [data-ev-scope]')), 'recorded times and the entry’s scope are named precisely');
+    ok(/19:40–20:05 first and last recorded playback, not when a session started or ended/.test(await text('#dlg [data-ev-recorded]')) && /one recorded viewing of this video/.test(await text('#dlg [data-ev-scope]')), 'recorded times and the entry’s scope are named precisely');
     ok(/English \(en\) · high confidence · from the selected audio track/.test(await text('#dlg [data-ev-estimate]')), 'the collector’s estimate is shown as derived, with its signal');
-    ok((await p.eval(() => document.querySelector('#dlg a[data-key="dlg:languages"]')?.getAttribute('href'))) === 'modules/languages/#device=d-laptop&query=mockLaptop1', 'the inspector links to this version in Languages, where corrections live');
+    ok((await p.eval(() => document.querySelector('#dlg a[data-key="dlg:languages"]')?.getAttribute('href'))) === 'modules/languages/#device=d-laptop&query=mockLaptop1&metadata=m-mockLaptop1-chrome1', 'the inspector links to this version in Languages, where corrections live');
     await p.click('#dlg [data-raw-details] > summary');
     const exact = mockServer.fx.evidence[mockServer.fx.rows.find((r) => r.id === 'w-t1').evidenceId];
     ok((await p.eval(() => document.querySelector('#dlg code[data-raw="exact"]')?.textContent)) === exact, 'the raw view is the exact saved text');
@@ -419,6 +419,22 @@ try {
     await p.key('Escape', 27);
     ok(await p.eval(() => !document.getElementById('dlg').open && document.activeElement?.dataset.key === 'ev:w-t1'), 'Esc closes and returns focus to the entry’s Evidence button');
     const inspect = async (id) => { await p.click(`[data-key="ev:${id}"]`); await p.waitFor(() => !!document.querySelector('#dlg[open] [data-ev-collector]') || !!document.querySelector('#dlg[open] .problem')); await sleep(150); };
+    await inspect('w-y2');
+    ok(await p.eval(() => document.querySelectorAll('#f-version option').length === 2 && document.querySelector('#f-version').value === 'd-laptop:m-meta-b' && Number(document.querySelector('[data-ev-total]').dataset.evTotal) === 1500), 'group inspector starts on newest evidence and keeps whole-entry time');
+    ok(/60% covered/.test(await text('[data-ev-covered]')), 'entry coverage unions overlapping version ranges');
+    await requests();
+    await p.select('#f-version', 'd-laptop:m-meta-a');
+    await p.waitFor(() => document.querySelector('#dlg [data-ev-description]')?.textContent === 'First upload.');
+    req = await requests();
+    ok(lastOf(req, '/api/history/evidence')?.query.metadata === 'm-meta-a' && (await p.eval(() => document.querySelector('#dlg code[data-raw="exact"]')?.textContent)) === fx.evidence[fx.rows.find((r) => r.id === 'w-y3').evidenceId], 'selecting the earlier version retrieves its exact saved evidence');
+    ok(await p.waitFor(() => /Matches/.test(document.querySelector('#dlg [data-digest]')?.textContent || '')) && /metadata=m-meta-a/.test(await p.eval(() => document.querySelector('[data-key="dlg:languages"]').getAttribute('href'))), 'selected-version digest and Languages link use the same identity');
+    await control({ slow: [{ path: '/api/history/evidence', when: { metadata: 'm-meta-b' }, ms: 900 }] });
+    await p.select('#f-version', 'd-laptop:m-meta-b');
+    await p.select('#f-version', 'd-laptop:m-meta-a');
+    await sleep(1100);
+    ok((await text('#dlg [data-ev-description]')) === 'First upload.' && Number(await p.eval(() => document.querySelector('[data-ev-total]').dataset.evTotal)) === 1500, 'late version responses cannot replace the selection or change entry totals');
+    await control({ slow: [] });
+    await p.key('Escape', 27);
     await inspect('w-t5');
     await p.click('#dlg [data-raw-details] > summary');
     ok(await p.waitFor(() => /Does not match/.test(document.querySelector('#dlg [data-digest]')?.textContent || '')) && /shown exactly as stored/.test(await text('#dlg [data-digest]')), 'a saved text that differs from its ID is shown as a mismatch, unchanged');
@@ -439,7 +455,7 @@ try {
     await p.click('[data-key="page:next"]');
     await settled();
     await inspect('w-l1');
-    ok(/older collector recorded for this version/.test(await text('#dlg [data-ev-scope]')) && /not separate plays/.test(await text('#dlg [data-ev-scope]')) && /First sample 09:12, latest 21:47/.test(await text('#dlg [data-ev-recorded]')), 'a legacy day explains itself: one day’s record, first and latest samples, not plays');
+    ok(/older collector recorded for this video/.test(await text('#dlg [data-ev-scope]')) && /not separate plays/.test(await text('#dlg [data-ev-scope]')) && /First sample 09:12, latest 21:47/.test(await text('#dlg [data-ev-recorded]')), 'a legacy day explains itself: one day’s record, first and latest samples, not plays');
     ok((await text('[data-row="w-l1"] .hrow__time')) === 'Recorded that day' && !(await p.eval(() => document.querySelector('[data-row="w-l1"] time'))), 'legacy rows read “Recorded that day”, with no time of day');
     await p.key('Escape', 27);
     await p.click('[data-key="page:prev"]');
@@ -550,7 +566,7 @@ try {
     const legacy = lapAll.find((r) => r.rowKind === 'legacy-day');
     const split = lapAll.filter((r) => r.viewingId && r.viewingId === lapAll.find((x) => x.title?.includes('(revised)'))?.viewingId);
     ok(!!legacy && legacy.viewingId === null, 'the legacy fixture is grouped as a legacy day with no viewing identity');
-    ok(split.length === 2 && new Set(split.map((r) => r.metadataId)).size === 2, 'the metadata change splits one viewing into two entries');
+    ok(split.length === 1 && split[0].versionCount === 2 && new Set(split[0].versions.map((r) => r.metadataId)).size === 2, 'the metadata change stays within one viewing with two evidence versions');
     const midnight = lapAll.filter((r) => r.title === 'Night train across midnight');
     ok(midnight.length === 2 && midnight[0].viewingId === midnight[1].viewingId && midnight[0].date !== midnight[1].date, 'the viewing across midnight gives one entry per server date');
     ok(lapAll.some((r) => r.coverageComplete === false), 'a viewing with a slice without ranges is reported as partial coverage');

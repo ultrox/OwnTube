@@ -72,7 +72,7 @@ fn search(id: &str, query: &str, t: i64) -> Value {
 }
 
 #[tokio::test]
-async fn recorded_visits_versions_context_and_legacy_days_are_not_conflated() {
+async fn metadata_versions_combine_within_visits_and_legacy_days_without_merging_visits() {
     let s = seed().await;
     let raw = r#"{ "title":"Saved", "description":"<img onerror=bad()>", "algorithmVersion":"language-v2", "selectedAudioLanguage":"en" }"#;
     let mut first = viewing("first", "visit1", 30., "foreground");
@@ -92,6 +92,7 @@ async fn recorded_visits_versions_context_and_legacy_days_are_not_conflated() {
         "videoId":"abcdefghijk","title":"Legacy version","lang":"other","source":"unknown","conf":"low"});
     let mut legacy2 = legacy.clone();
     legacy2["eventId"] = json!("legacy2");
+    legacy2["title"] = json!("Updated legacy title");
     legacy2["t"] = json!(bucket() + 80_000);
     ingest(
         &s,
@@ -101,7 +102,7 @@ async fn recorded_visits_versions_context_and_legacy_days_are_not_conflated() {
     )
     .await;
     let value = watched(&s, json!({})).await;
-    assert_eq!(value["count"], 4);
+    assert_eq!(value["count"], 3);
     assert_eq!(value["videoCount"], 1);
     assert_eq!(value["seconds"], 130.);
     assert_eq!(value["foregroundSeconds"], 90.);
@@ -113,17 +114,23 @@ async fn recorded_visits_versions_context_and_legacy_days_are_not_conflated() {
         .iter()
         .find(|v| v["viewingId"] == "visit1" && v["title"] == "<script>Title</script>")
         .unwrap();
-    assert_eq!(visit["seconds"], 60.);
+    assert_eq!(visit["seconds"], 90.);
     assert_eq!(visit["coveredSeconds"], 30.);
     assert_eq!(visit["coveragePercent"], 30.);
     assert_eq!(visit["coverageComplete"], true);
-    assert_eq!(visit["rowKind"], "viewing-version");
+    assert_eq!(visit["rowKind"], "viewing");
+    assert_eq!(visit["versionCount"], 2);
+    assert_eq!(visit["versions"][0]["seconds"], 60.);
+    assert_eq!(visit["versions"][1]["seconds"], 30.);
+    assert_eq!(visit["foregroundSeconds"], 60.);
+    assert_eq!(visit["backgroundSeconds"], 30.);
     assert_eq!(visit["deviceKind"], "browser"); // not inferred from the misleading label
     let old = rows.iter().find(|v| v["rowKind"] == "legacy-day").unwrap();
     assert!(old["viewingId"].is_null());
     assert!(old["coveredSeconds"].is_null());
     assert!(old["coveragePercent"].is_null());
     assert_eq!(old["seconds"], 10.);
+    assert_eq!(old["versionCount"], 2);
     let detail = s
         .history_evidence(
             "browser".into(),
@@ -156,6 +163,9 @@ async fn recorded_visits_versions_context_and_legacy_days_are_not_conflated() {
     }
     let filtered = watched(&s, json!({"query":"CHANGED"})).await;
     assert_eq!(filtered["filteredCount"], 1);
+    assert_eq!(filtered["rows"][0]["id"], visit["id"]);
+    assert_eq!(filtered["rows"][0]["seconds"], 90.);
+    assert_eq!(filtered["rows"][0]["versionCount"], 2);
     assert_eq!(filtered["seconds"], value["seconds"]);
     for (a, b) in filtered["daily"]
         .as_array()
@@ -166,6 +176,108 @@ async fn recorded_visits_versions_context_and_legacy_days_are_not_conflated() {
         assert_eq!(a["seconds"], b["seconds"]);
         assert_eq!(a["rowCount"], b["rowCount"]);
     }
+}
+
+#[tokio::test]
+async fn history_groups_before_paging_and_keeps_identity_and_union_coverage_across_updates() {
+    let s = seed().await;
+    let mut events = Vec::new();
+    for visit in 0..25 {
+        for version in 0..2 {
+            let mut e = viewing(
+                &format!("v{visit}-{version}"),
+                &format!("visit{visit}"),
+                2.,
+                "foreground",
+            );
+            e["title"] = json!(if version == 0 {
+                "Original title"
+            } else {
+                "Updated title"
+            });
+            e["t"] = json!(bucket() + 1000 + version * 3000);
+            e["lastWatched"] = json!(bucket() + 3000 + version * 3000);
+            e["coverage"] = json!([[version as f64, version as f64 + 2.]]);
+            events.push(e);
+        }
+    }
+    ingest(&s, "browser", events, Default::default()).await;
+    let first = watched(&s, json!({"query":"Original"})).await;
+    let second = watched(&s, json!({"query":"Original","page":2,"generation":first["generation"],"until":first["until"]})).await;
+    assert_eq!(first["count"], 25);
+    assert_eq!(first["filteredCount"], 25);
+    assert_eq!(first["pages"], 2);
+    assert_eq!(first["rows"].as_array().unwrap().len(), 20);
+    assert_eq!(second["rows"].as_array().unwrap().len(), 5);
+    let rows: Vec<_> = first["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .chain(second["rows"].as_array().unwrap())
+        .collect();
+    assert_eq!(
+        rows.iter()
+            .map(|r| r["id"].as_str().unwrap())
+            .collect::<BTreeSet<_>>()
+            .len(),
+        25
+    );
+    for row in &rows {
+        assert_eq!(row["title"], "Updated title");
+        assert_eq!(row["seconds"], 4.);
+        assert_eq!(row["coveredSeconds"], 3.); // overlapping ranges across versions, not a sum of 4
+        assert_eq!(row["versionCount"], 2);
+        assert_eq!(row["versions"][0]["title"], "Updated title");
+        assert_eq!(row["versions"][1]["title"], "Original title");
+    }
+    let prior = rows.iter().find(|r| r["viewingId"] == "visit0").unwrap();
+    let mut updates = Vec::new();
+    for version in 2..17 {
+        let mut e = viewing(&format!("update-{version}"), "visit0", 1., "background");
+        e["title"] = json!(format!("Metadata {version}"));
+        e["t"] = json!(bucket() + 10_000 + version * 1000);
+        e["lastWatched"] = json!(bucket() + 11_000 + version * 1000);
+        e["coverage"] = json!([]);
+        updates.push(e);
+    }
+    ingest(&s, "browser", updates, Default::default()).await;
+    let updated = watched(&s, json!({})).await;
+    assert_eq!(updated["count"], 25);
+    let entry = &updated["rows"][0];
+    assert_eq!(entry["id"], prior["id"]);
+    assert_eq!(entry["versionCount"], 17);
+    assert_eq!(entry["title"], "Metadata 16");
+    assert_eq!(entry["seconds"], 19.);
+    assert_eq!(entry["foregroundSeconds"], 4.);
+    assert_eq!(entry["backgroundSeconds"], 15.);
+    assert_eq!(entry["coveredSeconds"], 3.);
+    assert_eq!(entry["coverageComplete"], false);
+}
+
+#[tokio::test]
+async fn history_keeps_devices_and_videos_separate_even_when_viewing_ids_are_reused() {
+    let s = seed().await;
+    ingest(
+        &s,
+        "browser",
+        vec![viewing("a", "reused-id", 2., "foreground")],
+        Default::default(),
+    )
+    .await;
+    ingest(
+        &s,
+        "tv",
+        vec![viewing("b", "reused-id", 3., "background")],
+        Default::default(),
+    )
+    .await;
+    let mut other = viewing("c", "reused-id", 4., "foreground");
+    other["videoId"] = json!("lmnopqrstuv");
+    ingest(&s, "browser", vec![other], Default::default()).await;
+    let data = watched(&s, json!({})).await;
+    assert_eq!(data["count"], 3);
+    assert_eq!(data["videoCount"], 2);
+    assert_eq!(data["seconds"], 9.);
 }
 
 #[tokio::test]

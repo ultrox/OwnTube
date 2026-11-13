@@ -132,6 +132,7 @@ fn recorded(m: &Metadata) -> Value {
     json!({"lang":m.lang,"source":m.source,"conf":m.conf})
 }
 
+#[derive(Clone)]
 struct Row {
     device: Value,
     meta: Metadata,
@@ -179,6 +180,70 @@ impl Row {
     }
 }
 
+// A metadata revision is evidence within a viewing, never a second visit.
+struct Entry {
+    row: Row,
+    versions: Vec<Row>,
+}
+impl Entry {
+    fn new(mut versions: Vec<Row>) -> Self {
+        versions.sort_by(|a, b| {
+            b.last
+                .total_cmp(&a.last)
+                .then(a.metadata_id.cmp(&b.metadata_id))
+        });
+        let mut row = versions[0].clone();
+        row.context = [0.; 3];
+        row.ranges.clear();
+        row.coverage_complete = true;
+        for version in &versions {
+            row.first = row.first.min(version.first);
+            row.last = row.last.max(version.last);
+            for i in 0..3 {
+                row.context[i] += version.context[i];
+            }
+            row.ranges = compact::merge_sorted(&row.ranges, &version.ranges);
+            row.coverage_complete &= version.coverage_complete;
+        }
+        Self { row, versions }
+    }
+
+    fn matches(&self, query: &str) -> bool {
+        query.is_empty()
+            || self.versions.iter().any(|r| {
+                format!(
+                    "{} {} {}",
+                    r.meta.title,
+                    r.meta.channel.as_deref().unwrap_or(""),
+                    r.meta.video_id
+                )
+                .to_lowercase()
+                .contains(query)
+            })
+    }
+
+    fn value(&self) -> Value {
+        let mut value = self.row.value();
+        value["id"] = json!(hash(
+            &json!([
+                self.row.device["id"],
+                self.row.viewing_id,
+                self.row.meta.video_id,
+                self.row.date
+            ])
+            .to_string()
+        ));
+        value["rowKind"] = json!(if self.row.viewing_id.is_some() {
+            "viewing"
+        } else {
+            "legacy-day"
+        });
+        value["versionCount"] = json!(self.versions.len());
+        value["versions"] = json!(self.versions.iter().map(Row::value).collect::<Vec<_>>());
+        value
+    }
+}
+
 #[derive(Default)]
 struct Day {
     context: [f64; 3],
@@ -219,13 +284,21 @@ impl Store {
                 r.ranges = compact::merge_sorted(&r.ranges, &f.ranges);
                 r.coverage_complete &= !f.ranges.is_empty();
             }
+            let mut groups: BTreeMap<(String, Option<String>, String, String), Vec<Row>> = BTreeMap::new();
+            for row in rows.into_values() {
+                let key = (row.device["id"].as_str().unwrap().to_owned(), row.viewing_id.clone(),
+                    row.meta.video_id.clone(), row.date.clone());
+                groups.entry(key).or_default().push(row);
+            }
             let mut daily: BTreeMap<String, Day> = window.dates.iter().map(|d| (d.clone(), Day::default())).collect();
             let mut context = [0.; 3];
             let mut video_ids = BTreeSet::new();
-            let count = rows.len();
+            let count = groups.len();
             let query = filter.query.trim().to_lowercase();
             let mut matched = Vec::new();
-            for r in rows.into_values() {
+            for versions in groups.into_values() {
+                let entry = Entry::new(versions);
+                let r = &entry.row;
                 let day = daily.get_mut(&r.date).expect("fact belongs to window");
                 day.count += 1;
                 for i in 0..3 {
@@ -233,15 +306,15 @@ impl Store {
                     day.context[i] += r.context[i];
                 }
                 video_ids.insert(r.meta.video_id.clone());
-                if query.is_empty() || format!("{} {} {}", r.meta.title, r.meta.channel.as_deref().unwrap_or(""), r.meta.video_id).to_lowercase().contains(&query) {
+                if entry.matches(&query) {
                     day.filtered += 1;
-                    matched.push(r);
+                    matched.push(entry);
                 }
             }
-            matched.sort_by(|a,b| b.last.total_cmp(&a.last)
-                .then(a.device["id"].as_str().cmp(&b.device["id"].as_str()))
-                .then(a.viewing_id.cmp(&b.viewing_id)).then(a.metadata_id.cmp(&b.metadata_id))
-                .then(a.date.cmp(&b.date)));
+            matched.sort_by(|a,b| b.row.last.total_cmp(&a.row.last)
+                .then(a.row.device["id"].as_str().cmp(&b.row.device["id"].as_str()))
+                .then(a.row.viewing_id.cmp(&b.row.viewing_id)).then(a.row.meta.video_id.cmp(&b.row.meta.video_id))
+                .then(a.row.date.cmp(&b.row.date)));
             let filtered = matched.len();
             let pages = filtered.div_ceil(PAGE_SIZE).max(1);
             let page = filter.page.unwrap_or(1).min(pages);
@@ -254,7 +327,7 @@ impl Store {
                 "daily":daily.into_iter().map(|(date,d)| json!({"date":date,"seconds":d.context.iter().sum::<f64>(),
                     "foregroundSeconds":d.context[0],"backgroundSeconds":d.context[1],"unspecifiedSeconds":d.context[2],
                     "rowCount":d.count,"filteredCount":d.filtered})).collect::<Vec<_>>(),
-                "rows":matched.iter().skip((page-1)*PAGE_SIZE).take(PAGE_SIZE).map(Row::value).collect::<Vec<_>>()
+                "rows":matched.iter().skip((page-1)*PAGE_SIZE).take(PAGE_SIZE).map(Entry::value).collect::<Vec<_>>()
             }))
         }).await
     }

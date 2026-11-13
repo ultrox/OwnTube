@@ -18,8 +18,9 @@ The masthead links to **Languages** (`modules/languages/`) and to the **legacy**
 | `tests/mock-server.mjs` | The mock: fictional fixtures, auth, recorded requests, injected delays and failures. Not shipped. |
 | `tests/seed-dev.mjs` | Fictional fixture devices for a local dev server, through ingestion only. Not shipped. |
 
-The build ships only the four runtime files and versions them as one graph: `api.js` first, then
-`desk.js` (its import rewritten), then `desk.css` and `index.html`.
+The build versions the runtime import graph: `api.js` and the shared
+`../shared/recorded-versions.js` first, then `desk.js`, `desk.css` and `index.html`.
+History and Languages share version identity, the picker and exact-evidence digest verification.
 
 ## Behaviour that matters
 
@@ -47,7 +48,9 @@ The build ships only the four runtime files and versions them as one graph: `api
   the response's `timezone`; Today and Yesterday come from the snapshot's `until`. Day headers carry
   the whole day's totals from `daily`, say how many entries match a filter, and say when a day
   continues on another page.
-- **Entries.** A native entry is one recorded viewing of one version on one device and day. It shows
+- **Entries.** A native entry is one recorded viewing of a video on one device and day. Metadata
+  updates stay inside the entry, with summed watch time and union coverage. Distinct visits stay
+  separate. Text matches any version before paging and retains the whole entry. It shows
   its first and last recorded playback as a range (`13:02–15:20`), never a reconstructed session. A
   `legacy-day` entry reads **Recorded that day**; the inspector gives its first and latest samples.
 - **Context** is named by source: *on-tab* for browsers, *foreground* for TVs, *on-tab / foreground*
@@ -75,14 +78,15 @@ The build ships only the four runtime files and versions them as one graph: `api
     and empty values stay hidden.
 - **Evidence inspector**, for one entry, in this order:
   1. The entry's playback context and recorded times, with the entry named precisely.
-  2. The collector's language estimate, labelled as derived. It links to that version in Languages,
+  2. A saved-version picker when needed, newest first; entry totals stay fixed while evidence changes.
+     The collector's language estimate is labelled as derived. It links to that exact version in Languages,
      where corrections live.
   3. The saved source values and the text detector.
   4. The raw snapshot: the exact `evidenceText`, its SHA-256 recomputed in the browser, and a
      re-encoded "Formatted" view. A digest mismatch is shown as stored, never rewritten.
 
-  No snapshot and invalid JSON are stated explicitly. A late answer for a closed inspector, or its
-  digest, never lands in another one.
+  No snapshot and invalid JSON are stated explicitly. A late answer for a closed inspector or
+  previous version, including its digest, never replaces the current selection.
 - **Sign-in and sign-out** use `/api/session`, `/api/login` and `/api/logout`. Sign-out completes only
   when the server confirms it (or the session is already gone); otherwise you stay signed in and see
   the error.

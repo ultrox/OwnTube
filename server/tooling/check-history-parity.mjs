@@ -77,13 +77,22 @@ for (const days of [7,30,90]) for (const scope of scopes) {
   }
   assert.equal(rows.length,history.count);
   assert.equal(new Set(rows.map(r=>r.id)).size,rows.length);
+  assert.equal(new Set(rows.map(r=>JSON.stringify([r.deviceId,r.viewingId,r.videoId,r.date]))).size,rows.length);
+  for (const row of rows) {
+    assert.equal(row.versionCount,row.versions.length);
+    assert.equal(row.metadataId,row.versions[0].metadataId);
+    for (const version of row.versions) {
+      for (const field of ['deviceId','viewingId','videoId','date']) assert.equal(version[field],row[field]);
+    }
+    for (const field of fields) close(row.versions.reduce((n,v)=>n+v[field],0),row[field],`History versions ${field}`);
+  }
   for (const field of fields) close(rows.reduce((sum,r)=>sum+r[field],0),history[field],`Paged ${field}`);
   for (const day of history.daily) {
     const dailyRows=rows.filter(r=>r.date===day.date);
     assert.equal(dailyRows.length,day.rowCount);
     for (const field of fields) close(dailyRows.reduce((sum,r)=>sum+r[field],0),day[field],`Daily ${field}`);
   }
-  for (const row of rows) {
+  for (const row of rows.flatMap(r=>r.versions)) {
     const key=`${row.deviceId}/${row.metadataId}`;
     if (evidenceSeen.has(key)) continue;
     evidenceSeen.add(key);

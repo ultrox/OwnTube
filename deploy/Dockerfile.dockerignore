@@ -20,3 +20,5 @@
 !apps/backoffice/modules/**
 !apps/backoffice/desk/
 !apps/backoffice/desk/**
+!apps/backoffice/shared/
+!apps/backoffice/shared/**

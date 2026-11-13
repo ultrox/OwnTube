@@ -160,7 +160,7 @@ export function createFixtures(tz = 'Europe/Zurich') {
 
 const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript' };
 const STUBS = { '/modules/languages/': 'Languages', '/legacy/': 'Legacy dashboard', '/diagnostics.html': 'Diagnostics', '/android-integration.html': 'Android TV guide' };
-const STATIC = { '/': 'index.html', '/index.html': 'index.html', '/desk.css': 'desk.css', '/desk.js': 'desk.js', '/api.js': 'api.js' };
+const STATIC = { '/': 'index.html', '/index.html': 'index.html', '/desk.css': 'desk.css', '/desk.js': 'desk.js', '/api.js': 'api.js', '/shared/recorded-versions.js': '../shared/recorded-versions.js' };
 
 export async function startMock(deskDir, { tz = 'Europe/Zurich' } = {}) {
   const fx = createFixtures(tz);
@@ -189,9 +189,25 @@ export async function startMock(deskDir, { tz = 'Europe/Zurich' } = {}) {
     const until = q.until !== undefined ? Number(q.until) : now();
     const days = Number(q.days);
     const window = dates(until, days);
-    const scope = fx.rows.filter((r) => r.date >= window[0] && r.date <= window.at(-1) && r.lastWatched < until && inScope(r.deviceId, q));
+    const groups = new Map();
+    for (const r of fx.rows.filter((r) => r.date >= window[0] && r.date <= window.at(-1) && r.lastWatched < until && inScope(r.deviceId, q))) {
+      const key = JSON.stringify([r.deviceId, r.viewingId, r.videoId, r.date]);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(r);
+    }
+    const scope = [...groups.values()].map((versions) => {
+      versions.sort((a, b) => b.lastWatched - a.lastWatched);
+      const row = { ...versions[0], versions, versionCount: versions.length, rowKind: versions[0].viewingId ? 'viewing' : 'legacy-day' };
+      for (const field of ['seconds', 'foregroundSeconds', 'backgroundSeconds', 'unspecifiedSeconds']) row[field] = versions.reduce((n, v) => n + v[field], 0);
+      row.firstWatched = Math.min(...versions.map((v) => v.firstWatched));
+      // Fixture coverage ranges all start at zero, so their union is the longest.
+      row.coveredSeconds = versions.some((v) => v.coveredSeconds != null) ? Math.max(...versions.map((v) => v.coveredSeconds || 0)) : null;
+      row.coveragePercent = row.coveredSeconds != null && row.durationSeconds ? Math.min(100, row.coveredSeconds / row.durationSeconds * 100) : null;
+      row.coverageComplete = versions.every((v) => v.coverageComplete);
+      return row;
+    });
     const needle = (q.query || '').trim().toLowerCase();
-    const hit = (r) => !needle || [r.title, r.channel, r.videoId].some((s) => String(s || '').toLowerCase().includes(needle));
+    const hit = (r) => !needle || r.versions.some((v) => [v.title, v.channel, v.videoId].some((s) => String(s || '').toLowerCase().includes(needle)));
     const filtered = scope.filter(hit).sort((a, b) => b.lastWatched - a.lastWatched || (a.id < b.id ? -1 : 1));
     const sum = (list, f) => list.reduce((s, r) => s + r[f], 0);
     const pages = Math.max(1, Math.ceil(filtered.length / 20));

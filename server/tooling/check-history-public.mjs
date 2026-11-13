@@ -24,7 +24,7 @@ async function asset(url) {
   const hash=url.pathname.match(/\.([a-f0-9]{16})\.(?:js|css)$/)?.[1];
   assert.ok(hash,`Content-addressed asset: ${url.pathname}`);
   assert.equal(createHash('sha256').update(text).digest('hex').slice(0,16),hash);
-  for (const [,dependency] of text.matchAll(/from\s+['"](\.\/[^'"]+\.js)['"]/g)) await asset(new URL(dependency,url));
+  for (const [,dependency] of text.matchAll(/from\s+['"]((?:\.\/|\/)[^'"]+\.js)['"]/g)) await asset(new URL(dependency,url));
 }
 for (const [,file] of html.matchAll(/(?:src|href)="([^"]+\.(?:js|css))"/g)) await asset(new URL(file,origin+'/'));
 for (const route of ['/legacy/','/modules/languages/','/diagnostics.html','/android-integration.html']) {
@@ -80,6 +80,33 @@ try {
   await ui.goto(origin+'/#/history');
   await ui.waitFor('[data-ledger]');
   assert.equal(await ui.count('#owner-key'),0,'Session restored');
+  await ui.goto(origin+'/#/history?days=90&q=USBk_L36Rhc');
+  await ui.waitFor('[data-row]');
+  const reported=await ui.eval(async()=> {
+    const data=await fetch('/api/history?days=90&query=USBk_L36Rhc').then(r=>r.json());
+    return data.rows.filter(r=>r.viewingId==='dc781504-d8b7-43fe-970d-7367bbd86a92');
+  });
+  assert.equal(reported.length,1,'Reported viewing is one entry');
+  assert.equal(reported[0].versionCount,2);
+  assert.ok(Math.abs(reported[0].seconds-370.7307000012399)<0.001);
+  await ui.click(`[data-row="${reported[0].id}"] [data-action="evidence"]`);
+  await ui.waitFor('[data-ev-estimate]');
+  assert.equal(await ui.count('#f-version option'),2);
+  const earlier=reported[0].versions.find(v=>v.seconds<1);
+  await ui.eval((value)=>{
+    const select=document.querySelector('#f-version'); select.value=value; select.dispatchEvent(new Event('change',{bubbles:true}));
+  },`${earlier.deviceId}:${earlier.metadataId}`);
+  await ui.waitFor('[data-ev-estimate]');
+  const exact=await ui.eval(async(metadata)=>fetch('/api/history/evidence?device=f78d809a-7318-44f8-8336-f6ca1a6f30f5&metadata='+metadata).then(r=>r.json()),earlier.metadataId);
+  assert.equal(await ui.text('[data-raw="exact"]'),exact.evidenceText);
+  await ui.screenshot(path.join(output,'history-grouped-reported-viewing.png'));
+  await ui.setSize(390,844);
+  assert.equal(await ui.eval(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  await ui.screenshot(path.join(output,'history-grouped-phone.png'));
+  await ui.click('[data-key="dlg:languages"]');
+  await ui.waitFor('[data-assessment]');
+  assert.equal(await ui.eval(()=>document.querySelector('#f-version')?.value),`${earlier.deviceId}:${earlier.metadataId}`,'History deep link selects exact Languages version');
+  await ui.setSize(1440,1000);
   await ui.goto(origin+'/legacy/');
   await ui.waitFor('#watch-total');
   await ui.goto(origin+'/modules/languages/');
@@ -116,7 +143,8 @@ try {
     origin,checkedAt:new Date().toISOString(),assets:[...checked],seconds:total,
     checks:['public asset hashes','authentication','real History','real Searches','evidence modal',
       'stable filtered totals','phone layout','session restoration','legacy dashboard',
-      'grouped Languages','automatic English classification','Languages asset hashes and phone layout'],
+      'grouped Languages','automatic English classification','Languages asset hashes and phone layout',
+      'reported History viewing grouped','exact older evidence','selected-version Languages deep link'],
     pageErrors:errors,
   },null,2));
   console.log('Public desk: asset hashes, authentication, real records, evidence, stable totals, phone layouts, legacy, grouped Languages and automatic English classification passed.');

@@ -44,7 +44,9 @@ The production web build serves **History** at `/#/history` and **Searches** at
 and exact-version `/api/history/evidence`; see [the contract](../contracts/history.md).
 Period/person/device define totals. Text narrows records across all pages without changing
 those totals. Watch time separates foreground, background and unspecified contexts.
-Native entries group recorded viewing ID, metadata version, device and server calendar date.
+Native entries group recorded viewing ID, video, device and server calendar date.
+Metadata versions stay inside the entry's shared version/evidence inspector; watch time sums
+versions while coverage unions their ranges. The Languages link selects the exact evidence version.
 Legacy entries say **Recorded that day** because the collector saved no visit identity.
 Coverage describes the entry's recorded media ranges, with partial/missing coverage labelled.
 Searches pages expose every saved query, rather than only the latest twenty.

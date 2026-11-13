@@ -6,6 +6,7 @@
 // before + until). The pair is kept while the filter or page changes, and dropped when the scope
 // changes, on Refresh, or when the server answers 410 (the list starts again at page 1).
 import { ApiError, api } from './api.js';
+import { versionKey, recordedVersions, findVersion, versionPickerHTML, savedEvidence, EvidenceDigests } from '/shared/recorded-versions.js';
 
 /* ------------------------------------------------------------------ utilities */
 
@@ -357,7 +358,7 @@ function personField(devices, people) {
 const NOTES = {
   watched: `<p>History is a record, not a goal. It is here so you can act on what actually played.</p>
     <p><b>Watched</b> is wall-clock playback, background included. <b>On-tab</b> (browser) and <b>foreground</b> (TV) say what was in front, not who paid attention; <b>unspecified</b> means the collector didn’t record it.</p>
-    <p>An <b>entry</b> is one recorded viewing of one version on one device and day. Older collectors saved samples per day instead, shown as <b>Recorded that day</b>. <b>Covered</b> is the share of the video that played at least once.</p>`,
+    <p>An <b>entry</b> is one recorded viewing of a video on one device and day. Metadata updates stay inside its evidence details. Older collectors saved samples per day instead, shown as <b>Recorded that day</b>. <b>Covered</b> is the share of the video that played at least once.</p>`,
   searches: `<p>A search is recorded when a YouTube results page opens in a browser with the collector; the same query again within 5 seconds counts once.</p>
     <p>OwnTube on Android TV records playback only. The small code beside a query is a language estimated from its text, not from anything spoken.</p>`,
 };
@@ -736,7 +737,8 @@ async function openEvidence(id, opener) {
   const row = rowById(id);
   if (!row) return;
   state.dialog = {
-    row, tz: d.timezone, days: num(d.days) || state.scope.days, data: null, loading: true, error: null,
+    row, selected: versionKey(recordedVersions(row)[0]), request: 0,
+    tz: d.timezone, days: num(d.days) || state.scope.days, data: null, loading: true, error: null,
     raw: 'exact', rawOpen: false, openerKey: opener?.getAttribute?.('data-key') || null,
   };
   renderDialog();
@@ -749,19 +751,22 @@ async function openEvidence(id, opener) {
 async function fetchEvidence() {
   const dl = state.dialog;
   if (!dl) return;
+  const version = findVersion(dl.row, dl.selected);
+  const request = ++dl.request;
+  dl.data = null;
   dl.loading = true;
   dl.error = null;
   renderDialog();
   try {
-    const data = await api.evidence(dl.row.deviceId, dl.row.metadataId);
-    if (state.dialog !== dl) return;
+    const data = await api.evidence(version.deviceId, version.metadataId);
+    if (state.dialog !== dl || request !== dl.request) return;
     dl.data = data && typeof data === 'object' ? data : {};
   } catch (error) {
-    if (state.dialog !== dl) return;
+    if (state.dialog !== dl || request !== dl.request) return;
     if (error instanceof ApiError && error.status === 401) { signedOut('Your session ended. Sign in again.'); return; }
     dl.error = error?.message || 'The evidence could not be loaded.';
   } finally {
-    if (state.dialog === dl) { dl.loading = false; renderDialog(); }
+    if (state.dialog === dl && request === dl.request) { dl.loading = false; renderDialog(); }
   }
 }
 
@@ -786,6 +791,7 @@ function languagesHref(r, days) {
   if (days !== 7 && DAYS.includes(days)) p.set('days', String(days));
   if (r.deviceId) p.set('device', r.deviceId);
   if (r.videoId) p.set('query', r.videoId);
+  if (r.metadataId) p.set('metadata', r.metadataId);
   return `modules/languages/#${p}`;
 }
 
@@ -803,8 +809,8 @@ function contextHTML(r, tz) {
   const covered = `${coverageHTML(r)}${has(r.durationSeconds) && num(r.durationSeconds) > 0 ? ` <span class="why">of ${clock(r.durationSeconds)}</span>` : ''}${partial ? ' <span class="why">· some samples have no ranges, so more may have played</span>' : ''}`;
   const device = clean(r.deviceLabel) || 'this device';
   const scope = legacy
-    ? `This entry is everything an older collector recorded for this version of the video on ${esc(device)} on ${esc(longDate(r.date))}. It saved samples without a visit identity, so this is one day’s record, not separate plays.`
-    : `This entry is one recorded viewing of this version of the video on ${esc(device)}, ${esc(longDate(r.date))}.`;
+    ? `This entry is everything an older collector recorded for this video on ${esc(device)} on ${esc(longDate(r.date))}. It saved samples without a visit identity, so this is one day’s record, not separate plays.`
+    : `This entry is one recorded viewing of this video on ${esc(device)}, ${esc(longDate(r.date))}.`;
   const meaning = kind === 'browser' ? 'On-tab means the YouTube tab was visible' : kind === 'tv' ? 'Foreground means the player was the app in front' : 'On-tab (browser) or foreground (TV) means the video was in front';
   return `<section class="ev__section" aria-labelledby="ev-ctx">
       <h3 class="label" id="ev-ctx">Playback context · this entry</h3>
@@ -816,7 +822,7 @@ function contextHTML(r, tz) {
         ['Recorded', `<span data-ev-recorded>${recorded}</span>`],
         ['Covered', `<span data-ev-covered>${covered}</span>`],
       ])}
-      <p class="ev__note" data-ev-scope>${scope} ${meaning}; neither proves attention. Covered counts each part of the video once; replays add watched time only.</p>
+      <p class="ev__note" data-ev-scope>${scope} ${recordedVersions(r).length > 1 ? `It combines all ${recordedVersions(r).length} saved versions. ` : ''}${meaning}; neither proves attention. Covered counts each part of the video once across versions; replays add watched time only.</p>
       ${r.contextOverride?.context === 'foreground' ? `<p class="ev__note" data-context-correction>Foreground by owner correction for this device. ${esc(r.contextOverride.reason)} Original collector records are retained.</p>` : ''}
     </section>`;
 }
@@ -824,13 +830,14 @@ function contextHTML(r, tz) {
 function inspectorHTML() {
   const dl = state.dialog;
   const r = dl.row;
+  const version = findVersion(r, dl.selected);
+  const versions = recordedVersions(r);
   const tz = dl.tz;
   const data = dl.data;
-  const ev = data?.evidence && typeof data.evidence === 'object' && !Array.isArray(data.evidence) ? data.evidence : null;
-  const text = typeof data?.evidenceText === 'string' ? data.evidenceText : null;
+  const { evidence: ev, text } = savedEvidence(data);
   const android = ev?.collector === 'owntube-source-v1';
-  const recordTitle = clean(r.title);
-  const heading = clean(ev?.title) || clean(data?.title) || recordTitle || `Untitled · ${r.videoId || ''}`;
+  const recordTitle = clean(version.title);
+  const heading = clean(r.title) || clean(ev?.title) || clean(data?.title) || `Untitled · ${r.videoId || ''}`;
   const legacy = r.rowKind === 'legacy-day';
   const when = legacy ? `${longDate(r.date)} · recorded that day` : `${longDate(r.date)}${clockTime(r.firstWatched, tz) ? ` · ${clockTime(r.firstWatched, tz)}` : ''}`;
 
@@ -841,12 +848,17 @@ function inspectorHTML() {
   const foot = `<div class="dialog__foot"><span class="why">Saved evidence · not a fresh YouTube lookup</span><button type="button" class="btn btn--sm" data-action="close" data-key="dlg:done">Done</button></div>`;
   const meta = `<p class="ev__meta">${clean(r.channel) ? `<span>${esc(clean(r.channel))}</span>` : ''}<span class="mono">${esc(r.videoId || '')}</span><span>${esc(clean(r.deviceLabel) || 'Device')}</span><span>${esc(when)}</span></p>`;
   const context = contextHTML(r, tz);
+  const picker = versions.length > 1 ? `<section class="ev__section" aria-labelledby="ev-versions">
+      <h3 class="label" id="ev-versions">Saved versions · ${versions.length}</h3>
+      ${versionPickerHTML(r, dl.selected, (v, i) => `${i === 0 ? 'Newest · ' : ''}${clockTime(v.lastWatched, tz)} · ${v.title || v.videoId} · ${String(v.metadataId).slice(0, 12)}`, { key: 'dlg:version' })}
+      <p class="ev__note" data-version-scope data-metadata="${esc(version.metadataId)}">${esc(spent(version.seconds))} watched with this version. The playback totals above include every version; evidence below belongs only to this selection.</p>
+    </section>` : '';
 
   if (!data) {
     const inner = dl.error
       ? `<div class="problem" role="alert"><p><b>The evidence couldn’t be loaded.</b> ${esc(dl.error)}</p><button type="button" class="btn btn--sm" data-action="evidence-retry" data-key="dlg:retry">Try again</button></div>`
       : '<p class="boot" style="padding:24px 0">Loading the saved evidence…</p>';
-    return `${head}<div class="dialog__body">${meta}${context}${inner}</div>${foot}`;
+    return `${head}<div class="dialog__body">${meta}${context}${picker}${inner}</div>${foot}`;
   }
 
   const collectorLine = !ev && !text ? ''
@@ -854,14 +866,14 @@ function inspectorHTML() {
       : ev ? `Snapshot from the browser collector (schema ${esc(ev.schemaVersion ?? '?')}, <span class="mono">${esc(ev.algorithmVersion || 'no algorithm version')}</span>).`
         : 'The saved snapshot isn’t valid JSON; its exact text is below.';
 
-  const rec = data.recorded && typeof data.recorded === 'object' ? data.recorded : (r.recorded || {});
+  const rec = data.recorded && typeof data.recorded === 'object' ? data.recorded : (version.recorded || {});
   const usable = typeof rec.lang === 'string' && rec.lang && rec.lang !== 'other';
   const estimate = `<section class="ev__section" aria-labelledby="ev-est">
       <h3 class="label" id="ev-est">Language estimate · the collector’s, derived</h3>
       <p class="ev__lead" data-ev-estimate>${usable
         ? `${langLabel(rec.lang)}${rec.conf ? ` · ${esc(rec.conf)} confidence` : ''}${rec.source ? ` · from ${esc(SIGNAL_WORDS[rec.source] || rec.source)}` : ''}`
         : android || rec.source === 'android-player' ? notRecorded('OwnTube on Android TV doesn’t run language analysis') : notRecorded()}</p>
-      <p class="ev__note">The collector’s estimate of the spoken language, made from the source values below; it is not itself a source value. Review and corrections live in <a href="${esc(languagesHref(r, dl.days))}" data-key="dlg:languages">Languages</a>, which keeps its own record and never changes History.</p>
+      <p class="ev__note">The collector’s estimate of the spoken language, made from the source values below; it is not itself a source value. Review and corrections live in <a href="${esc(languagesHref(version, dl.days))}" data-key="dlg:languages">Languages</a>, which keeps its own record and never changes History.</p>
     </section>`;
 
   let body = '';
@@ -941,7 +953,7 @@ function inspectorHTML() {
         <pre class="ev__rawtext" tabindex="0" aria-label="${mode === 'exact' ? 'Exact saved snapshot text' : 'Snapshot re-encoded for reading'}"><code data-raw="${mode}">${esc(mode === 'exact' ? text : formatted)}</code></pre>
         <p class="ev__note">${mode === 'exact'
           ? 'Exactly as saved. The evidence ID names the SHA-256 of this text.'
-          : 'Re-encoded for reading, so not byte-identical: numbers can print slightly differently. Only the exact text is covered by the digest.'} Each version keeps the snapshot saved with it; there is no revision browser yet.</p>
+          : 'Re-encoded for reading, so not byte-identical: numbers can print slightly differently. Only the exact text is covered by the digest.'} Each recorded version keeps its own saved snapshot.</p>
       </details>`;
     if (text && id) checkDigest(text, id);
   }
@@ -949,31 +961,20 @@ function inspectorHTML() {
   return `${head}<div class="dialog__body">${meta}
       ${ev?.title && recordTitle && ev.title !== recordTitle ? `<p class="ev__note" style="margin:-6px 0 12px">The viewing record’s title is “${esc(recordTitle)}”.</p>` : ''}
       <p class="notice ev__notice" data-ev-collector><span><strong>Saved evidence, not a fresh YouTube lookup.</strong> ${collectorLine}</span></p>
-      ${context}${estimate}${body}${raw}
+      ${context}${picker}${estimate}${body}${raw}
     </div>${foot}`;
 }
 
 // Re-hash the exact saved text in this browser and compare it with the stored evidence ID. A
 // mismatch is shown as it is: the text is never rewritten to fit the ID.
-const digests = new Map();
-const digestKey = (id, text) => `${id}\n${text}`;
+const digests = new EvidenceDigests();
 const digestText = (id, text) => ({
   match: '<span class="ev__ok">Matches</span> <span class="why">SHA-256 of the exact text, recomputed in this browser</span>',
   mismatch: '<span class="ev__bad">Does not match</span> <span class="why">the saved text differs from what this ID names; it is shown exactly as stored</span>',
   unavailable: notRecorded('can’t be checked here (needs a secure context)'),
-})[digests.get(digestKey(id, text))] || '<span class="why">Checking…</span>';
+})[digests.get(id, text)] || '<span class="why">Checking…</span>';
 async function checkDigest(text, id) {
-  const key = digestKey(id, text);
-  if (digests.has(key)) return;
-  if (!globalThis.crypto?.subtle || !globalThis.TextEncoder) { digests.set(key, 'unavailable'); return; }
-  digests.set(key, 'pending');
-  try {
-    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-    const hex = [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
-    digests.set(key, hex === String(id).toLowerCase() ? 'match' : 'mismatch');
-  } catch {
-    digests.set(key, 'unavailable');
-  }
+  await digests.check(id, text);
   // Only an inspector still showing this exact snapshot receives the result.
   const dl = state.dialog;
   const el = $('#dlg [data-digest]');
@@ -1054,7 +1055,12 @@ document.addEventListener('click', (e) => {
 document.addEventListener('change', (e) => {
   const t = e.target;
   const name = state.view;
-  if (t.dataset.action === 'device') setScope({ device: t.value }).then(() => announce(name, summary(name)));
+  if (t.dataset.action === 'version' && state.dialog) {
+    state.dialog.selected = t.value;
+    state.dialog.raw = 'exact';
+    state.dialog.rawOpen = false;
+    fetchEvidence();
+  } else if (t.dataset.action === 'device') setScope({ device: t.value }).then(() => announce(name, summary(name)));
   else if (t.dataset.action === 'person') {
     // A device that belongs to someone else can't be in the new person's scope; clear it.
     const device = known('devices').find((x) => x.id === state.scope.device);
