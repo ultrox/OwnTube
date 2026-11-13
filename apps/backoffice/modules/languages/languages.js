@@ -119,6 +119,7 @@ const comparison = createComparison({
   api: () => api,
   scope: () => ({ device: state.filters.device, person: state.filters.person }),
   render, expired: () => signedOut('Your session ended. Sign in again.'), esc, spent, langName, demo: DEMO,
+  pickLanguage: (options) => openLanguagePicker({ ...options, esc, langName }),
 });
 let generation = 0;
 let linkedMetadata = new URLSearchParams(location.hash.replace(/^#/, '')).get('metadata');

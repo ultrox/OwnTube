@@ -64,6 +64,11 @@
 .compare__table span, .compare__table code { display: block; margin-top: 5px; font-size: 12px; color: var(--ink-2); font-weight: 400; }
 .compare__table strong { font-weight: 500; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .compare__empty { padding: 24px 0; border-top: 1px solid var(--rule); }
+.compare__languages { min-width: 0; border: 0; border-top: 1px solid var(--rule); margin: 24px 0; padding: 16px 0 0; }
+.compare__languages legend { font-size: 12px; color: var(--ink-2); padding-right: 10px; }
+.compare__chips { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.compare__chips .btn { white-space: normal; overflow-wrap: anywhere; text-align: left; }
+.compare__combined { background: var(--desk-2); }
 .dialog.language-picker { width: min(480px, calc(100vw - 24px)); padding: 24px; max-height: 85dvh; }
 .language-picker__head { display: flex; align-items: start; gap: 16px; justify-content: space-between; }
 .language-picker h2 { font: 24px var(--font-content); margin: 0; }

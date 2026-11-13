@@ -806,15 +806,39 @@ try {
   }
   await p.click('[data-compare="save"]');
   await p.waitFor(() => document.querySelector('[data-compare="save"]')?.textContent === 'Save & compare' && !!document.querySelector('.compare__table'));
-  const result = (await compareApi()).data;
+  let result = (await compareApi()).data;
   ok(result.groups[0].calendarDays === 4 && result.groups[1].calendarDays === 4 && result.config.groups[0].ranges.length === 3, 'multiple ranges persist, with duplicate days counted only once');
   ok(result.groups[0].includesToday && await p.eval(() => document.querySelector('.compare').textContent.includes('Today is partial')), 'today is identified as partial');
   ok(result.groups.every((g) => Math.abs(g.minutesPerDay - g.seconds / 60 / g.calendarDays) < 1e-8
     && Math.abs(g.languages.reduce((n, l) => n + l.seconds, 0) - g.seconds) < 1e-6), 'daily averages and language totals reconcile for both groups');
+  const allLanguageGroups = structuredClone(result.groups);
+  for (const [name, lang] of [['German', 'de'], ['Japanese', 'ja'], ['German', 'de']]) {
+    await p.click('[data-key="compare:add-language"]');
+    await p.click('#language-search'); await p.type(name);
+    await p.click(`[data-picker-code="${lang}"]`);
+    await p.waitFor((l) => !!document.querySelector(`[data-key="compare:language:${l}"]`), lang);
+  }
+  ok(await p.eval(() => document.querySelectorAll('[data-compare="remove-language"]').length === 2
+    && document.querySelector('.compare__actions [role="status"]').textContent === 'Unsaved changes'), 'search adds a shared language set to the draft without duplicates or immediate saves');
+  await p.click('[data-compare="remove-language"][data-lang="ja"]');
+  ok(await p.eval(() => !document.querySelector('[data-key="compare:language:ja"]')), 'a chosen language can be removed');
+  await p.click('[data-key="compare:add-language"]');
+  await p.click('#language-search'); await p.type('Japanese');
+  await p.click('[data-picker-code="ja"]');
+  await p.click('[data-compare="save"]');
+  await p.waitFor(() => !!document.querySelector('[data-combined]') && !document.querySelector('[data-compare="save"]').disabled);
+  result = (await compareApi()).data;
+  ok(JSON.stringify(result.config.selectedLanguages) === JSON.stringify(['de', 'ja'])
+    && result.groups.every((g, i) => Math.abs(g.seconds - allLanguageGroups[i].languages.filter((l) => ['de', 'ja'].includes(l.lang)).reduce((n, l) => n + l.seconds, 0)) < 1e-6
+      && g.allSeconds === allLanguageGroups[i].seconds && g.calendarDays === allLanguageGroups[i].calendarDays),
+    'saved German + Japanese totals combine only chosen languages in both groups, preserving calendar days and all-language share denominators');
+  ok(await p.eval(() => document.querySelectorAll('.compare__table tbody tr').length === 3
+    && [...document.querySelectorAll('.compare__table tbody code')].every((c) => ['de', 'ja'].includes(c.textContent))), 'results show the combined selection plus only its individual languages');
   await p.shot(`${LIVE ? 'live' : 'mock'}-comparison-desktop`);
   await p.go(`${MODULE}#days=30&query=${video}&view=compare`);
   await p.waitFor(() => !!document.querySelector('.compare__table'));
   ok(await p.eval(() => document.querySelectorAll('[data-compare-field="start"]').length === 4), 'saved ranges are restored after a fresh page load');
+  ok(await p.eval(() => !!document.querySelector('[data-key="compare:language:de"]') && !!document.querySelector('[data-key="compare:language:ja"]') && !!document.querySelector('[data-combined]')), 'the shared language set and combined results survive a fresh page load');
   await field('compare:1:0:start', dates[0]); await field('compare:1:0:end', dates[0]);
   await p.click('[data-compare="save"]');
   ok(await p.waitFor(() => document.querySelector('.compare [role="alert"]')?.textContent.includes('both groups'))
@@ -840,6 +864,14 @@ try {
   await p.click('[data-key="view:overview"]');
   await p.waitFor((id) => !!document.querySelector(`[data-row="${id}"]`), video);
   ok(await p.eval((id) => document.querySelector('#f-query').value === id && document.querySelector('[data-key="f:days:30"]').getAttribute('aria-pressed') === 'true', video), 'returning to Overview retains its search and period');
+  await p.click('[data-key="view:compare"]');
+  await p.waitFor(() => !!document.querySelector('[data-combined]') && !document.querySelector('[data-compare="save"]').disabled);
+  await p.click('[data-compare="all-languages"]');
+  await p.click('[data-compare="save"]');
+  await p.waitFor(() => !!document.querySelector('.compare__totals') && !document.querySelector('[data-compare="save"]').disabled);
+  const restored = (await compareApi()).data;
+  ok(restored.config.selectedLanguages.length === 0 && restored.groups.every((g) => g.seconds === g.allSeconds)
+    && await p.eval(() => !document.querySelector('[data-combined]')), 'Use all languages restores the complete comparison');
 } catch (error) {
   failures.push(`threw: ${error.message}`);
   console.log(`  FAIL threw: ${error.message}`);

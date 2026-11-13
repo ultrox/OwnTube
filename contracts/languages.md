@@ -18,6 +18,7 @@ It is independent of Overview's days, language, status and search filters.
 ```json
 {
   "baseRevision": 0,
+  "selectedLanguages": ["de", "ja"],
   "groups": [
     {"label": "Using it", "ranges": [{"start": "2026-10-01", "end": "2026-10-14"}]},
     {"label": "Not using it", "ranges": [{"start": "2026-09-01", "end": "2026-09-14"}]}
@@ -41,13 +42,25 @@ and `languages: [{lang, seconds, minutesPerDay, share}]`. Share is a fraction
 of **all** watch time, including unknown/mixed/no-speech. Empty groups have a
 null daily average. Selected days with no recording count in the denominator;
 recorded active days are separate. A group with selected days but no playback
-has zero time and no language rows; shares are undefined, not zero.
+has zero time and no language rows unless languages were explicitly selected;
+shares are undefined when there is no scoped watch time, not zero.
 
 Local midnight boundaries respect DST. Measurements use the existing compact
 facts, legacy boundary clipping, assessment precedence and device context
 corrections, in a consistent read transaction. Cumulative measurements are never
 interpolated. Today counts as one partial calendar day and is flagged explicitly.
 No recording or language audit rows are changed by comparison saves.
+
+`selectedLanguages` is shared by both groups and saved with the same revision
+check. It defaults to `[]` (all languages), including for older saved configurations.
+Up to 128 valid language codes are accepted; saving normalizes and deduplicates
+them. With a selection, group seconds, context, review time, active days and
+daily averages cover only those languages. Calendar days retain the full chosen
+date denominator. `allSeconds` is the complete scoped watch time; group `share`
+and per-language shares use that denominator so a selection does not misleadingly
+become 100%. Chosen languages with no playback return a zero row. The UI shows
+the combined selection and its per-language rows. Choosing all restores the full
+comparison.
 
 ### Overview
 

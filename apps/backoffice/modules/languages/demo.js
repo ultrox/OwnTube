@@ -174,7 +174,7 @@ async function sha256(text) {
 
 export async function createDemoApi({ external = false } = {}) {
   const now = Date.now();
-  let comparisonConfig = { baseRevision: 0, groups: [{ label: 'Using it', ranges: [] }, { label: 'Not using it', ranges: [] }] };
+  let comparisonConfig = { baseRevision: 0, selectedLanguages: [], groups: [{ label: 'Using it', ranges: [] }, { label: 'Not using it', ranges: [] }] };
   const localDate = (at) => {
     const d = new Date(at);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -272,20 +272,25 @@ export async function createDemoApi({ external = false } = {}) {
     logout: () => later({ ok: true }, 20),
     saveComparison(config) {
       comparisonDays(config);
+      const selection = config.selectedLanguages || [];
+      if (selection.length > 128 || selection.some((l) => !language(l))) throw fail(422, 'Choose up to 128 valid language codes');
       if (config.baseRevision !== comparisonConfig.baseRevision) throw fail(409, 'Comparison changed in another browser. Reload saved periods before saving.');
-      comparisonConfig = structuredClone({ ...config, baseRevision: config.baseRevision + 1 });
+      comparisonConfig = structuredClone({ ...config, selectedLanguages: [...new Set(selection.map(language))].sort(), baseRevision: config.baseRevision + 1 });
       return later(comparisonConfig);
     },
     comparison({ device = '', person = '' } = {}) {
       const groups = comparisonDays(comparisonConfig).map((dates) => {
-        const active = new Set(), langs = new Map();
-        let seconds = 0, foregroundSeconds = 0, backgroundSeconds = 0, unspecifiedSeconds = 0, reviewSeconds = 0;
+        const selected = comparisonConfig.selectedLanguages || [];
+        const active = new Set(), langs = new Map(selected.map((l) => [l, 0]));
+        let seconds = 0, allSeconds = 0, foregroundSeconds = 0, backgroundSeconds = 0, unspecifiedSeconds = 0, reviewSeconds = 0;
         for (const r of records) {
           const dev = DEVICES.find((d) => d.id === r.deviceId);
           if ((device && dev.id !== device) || (person && dev.personId !== person)) continue;
           for (const p of r.plays) {
             if (!dates.has(localDate(p.at))) continue;
             const time = p.fg + p.bg + p.un;
+            allSeconds += time;
+            if (selected.length && !selected.includes(r.assessment.lang)) continue;
             seconds += time; langs.set(r.assessment.lang, (langs.get(r.assessment.lang) || 0) + time);
             if (time) active.add(localDate(p.at));
             if (needsReview(r.assessment)) reviewSeconds += time;
@@ -294,10 +299,10 @@ export async function createDemoApi({ external = false } = {}) {
             unspecifiedSeconds += dev.contextOverride ? 0 : p.un;
           }
         }
-        return { seconds, foregroundSeconds, backgroundSeconds, unspecifiedSeconds, reviewSeconds,
+        return { seconds, allSeconds, share: allSeconds ? seconds / allSeconds : null, foregroundSeconds, backgroundSeconds, unspecifiedSeconds, reviewSeconds,
           calendarDays: dates.size, activeDays: active.size, includesToday: dates.has(localDate(now)),
           minutesPerDay: dates.size ? seconds / 60 / dates.size : null,
-          languages: [...langs].map(([lang, time]) => ({ lang, seconds: time, minutesPerDay: dates.size ? time / 60 / dates.size : null, share: seconds ? time / seconds : null })) };
+          languages: [...langs].map(([lang, time]) => ({ lang, seconds: time, minutesPerDay: dates.size ? time / 60 / dates.size : null, share: allSeconds ? time / allSeconds : null })) };
       });
       return later({ config: comparisonConfig, groups, today: localDate(now), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, asOf: now });
     },

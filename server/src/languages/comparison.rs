@@ -21,6 +21,8 @@ pub struct Group {
 pub struct Config {
     base_revision: i64,
     groups: [Group; 2],
+    #[serde(default)]
+    selected_languages: Vec<String>,
 }
 
 #[derive(Default, Deserialize)]
@@ -35,6 +37,7 @@ pub struct Scope {
 fn empty() -> Config {
     Config {
         base_revision: 0,
+        selected_languages: vec![],
         groups: ["Using it", "Not using it"].map(|label| Group {
             label: label.into(),
             ranges: vec![],
@@ -55,6 +58,9 @@ fn date(value: &str) -> Result<NaiveDate> {
 fn days(config: &Config, today: NaiveDate) -> Result<[BTreeSet<NaiveDate>; 2]> {
     if config.base_revision < 0 {
         return Err(invalid("Invalid comparison revision"));
+    }
+    if config.selected_languages.len() > 128 || config.selected_languages.iter().any(|s| language(s).is_none()) {
+        return Err(invalid("Choose up to 128 valid language codes"));
     }
     let mut result = [BTreeSet::new(), BTreeSet::new()];
     for (group, selected) in config.groups.iter().zip(result.iter_mut()) {
@@ -128,8 +134,10 @@ fn windows(selected: &BTreeSet<NaiveDate>, tz: chrono_tz::Tz, at: i64) -> Result
 }
 
 impl Store {
-    pub async fn save_language_comparison(&self, config: Config, tz: chrono_tz::Tz) -> Result<Value> {
+    pub async fn save_language_comparison(&self, mut config: Config, tz: chrono_tz::Tz) -> Result<Value> {
         days(&config, tz.timestamp_millis_opt(now()).unwrap().date_naive())?;
+        config.selected_languages = config.selected_languages.iter().map(|s| language(s).unwrap())
+            .collect::<BTreeSet<_>>().into_iter().collect();
         self.run(move |db| {
             let tx = db.transaction()?;
             let old = saved(&tx)?;
@@ -165,7 +173,8 @@ impl Store {
             let mut groups = vec![];
             for selected_days in &selected_days {
                 let mut context = [0.; 3];
-                let mut langs: BTreeMap<String, f64> = BTreeMap::new();
+                let mut langs: BTreeMap<String, f64> = config.selected_languages.iter().map(|l| (l.clone(), 0.)).collect();
+                let mut all_seconds = 0.;
                 let mut active = BTreeSet::new();
                 let mut review = 0.;
                 for window in windows(selected_days, tz, at)? {
@@ -177,6 +186,8 @@ impl Store {
                             assessments.insert(key.clone(), latest(db, &key.0, &key.1, &fact.metadata)?.1);
                         }
                         let assessment = &assessments[&key];
+                        all_seconds += fact.seconds;
+                        if !config.selected_languages.is_empty() && !config.selected_languages.contains(&assessment.lang) { continue; }
                         *langs.entry(assessment.lang.clone()).or_default() += fact.seconds;
                         context[fact.context] += fact.seconds;
                         if assessment.review() { review += fact.seconds; }
@@ -190,13 +201,14 @@ impl Store {
                 groups.push(json!({
                     "calendarDays": count, "activeDays": active.len(),
                     "includesToday": selected_days.contains(&today),
-                    "seconds": seconds, "reviewSeconds": review,
+                    "seconds": seconds, "allSeconds": all_seconds, "reviewSeconds": review,
+                    "share": (all_seconds > 0.).then(|| seconds / all_seconds),
                     "foregroundSeconds": context[0], "backgroundSeconds": context[1], "unspecifiedSeconds": context[2],
                     "minutesPerDay": (count > 0).then(|| seconds / 60. / count as f64),
                     "languages": langs.into_iter().map(|(lang, seconds)| json!({
                         "lang": lang, "seconds": seconds,
                         "minutesPerDay": (count > 0).then(|| seconds / 60. / count as f64),
-                        "share": (context.iter().sum::<f64>() > 0.).then(|| seconds / context.iter().sum::<f64>())
+                        "share": (all_seconds > 0.).then(|| seconds / all_seconds)
                     })).collect::<Vec<_>>()
                 }));
             }
@@ -222,6 +234,7 @@ mod tests {
     fn config(a: &[(&str, &str)], b: &[(&str, &str)]) -> Config {
         Config {
             base_revision: 0,
+            selected_languages: vec![],
             groups: [a, b].map(|ranges| Group {
                 label: "A group".into(),
                 ranges: ranges.iter().map(|(a, b)| Range { start: (*a).into(), end: (*b).into() }).collect(),
@@ -294,6 +307,22 @@ mod tests {
         assert_eq!(updated["groups"][0]["languages"][0]["seconds"], 5.);
         assert_eq!(updated["groups"][0]["languages"][1]["lang"], "und");
         assert_eq!(updated["groups"][0]["languages"][1]["share"], 0.75);
+        let mut chosen: Config = serde_json::from_value(updated["config"].clone()).unwrap();
+        chosen.selected_languages = vec!["JA".into(), "ja".into(), "ru".into()];
+        assert_eq!(s.save_language_comparison(chosen, tz).await.unwrap()["selectedLanguages"], json!(["ja","ru"]));
+        let chosen = s.language_comparison(Scope::default(), tz).await.unwrap();
+        assert_eq!(chosen["groups"][0]["seconds"], 5.);
+        assert_eq!(chosen["groups"][0]["allSeconds"], 20.);
+        assert_eq!(chosen["groups"][0]["share"], 0.25);
+        assert_eq!(chosen["groups"][0]["calendarDays"], 1);
+        assert_eq!(chosen["groups"][0]["backgroundSeconds"], 5.);
+        assert_eq!(chosen["groups"][0]["reviewSeconds"], 0.);
+        assert_eq!(chosen["groups"][0]["languages"][0]["share"], 0.25);
+        assert_eq!(chosen["groups"][0]["languages"][1]["seconds"], 0.);
+        assert_eq!(chosen["groups"][1]["seconds"], 40.);
+        let mut invalid_choice: Config = serde_json::from_value(chosen["config"].clone()).unwrap();
+        invalid_choice.selected_languages = vec!["Japanese".into()];
+        assert!(s.save_language_comparison(invalid_choice,tz).await.is_err());
         let excluded = s.language_comparison(Scope { device:"other".into(),person:String::new() }, tz).await.unwrap();
         assert_eq!(excluded["groups"][0]["seconds"], 0.);
         assert_eq!(excluded["groups"][0]["calendarDays"], 1);
@@ -337,12 +366,19 @@ mod tests {
     async fn comparison_survives_store_reopen_and_empty_groups_have_no_average() {
         let path = std::env::temp_dir().join(format!("comparison-{}.sqlite", crate::token()));
         let s = Store::open(path.clone()).unwrap();
-        let c = config(&[("2026-03-01", "2026-03-02")], &[]);
+        // Previously saved payloads without selectedLanguages still read as all languages.
+        let old: Config = serde_json::from_value(json!({"baseRevision":0,"groups":[
+            {"label":"Using it","ranges":[]},{"label":"Not using it","ranges":[]}
+        ]})).unwrap();
+        assert!(old.selected_languages.is_empty());
+        let mut c = config(&[("2026-03-01", "2026-03-02")], &[]);
+        c.selected_languages = vec!["de".into(), "ja".into()];
         s.save_language_comparison(c, chrono_tz::UTC).await.unwrap();
         drop(s);
         let s = Store::open(path.clone()).unwrap();
         let read = s.language_comparison(Scope::default(), chrono_tz::UTC).await.unwrap();
         assert_eq!(read["config"]["baseRevision"], 1);
+        assert_eq!(read["config"]["selectedLanguages"], json!(["de","ja"]));
         assert_eq!(read["groups"][0]["calendarDays"], 2);
         assert_eq!(read["groups"][1]["minutesPerDay"], Value::Null);
         drop(s);

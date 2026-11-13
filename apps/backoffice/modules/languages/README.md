@@ -23,6 +23,13 @@ days with no playback still count in a populated group's daily denominator.
 Today is explicitly partial. On phones the editor stacks and the table has its
 own labelled horizontal scroll region.
 
+**Languages to compare** is a shared saved selection for both period groups.
+Use **+ Add language** to search, remove a chip to exclude a language, then
+**Save & compare**. Results show only chosen languages plus their combined time
+and differences. **Use all languages** restores the full view. Shares stay relative
+to all recorded watch time; selecting two languages does not rebase their sum to
+100%. Period lengths are unchanged, and zero-watch selected languages stay visible.
+
 | File | Role |
 | --- | --- |
 | `index.html`, `languages.css` | Page shell and styles. Self-contained; no fonts or files from elsewhere. |
