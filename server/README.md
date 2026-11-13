@@ -301,7 +301,52 @@ All 45 Android unit regressions, a disposable-backend HTTP contract test and the
 The ARM64 APK was installed on the Shield on 2026-11-13; versionCode 2466 and the retained app-data
 directory were verified. Post-update playback capture has not yet been checked on-device.
 
-### Current release: `owntube-youtube-links-20261113-1`
+### Current release: `owntube-period-comparison-20261113-1`
+
+Source `08599ce56`, deployed through
+`kamal app boot -c deploy/deploy.yml --version owntube-period-comparison-20261113-1`.
+Container `af352ee3d899`, image
+`sha256:dbfcdebdd1f9ee4bd9925634091d6c660ea66b3880ae62299794ef5206093da2`.
+Source archive SHA-256:
+`9af83f742659fb07089e96c0c8e5c3f0a9bec090190005ea12ddd1748b72940f`.
+Release files: `/home/marko/releases/youtube-observer/owntube-period-comparison-20261113-1/`.
+
+Languages adds **Compare periods**: two server-saved groups, each combining
+multiple inclusive date ranges. It compares assessed language watch time, minutes
+per calendar day, shares and differences; shared device/person scope and context
+corrections remain applied. Repeated days count once, cross-group overlap is
+rejected, empty groups have no average and today is marked partial. A revision
+check protects concurrent configuration saves. The only schema addition is the
+singleton `language_comparison` table; the recording and assessment tables retain
+their existing meaning. **Other…** beside the row shortcuts searches language
+names, codes and native names, saving through the existing audited bulk flow.
+
+Verification before deployment: 40 server tests passed (one opt-in production-copy
+test ignored), followed by all four focused comparison tests including the added
+cumulative-time/context/person case. 126 mock and 42 real-local-server browser
+checks passed. These cover retained drafts, persistence, conflicting saves,
+overlaps, totals, Russian/Japanese decisions, keyboard closing and 390 px layouts.
+Local built-asset graph verification matched all seven assets/imports.
+Public HTTPS verification also matched all seven assets, required owner auth,
+loaded the comparison, found Japanese in the picker and passed phone layout checks.
+Production verification matched all six frozen scopes; credentials, source
+records, all 237 assessments and the TV context correction were preserved.
+Database integrity and foreign keys passed. Verification wrote no classifications
+or comparison configuration on production (initial comparison revision 0).
+
+Fresh online backup `before-owntube-period-comparison-20261113-1` is retained under
+`/home/marko/Backups/youtube-observer/` and locally under
+`~/.local/state/youtube-observer/backups/`; verified SHA-256:
+`de9130b2e504533a025136b8e54679449f3a937829a08af1152b42b6c521b733`.
+It contains 297,130 events, 473 evidence, 720 slices, 487 metadata versions,
+3 devices, 2 people, **237 assessments** and 1 context override.
+
+Image-only rollback:
+`kamal rollback owntube-youtube-links-20261113-1 -c deploy/deploy.yml`.
+The previous server ignores the additive comparison table; keep the database
+and any comparison configuration when rolling back.
+
+### Previous release: `owntube-youtube-links-20261113-1`
 
 Source `8bc544547`, deployed through
 `kamal app boot -c deploy/deploy.yml --version owntube-youtube-links-20261113-1`.

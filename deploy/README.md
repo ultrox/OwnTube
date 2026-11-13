@@ -81,13 +81,25 @@ The Languages follow-up `owntube-languages-20261113-2` uses the same process fro
 commit `4369a6835`, with mobile wrapping and content-hashed module assets. Its
 backend binary is identical to `-1`; the same backup and image-only rollback apply.
 
-## Current YouTube links release
+## Current language period comparison release
+
+`owntube-period-comparison-20261113-1`, source `08599ce56`, adds a saved two-group
+**Compare periods** view and a searchable **Other…** language picker. Dates combine
+within each group, with calendar-day averages and language-share differences.
+Concurrent saves are revision-checked. 126 mock and 42 real-local-server browser
+checks passed, with server coverage for DST, cumulative/legacy measurements,
+manual precedence, context correction, persistence, scope and conflicts.
+The verified fresh backup includes 237 existing language assessments.
+Release details and rollback:
+[`server/README.md`](../server/README.md#current-release-owntube-period-comparison-20261113-1).
+
+## Previous YouTube links release
 
 `owntube-youtube-links-20261113-1`, source `8bc544547`, adds **Open in YouTube ↗**
 to Languages rows and the inspector. Local and public browser checks verified
 new-tab opening, retained filters/draft edits and phone layouts.
 Release details and rollback:
-[`server/README.md`](../server/README.md#current-release-owntube-youtube-links-20261113-1).
+[`server/README.md`](../server/README.md#previous-release-owntube-youtube-links-20261113-1).
 
 ## Previous quick language controls release
 
