@@ -301,7 +301,47 @@ All 45 Android unit regressions, a disposable-backend HTTP contract test and the
 The ARM64 APK was installed on the Shield on 2026-11-13; versionCode 2466 and the retained app-data
 directory were verified. Post-update playback capture has not yet been checked on-device.
 
-### Current release: `owntube-recorded-language-picker-20261113-1`
+### Current release: `owntube-comparison-story-20261113-1`
+
+Deployed using `kamal app boot -c deploy/deploy.yml --version owntube-comparison-story-20261113-1`.
+Container `682b624c9fff`, image
+`sha256:4802679f5ce928865a67edd6c06fca10251da6431edbb114a812ceee16af4082`.
+Release files: `/home/marko/releases/youtube-observer/owntube-comparison-story-20261113-1/`.
+Source archive SHA-256:
+`6a09d593fb1834c394e216ef2d19307ead0f23876189f310c2494b657e4a4c9e`.
+
+Source `cfebb3765`. Fable's frontend redesign presents a compact saved setup,
+an explicit daily-rate comparison headline and paired bars, unique calendar-day
+coverage with the exact number of days needed to match lengths, per-language
+comparisons, and underlying totals. Share differences use percentage points
+and independently identify the higher-share group. Relative daily differences
+name their lower-rate reference; zero and trace baselines are distinguished.
+Today is marked partial. Missing-day cells represent duration gaps, not missing
+recordings or projected data. Longer periods use proportional duration bars.
+Controls retain shared language selection, recorded-only suggestions and the
+adjacent **Add period / Add language** actions.
+
+184 mock and 75 real-local-server browser checks passed, including asymmetric
+periods, opposing daily/share leaders, empty/zero/trace cases, rounded equality,
+long hostile labels, phone layout, keyboard focus and both themes' group-color
+contrast. Frontend build passed; backend and saved configuration are unchanged.
+Public HTTPS verification matched seven assets and checked the displayed daily
+rates/delta against the API, 5-versus-2-day coverage with three missing days,
+partial today, adjacent controls, recorded-only picker and phone layouts.
+Six frozen scopes matched; source records, credentials, all 237 assessments and
+saved comparison revision 9 were preserved. Integrity and foreign keys passed.
+Verification saved no production classification or comparison decisions.
+
+Fresh backup `before-owntube-comparison-story-20261113-1` is retained under
+`/home/marko/Backups/youtube-observer/` and locally under
+`~/.local/state/youtube-observer/backups/`; verified SHA-256:
+`bc24f9884079e7e3d9ceeb19c9d644cb8ca05dc4424bd6b53666f033d051dbe6`.
+It includes 297,131 events, 478 evidence, 730 slices, 492 metadata versions,
+237 assessments, the TV context correction and the saved comparison.
+Image-only rollback:
+`kamal rollback owntube-recorded-language-picker-20261113-1 -c deploy/deploy.yml`.
+
+### Previous release: `owntube-recorded-language-picker-20261113-1`
 
 Deployed using `kamal app boot -c deploy/deploy.yml --version owntube-recorded-language-picker-20261113-1`.
 Container `136c64c3002a`, image
