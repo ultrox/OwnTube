@@ -81,9 +81,22 @@ The Languages follow-up `owntube-languages-20261113-2` uses the same process fro
 commit `4369a6835`, with mobile wrapping and content-hashed module assets. Its
 backend binary is identical to `-1`; the same backup and image-only rollback apply.
 
-## Current review release
+## Current grouped History release
 
-`owntube-review-20261113-1`, source commit `457e90e82`, is live. It groups Languages
+`owntube-grouped-history-20261113-1`, source commit `2e44ac20a`, groups History
+metadata revisions within their recorded viewing. History and Languages share
+version selection and exact-evidence verification; History links select the
+matching version in Languages.
+
+The non-root AMD64 candidate passed 21 production-copy scope comparisons, all 465
+evidence versions, source-table preservation and desktop/phone browser checks.
+Fresh online backups include all 12 assessments and the active TV foreground
+override. Release identity, verification and image-only rollback:
+[`server/README.md`](../server/README.md#current-release-owntube-grouped-history-20261113-1).
+
+## Previous review release
+
+`owntube-review-20261113-1`, source commit `457e90e82`, grouped Languages
 by video, automatically interprets saved selected-audio labels for unreviewed
 records, and supports audited device playback-context corrections. The authorized
 TV OwnTube foreground override is active for existing and future playback.
@@ -92,11 +105,11 @@ The actual AMD64 image passed production-copy grouping/time/evidence checks and
 browser verification before the Kamal handover; public HTTPS verification passed
 after deployment. The new online backup and all 12 saved language assessments
 were preserved. Image, backup, activation and rollback details are in
-[`server/README.md`](../server/README.md#current-release-owntube-review-20261113-1).
+[`server/README.md`](../server/README.md#previous-release-owntube-review-20261113-1).
 
 ## Previous History release
 
-`owntube-history-20261113-1`, source commit `9fe9556a4`, is live at the root.
+`owntube-history-20261113-1`, source commit `9fe9556a4`, introduced the live desk at the root.
 The server-built AMD64 image passed an isolated fresh-production-copy comparison
 before `kamal app boot -c deploy/deploy.yml --version owntube-history-20261113-1`.
 Public browser checks and six frozen scope baselines passed after handover.

@@ -301,7 +301,66 @@ All 45 Android unit regressions, a disposable-backend HTTP contract test and the
 The ARM64 APK was installed on the Shield on 2026-11-13; versionCode 2466 and the retained app-data
 directory were verified. Post-update playback capture has not yet been checked on-device.
 
-### Current release: `owntube-review-20261113-1`
+### Current release: `owntube-grouped-history-20261113-1`
+
+Source commit `2e44ac20a`, deployed using
+`kamal app boot -c deploy/deploy.yml --version owntube-grouped-history-20261113-1`.
+Production container: `0d68f8bf38c0`.
+History now shows one entry per recorded viewing/video/device/server date.
+Metadata updates are nested evidence versions; distinct visits remain separate.
+Legacy samples group by video/device/day and retain **Recorded that day**.
+Grouping precedes paging and any-version text matching. Time sums versions;
+coverage unions their ranges.
+
+History and Languages share recorded-version identities, the version picker,
+saved-evidence handling and SHA-256 verification. A History evidence link opens
+the exact selected version in Languages. Both inspectors reject stale version
+responses. The existing editorial design and independent Languages review remain.
+
+AMD64 image:
+`sha256:e3907680dd176aed268b3752418dffebe0e7c2a27190b3fbdd31f4f752226276`.
+Source archive SHA-256:
+`c4fa7fff445043d45a1cacdc821c23bc24a16ddd4ebfd44092ead31b48804e07`.
+Sources and release manifest:
+`/home/marko/releases/youtube-observer/owntube-grouped-history-20261113-1/`.
+
+Checks passed: 36 Rust tests (optional migration test ignored), 110 History mock
+checks, 24 History real-backend checks, 83 Languages mock checks, 19 Languages
+real-backend checks and 106 design-preview checks. The actual non-root AMD64
+candidate matched History, Languages and Legacy across 21 period/device/person
+scopes, 465 exact evidence versions and 714 paged search rows. Both historical
+digest mismatches remain intact. Candidate browser checks verified shared hashed
+assets, exact older evidence, the selected-version Languages link, automatic
+English classification and desktop/phone layouts.
+
+The reported `USBk_L36Rhc` viewing (`dc781504-d8b7-43fe-970d-7367bbd86a92`)
+is one entry containing both metadata versions and 370.7307000012399 seconds.
+Candidate startup and read-only checks preserved every source-table row,
+credential, all 12 assessments and the active TV foreground override exactly.
+
+Post-deploy public HTTPS browser checks passed for the reported one-entry viewing,
+both evidence versions, exact-version Languages navigation, shared asset hashes,
+automatic classification, session restoration and desktop/phone layouts.
+Six frozen production scope baselines matched. All 14 Languages pages contained
+278 unique videos and 465 versions. TV's 34,193.02699999982 seconds remained
+foreground, with zero background or unspecified time. Database integrity and
+foreign keys passed; original source rows, unchanged-revision slices, device/owner
+credentials, all 12 assessments and the one context override were preserved.
+The isolated candidate was stopped and removed after verification.
+
+Fresh SQLite online backup `before-owntube-grouped-history-20261113-1` is retained
+under `/home/marko/Backups/youtube-observer/` and
+`~/.local/state/youtube-observer/backups/`. Independent restored integrity,
+foreign keys, counts, SHA-256 and unchanged owner key were verified.
+Database SHA-256:
+`9a862ae29d2dc0363f8f8758e8b9754c8b393ed9e76ec1e5f597b66ef82039d6`.
+The backup contains 297,130 events, 451 evidence records, 694 slices, 465 metadata
+versions, 3 devices, 2 people, 12 assessments and 1 context override.
+
+Image-only rollback, retaining current records, decisions and TV correction:
+`kamal rollback owntube-review-20261113-1 -c deploy/deploy.yml`.
+
+### Previous release: `owntube-review-20261113-1`
 
 Deployed from commit `457e90e82` (backend `b1afec4ff`) on 2026-11-13 using
 `kamal app boot -c deploy/deploy.yml --version owntube-review-20261113-1`.
