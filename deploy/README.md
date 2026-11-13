@@ -77,6 +77,17 @@ AMD64 image passed runtime-user asset checks and a restored-production-copy
 comparison before handover. Backups, image identity and rollback are recorded in
 [`server/README.md`](../server/README.md#backend-release-owntube-languages-20261113-1).
 
-The current follow-up `owntube-languages-20261113-2` uses the same process from
+The Languages follow-up `owntube-languages-20261113-2` uses the same process from
 commit `4369a6835`, with mobile wrapping and content-hashed module assets. Its
 backend binary is identical to `-1`; the same backup and image-only rollback apply.
+
+## Current History release
+
+`owntube-history-20261113-1`, source commit `9fe9556a4`, is live at the root.
+The server-built AMD64 image passed an isolated fresh-production-copy comparison
+before `kamal app boot -c deploy/deploy.yml --version owntube-history-20261113-1`.
+Public browser checks and six frozen scope baselines passed after handover.
+The new online backup preserves the 12 existing language assessments as well as
+all original collector records and credentials. Exact image, backup, verification
+and rollback records are in
+[`server/README.md`](../server/README.md#current-release-owntube-history-20261113-1).

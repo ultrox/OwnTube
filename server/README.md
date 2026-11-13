@@ -299,7 +299,57 @@ All 45 Android unit regressions, a disposable-backend HTTP contract test and the
 The ARM64 APK was installed on the Shield on 2026-11-13; versionCode 2466 and the retained app-data
 directory were verified. Post-update playback capture has not yet been checked on-device.
 
-### Current release: `owntube-languages-20261113-2`
+### Current release: `owntube-history-20261113-1`
+
+Deployed from commit `9fe9556a4` on 2026-11-13 through Kamal's health-gated
+handover. The approved editorial History/Searches desk now owns
+<https://ytdash.gromobran.com/>. Device management and the old Elm dashboard
+remain at `/legacy/`; Languages remains independent at `/modules/languages/`.
+
+Container `443662fb9000`, image
+`sha256:aaeb6736c1c3b47a25913f657dac5e1e74c76dbde05cbb9eef3f116259a1000a`.
+Source archive SHA-256:
+`81cd5dfc4a9a4f74caa147bb0ecf762365fefd60bb3fdb3ffb494b2694f89e21`.
+Source and verification records:
+`/home/marko/releases/youtube-observer/owntube-history-20261113-1/`.
+Runtime assets: `desk.a1ba918ac7a4a884.js`, `desk.3a6b6b39a8152829.css`,
+and `api.49eb2c94c801f698.js`; the import graph is content-addressed.
+
+Checks passed: 28 Rust tests (the optional migration-copy test remained ignored),
+105 desk mock assertions, 24 real-backend assertions including the final hashed
+build, 54 Languages assertions, 106 design-preview assertions, and Docker
+packaging/authentication/persistence. Both legacy browser checks passed; the
+collector pipeline's timing assertion failed during a concurrent image build,
+then passed in isolation without code changes.
+
+The actual AMD64 candidate restored the fresh backup, matched History/legacy/
+Languages totals across 21 period/person/device scopes, and returned all 462
+metadata versions' exact saved evidence. Two pre-existing evidence digest
+mismatches remain unchanged and are explicitly shown in the inspector.
+
+Public HTTPS Chromium verification passed on 2026-11-13 at 17:19 UTC: matching
+HTML and hashed assets, unauthenticated API rejection, owner sign-in, real History
+and Searches, evidence, unchanged totals while filtering, 390 px phone layouts,
+session restoration, legacy dashboard and Languages. No JavaScript exceptions.
+All six frozen pre-release scope summaries match, including the new History API.
+Production integrity/foreign-key checks passed; original events, evidence,
+metadata, people, credentials and all 12 language assessments were preserved.
+Normal uploads continued: verification saw 297,129 events, 449 evidence records,
+463 metadata versions and 677 slices. No fictional records were added to production.
+
+Verified online backup `before-owntube-history-20261113-1` exists under
+`/home/marko/Backups/youtube-observer/` and
+`~/.local/state/youtube-observer/backups/`, including the unchanged owner key.
+Database SHA-256:
+`e344b7a3b438a13bfd71ee6ab6fe370e933c575b2d3a2e109e9e0bc7e0888511`.
+It contains 297,129 events, 448 evidence records, 670 slices, 462 metadata
+versions, 3 devices, 2 people and 12 assessments.
+
+Image-only rollback, preserving the current volume:
+`kamal rollback owntube-languages-20261113-2 -c deploy/deploy.yml`.
+The previous image and stopped production container remain available.
+
+### Previous release: `owntube-languages-20261113-2`
 
 Follow-up from commit `4369a6835`, deployed on 2026-11-13: long channel/device
 names wrap within the mobile review list and inspector. CSS and the entire module
