@@ -299,7 +299,72 @@ All 45 Android unit regressions, a disposable-backend HTTP contract test and the
 The ARM64 APK was installed on the Shield on 2026-11-13; versionCode 2466 and the retained app-data
 directory were verified. Post-update playback capture has not yet been checked on-device.
 
-### Current release: `owntube-history-20261113-1`
+### Current release: `owntube-review-20261113-1`
+
+Deployed from commit `457e90e82` (backend `b1afec4ff`) on 2026-11-13 using
+`kamal app boot -c deploy/deploy.yml --version owntube-review-20261113-1`.
+Languages now lists one video across its scoped metadata versions, with summed
+watch time, exact version evidence and one atomic grouped review action.
+Unreviewed existing and incoming records automatically use digest-verified
+selected-audio labels; explicit saved assessments and resets keep precedence.
+The reported “Playlist For Men Who Lead In Silence” example now displays English,
+high confidence, without needing review or an Analyze click.
+
+Container `d5daed7b2735`, image
+`sha256:c9534693ddbc0daff28b46d39e9aaac1c402c0232586079a14d9e1033df11b20`.
+Source archive SHA-256:
+`d7dc8e37de6c02c8fd3ab9b555ed80a13e84e5495ee6cddc4113d0fe68f1ed9d`.
+Release sources and identity manifest:
+`/home/marko/releases/youtube-observer/owntube-review-20261113-1/`.
+Language runtime assets: `languages.38a702416748f8f9.js`,
+`languages.fde681e462e2219b.css`, `api.3e3de118d4c96c5a.js`,
+`demo.a2352a53507c506d.js`.
+
+Checks passed: 34 Rust tests (optional migration-copy test ignored), 83 Languages
+mock assertions, 19 real-backend assertions against fictional fixtures, 105 History
+desk assertions, 106 design-preview assertions, and Android collector unit tests.
+The actual non-root AMD64 candidate matched all three read models across 21
+period/device/person scopes, all grouped pages and 464 exact evidence versions.
+The two historical evidence digest mismatches remain intact and visibly labelled.
+Candidate and public HTTPS browser checks passed for hashed assets, authentication,
+History/Searches, grouped Languages, automatic English classification, evidence,
+stable filter totals, session restoration, legacy dashboard and phone layouts.
+
+The owner-authorized foreground correction was activated at revision 1 for
+`e1a6397c-381c-47ad-89ea-bae98ff299de` (TV OwnTube). It covers existing and future
+playback in the shared read model. At activation, frozen total time stayed
+76,940.68190000256 seconds; 34,025.70799999982 TV seconds moved from background
+to foreground. History, Languages and Legacy agree. Original collector context
+remains saved, and the inspector names the correction.
+The final public check at 18:19 UTC traversed all 14 Languages pages: 277 unique
+videos containing 464 versions. A further 90.099 seconds of real TV uploads after
+activation also counted as foreground, with zero background/unspecified TV time.
+
+Production integrity and foreign-key checks passed. Original events, evidence,
+metadata, slices, people, device credentials, owner key and all 12 language
+assessments were preserved. Three existing slices received ordinary higher-revision
+collector uploads during verification; unchanged-revision rows stayed byte-for-byte
+equal. Verification saw 297,130 events, 450 evidence records, 688 slices and 464
+metadata versions. The only new interpretation write was the authorized context
+override. No fictional records were added to production.
+
+Verified online backup `before-owntube-review-20261113-1-deploy` is retained under
+`/home/marko/Backups/youtube-observer/` and
+`~/.local/state/youtube-observer/backups/`, with the unchanged owner key.
+Database SHA-256:
+`72046ab1268a84eda7005c5dc727b52af0ea4ce45c40072362e4fd51862806e6`.
+It contains 297,130 events, 450 evidence records, 686 slices, 464 metadata versions,
+3 devices, 2 people and 12 assessments.
+
+Image-only rollback, preserving the current data volume:
+`kamal rollback owntube-history-20261113-1 -c deploy/deploy.yml`.
+That previous image ignores the additive correction table. With this release,
+an explicit owner POST of `{"context":null,"reason":"..."}` to the device's
+`playback-context` endpoint appends a reset and restores original attribution.
+The Android before-first-draw source fix is committed and tested, but this release
+does not install an APK or restart the TV; the server correction handles its uploads.
+
+### Previous release: `owntube-history-20261113-1`
 
 Deployed from commit `9fe9556a4` on 2026-11-13 through Kamal's health-gated
 handover. The approved editorial History/Searches desk now owns

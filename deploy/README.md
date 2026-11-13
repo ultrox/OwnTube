@@ -81,7 +81,20 @@ The Languages follow-up `owntube-languages-20261113-2` uses the same process fro
 commit `4369a6835`, with mobile wrapping and content-hashed module assets. Its
 backend binary is identical to `-1`; the same backup and image-only rollback apply.
 
-## Current History release
+## Current review release
+
+`owntube-review-20261113-1`, source commit `457e90e82`, is live. It groups Languages
+by video, automatically interprets saved selected-audio labels for unreviewed
+records, and supports audited device playback-context corrections. The authorized
+TV OwnTube foreground override is active for existing and future playback.
+
+The actual AMD64 image passed production-copy grouping/time/evidence checks and
+browser verification before the Kamal handover; public HTTPS verification passed
+after deployment. The new online backup and all 12 saved language assessments
+were preserved. Image, backup, activation and rollback details are in
+[`server/README.md`](../server/README.md#current-release-owntube-review-20261113-1).
+
+## Previous History release
 
 `owntube-history-20261113-1`, source commit `9fe9556a4`, is live at the root.
 The server-built AMD64 image passed an isolated fresh-production-copy comparison
@@ -90,4 +103,4 @@ Public browser checks and six frozen scope baselines passed after handover.
 The new online backup preserves the 12 existing language assessments as well as
 all original collector records and credentials. Exact image, backup, verification
 and rollback records are in
-[`server/README.md`](../server/README.md#current-release-owntube-history-20261113-1).
+[`server/README.md`](../server/README.md#previous-release-owntube-history-20261113-1).
