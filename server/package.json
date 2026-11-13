@@ -1,0 +1,11 @@
+{
+  "name": "owntube-integration-checks",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test:e2e": "cargo build --locked && node --test --test-concurrency=1 tests/e2e/*.test.mjs",
+    "check:live": "cargo build --locked && node tooling/check-live.mjs",
+    "check:docker": "node tooling/check-docker.mjs"
+  }
+}

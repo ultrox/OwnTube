@@ -1,0 +1,13 @@
+{
+  "name": "owntube-chrome-extension",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "devDependencies": { "esbuild": "^0.25.0", "fake-indexeddb": "6.2.7" },
+  "pnpm": { "onlyBuiltDependencies": ["esbuild"] }
+}

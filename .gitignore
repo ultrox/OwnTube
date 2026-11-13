@@ -73,3 +73,16 @@ tmp/
 fabric.properties
 *BAK.java
 hs_err_pid*.log
+
+# Web apps and Rust service (each component builds independently)
+node_modules/
+elm-stuff/
+dist/
+target/
+data/
+artifacts/
+.env
+.env.*
+!.env.production.example
+/apps/android/smarttubetv/release/
+/apps/android/smarttubetv/output/

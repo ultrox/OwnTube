@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="color-scheme" content="light dark">
+  <title>OwnTube Backoffice · design preview</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%230f171f'/%3E%3Ccircle cx='12' cy='12' r='7.2' fill='none' stroke='%2352e8ba' stroke-width='1.8'/%3E%3Cpath d='M10.4 8.9v6.2l4.8-3.1z' fill='%2352e8ba'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+  <script>
+    // Apply the saved appearance before first paint (no flash). Preferences live with the preview only.
+    try {
+      var p = JSON.parse(localStorage.getItem('owntube.backoffice.preview.prefs.v1') || '{}');
+      if (p.theme === 'light' || p.theme === 'dark') document.documentElement.dataset.theme = p.theme;
+    } catch (e) {}
+  </script>
+</head>
+<body data-view="curation" data-pane="index">
+  <a class="skip" href="#main">Skip to the workspace</a>
+
+  <div class="proto" id="proto" role="region" aria-label="About this preview">
+    <span class="proto__tag">Preview</span>
+    <span class="proto__msg" id="proto-msg"><span class="proto__long"><b>Local design prototype.</b> Sample data. Edits and “published” revisions stay in this browser. Nothing is sent to a TV or a server.</span><span class="proto__short"><b>Local prototype.</b> Sample data; nothing leaves this browser.</span></span>
+    <span class="proto__actions" id="proto-actions">
+      <button type="button" class="proto__btn" data-action="open-about">Preview settings</button>
+      <button type="button" class="proto__btn" data-action="reset">Reset sample</button>
+    </span>
+  </div>
+
+  <header class="mast">
+    <a class="brand" href="#/curation" aria-label="OwnTube Backoffice">
+      <svg class="brand__mark" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.6" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9.9 7.6v8.8l6.8-4.4z" fill="currentColor"/></svg>
+      <span class="brand__name">OwnTube</span>
+      <span class="brand__sub">Backoffice</span>
+    </a>
+    <nav class="nav" aria-label="Sections" id="nav">
+      <a class="nav__link" href="#/curation" data-nav="curation">Curation</a>
+      <a class="nav__link nav__link--tv" href="#/tv" data-nav="tv">On the TV</a>
+      <a class="nav__link" href="#/history" data-nav="history">History</a>
+      <a class="nav__link" href="modules/languages/?demo=1" data-nav="languages">Languages</a>
+    </nav>
+    <div class="mast__status" id="mast-status"></div>
+  </header>
+
+  <main class="ws" id="main" tabindex="-1">
+    <aside class="col col--index" id="col-index" data-scroll-key="col-index"></aside>
+    <section class="col col--list" id="col-list" data-scroll-key="col-list"></section>
+    <aside class="col col--monitor" id="col-monitor" data-scroll-key="col-monitor" aria-labelledby="monitor-h"></aside>
+  </main>
+
+  <div class="draftbar" id="draftbar" hidden></div>
+  <div class="toasts" id="toasts" role="status" aria-live="polite" aria-atomic="true"></div>
+  <div class="vh" id="sr" role="status" aria-live="polite" aria-atomic="true"></div>
+
+  <dialog class="sheet" id="dlg-publish" aria-labelledby="publish-title"></dialog>
+  <dialog class="dialog" id="dlg-item" aria-labelledby="item-title"></dialog>
+  <dialog class="dialog" id="dlg-about" aria-labelledby="about-title"></dialog>
+  <dialog class="dialog dialog--wide" id="dlg-evidence" aria-labelledby="evidence-title"></dialog>
+  <dialog class="tvdialog" id="dlg-tv" aria-label="TV preview, full screen"></dialog>
+
+  <noscript>
+    <p style="padding:24px;font:16px/1.5 Charter,Georgia,serif">This design preview needs JavaScript. Nothing here talks to a server; it renders sample data in the browser.</p>
+  </noscript>
+
+  <script src="fixtures.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Shorts fixture</title>
+<style>
+.html5-video-player{position:absolute;top:0;left:0;width:320px;height:400px}
+video{width:320px;height:400px}
+#hidden{visibility:hidden}#preload{top:2000px}#throwing{left:400px}
+</style></head><body>
+<div id="hidden" class="html5-video-player"><video></video></div>
+<div id="throwing" class="html5-video-player"><video></video></div>
+<div id="movie_player" class="html5-video-player" style="display:none"><video></video></div>
+<div id="shorts-player" class="html5-video-player"><video></video></div>
+<div id="preload" class="html5-video-player"><video></video></div>
+<script>
+const response=(id,title)=>({videoDetails:{videoId:id,title,author:'Shorts channel',lengthSeconds:'6'},captions:{playerCaptionsTracklistRenderer:{captionTracks:[{languageCode:'de'}]}}});
+window.firstResponse=response('nOMbBrCYmqE','First German Short');
+window.firstResponse.videoDetails.shortDescription='Heute erklären wir auf Deutsch, wie man ein einfaches Rezept für Sauerteigbrot selber machen kann. Lernen Sie mit uns Schritt für Schritt das Backen.';
+window.secondResponse=response('shorts00002','Second German Short');
+window.players=Object.fromEntries([...document.querySelectorAll('.html5-video-player')].map(p=>[p.id,p]));
+for(const p of Object.values(players)){
+  const canvas=document.createElement('canvas');canvas.width=320;canvas.height=400;
+  const ctx=canvas.getContext('2d');
+  setInterval(()=>{ctx.fillStyle=`hsl(${performance.now()/10%360} 60% 50%)`;ctx.fillRect(0,0,320,400)},50);
+  const v=p.querySelector('video');v.muted=true;v.srcObject=canvas.captureStream(20);
+  p.response=firstResponse;p.getPlayerResponse=()=>p.response;p.getAudioTrack=()=>({id:'de'});
+}
+players.throwing.getPlayerResponse=()=>{throw new Error('Preload not ready')};
+players.preload.response=secondResponse;
+// Hidden/preloaded media really plays in the isolated world, not mocked JS properties.
+void players.hidden.querySelector('video').play();
+void players.preload.querySelector('video').play();
+window.addEventListener('message',e=>{if(e.data?.tag==='youtube-observer/player/v1')window.lastSignal=e.data});
+</script></body></html>

@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>YouTube Observer · Connection settings</title><link rel="stylesheet" href="popup.css"></head>
+<body class="settings-page">
+<header><div><h1>Connection settings</h1><p>YouTube Observer</p></div></header>
+<section class="panel"><h2>Saved connection</h2><p id="saved-connection">Loading…</p><a id="dashboard" target="_blank" rel="noreferrer" hidden>Open dashboard ↗</a></section>
+<section class="panel"><h2>Pair this browser</h2>
+<p class="note">Setup opens in a normal tab so Chrome’s permission prompt cannot close it. Use a device key from the dashboard, not the owner login key.</p>
+<p id="notice" role="status" aria-live="polite"></p>
+<form id="pair"><fieldset id="fields" disabled>
+<label>Server URL<input id="server" type="url" value="https://ytdash.gromobran.com" required></label>
+<label>Device key<input id="token" type="password" autocomplete="off" required></label>
+<button id="save">Save connection</button>
+</fieldset></form>
+<p class="note">The saved key is never displayed. An empty key field after saving or reopening this page is normal. Check Saved connection above to confirm your pairing.</p>
+<p class="note">You can replace a key for the same device/server with uploads pending. Changing to a different server or device requires uploading queued events and resolving held events first. Refresh YouTube tabs after changing the pairing.</p>
+</section><script src="pairing.js"></script></body></html>

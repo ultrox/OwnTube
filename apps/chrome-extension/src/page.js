@@ -1,0 +1,1 @@
+import './capture/page.js';

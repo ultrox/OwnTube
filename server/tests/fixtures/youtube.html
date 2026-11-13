@@ -1,0 +1,15 @@
+<!doctype html><html><head><meta charset="utf-8"><title>YouTube fixture</title></head>
+<body><div id="movie_player"><video class="html5-main-video"></video></div>
+<script>
+const video=document.querySelector('video');
+const canvas=document.createElement('canvas');canvas.width=320;canvas.height=180;
+const context=canvas.getContext('2d');
+setInterval(()=>{context.fillStyle='#'+Math.floor(Math.random()*16777215).toString(16).padStart(6,'0');context.fillRect(0,0,320,180)},100);
+video.muted=true;video.srcObject=canvas.captureStream(10);void video.play();
+document.querySelector('#movie_player').getPlayerResponse=()=>({
+  videoDetails:{videoId:'abcdefghijk',title:'Sauerteigbrot backen für Anfänger',author:'Brotzeit',lengthSeconds:'60'},
+  captions:{playerCaptionsTracklistRenderer:{captionTracks:[{languageCode:'de-DE'}]}}
+});
+document.querySelector('#movie_player').getAudioTrack=()=>({id:'und'});
+window.addEventListener('message',e=>{if(e.data?.tag==='youtube-observer/player/v1')window.lastSignal=e.data});
+</script></body></html>

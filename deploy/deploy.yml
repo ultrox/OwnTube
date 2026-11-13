@@ -1,0 +1,46 @@
+# Run Kamal from the repository root with -c deploy/deploy.yml.
+service: youtube-observer
+image: youtube-observer
+
+servers:
+  web:
+    hosts:
+      - hserver
+
+ssh:
+  user: marko
+  keys:
+    - ~/.ssh/id_ed25519
+  keys_only: true
+  proxy_command: "tailscale nc %h %p"
+
+# Cloudflare Tunnel provides HTTPS; share hserver's existing loopback proxy.
+proxy:
+  ssl: false
+  host: ytdash.gromobran.com
+  app_port: 3210
+  forward_headers: true
+  healthcheck:
+    path: /health
+  run:
+    bind_ips:
+      - 127.0.0.1
+    http_port: 8080
+    https_port: 8443
+
+registry:
+  server: localhost:5555
+
+builder:
+  arch: amd64
+  remote: ssh://marko@hserver
+  context: .
+  dockerfile: deploy/Dockerfile
+
+env:
+  clear:
+    COOKIE_SECURE: "true"
+    TIMEZONE: Europe/Zurich
+
+volumes:
+  - youtube-observer-data:/app/data

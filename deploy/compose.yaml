@@ -1,0 +1,18 @@
+name: youtube-observer
+services:
+  observer:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    ports:
+      - "127.0.0.1:3210:3210"
+    environment:
+      TIMEZONE: Europe/Zurich
+      COOKIE_SECURE: "${COOKIE_SECURE:-false}"
+      LANGUAGE_ANALYZER_URL: "${LANGUAGE_ANALYZER_URL:-}"
+      LANGUAGE_ANALYZER_TOKEN: "${LANGUAGE_ANALYZER_TOKEN:-}"
+    volumes:
+      - observer-data:/app/data
+    restart: unless-stopped
+volumes:
+  observer-data:

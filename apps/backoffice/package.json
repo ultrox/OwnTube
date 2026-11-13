@@ -1,0 +1,13 @@
+{
+  "name": "owntube-backoffice",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "node build.mjs",
+    "preview:design": "python3 -m http.server 4187 --bind 127.0.0.1 --directory design-preview"
+  },
+  "devDependencies": { "elm": "0.19.1-6" },
+  "pnpm": { "onlyBuiltDependencies": ["elm"] }
+}

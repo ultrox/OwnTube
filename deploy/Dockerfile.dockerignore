@@ -1,0 +1,20 @@
+# Only the server and production web sources belong in this image's context.
+**
+!deploy/
+!deploy/Dockerfile
+!deploy/Dockerfile.dockerignore
+!server/
+!server/Cargo.toml
+!server/Cargo.lock
+!server/src/
+!server/src/**
+!apps/
+!apps/backoffice/
+!apps/backoffice/package.json
+!apps/backoffice/pnpm-lock.yaml
+!apps/backoffice/elm.json
+!apps/backoffice/build.mjs
+!apps/backoffice/history/
+!apps/backoffice/history/**
+!apps/backoffice/modules/
+!apps/backoffice/modules/**

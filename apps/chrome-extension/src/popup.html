@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>YouTube Observer</title><link rel="stylesheet" href="popup.css"></head>
+<body>
+<header><div><h1>YouTube Observer</h1><p>Collector & delivery</p></div><a id="dashboard" target="_blank" rel="noreferrer">Dashboard ↗</a></header>
+<p id="status" role="status">Loading collector…</p>
+<div class="metrics"><section><span>Waiting for acknowledgement</span><strong id="queue-count">—</strong><small>events saved on this browser</small></section><section><span>Next batch watch time</span><strong id="watch-seconds">—</strong><small>network reports add no watch time</small></section></div>
+<section class="panel"><h2>Delivery</h2><dl>
+<dt>Automatic uploads</dt><dd>Every 30 seconds while Chrome is running</dd>
+<dt>Next attempt / check</dt><dd id="next-attempt">—</dd>
+<dt>Last local save</dt><dd id="last-capture">—</dd>
+<dt>Last attempt</dt><dd id="last-attempt">—</dd>
+<dt>Server acknowledged</dt><dd id="last-ack">—</dd>
+<dt>Oldest queued event</dt><dd id="oldest">—</dd>
+</dl><p id="sync-error" class="error" hidden></p><button id="sync">Upload now</button><p class="note">Events leave this queue only after the server confirms saving them. Failed uploads retry after 30s, 1m, 2m… up to 30m. Sleeping Chrome can delay the schedule.</p></section>
+<section class="panel"><h2>What will be sent next?</h2><p id="batch-summary">—</p><p id="batch-evidence" class="note"></p><div id="events"></div><p class="note">Oldest events go first: up to 100 per request (also size-limited), and up to 10 requests per drain. Expand an event to inspect its captured data. While a batch uploads, it stays visible here until acknowledged.</p></section>
+<section id="held" class="panel" hidden><h2 id="held-count"></h2><p class="note">These events were rejected individually and are retained here with their evidence. Other events can continue uploading. Export to inspect them; retry after correcting the server or credential issue. Nothing is discarded.</p><div id="held-list"></div><button id="export-held">Export held data</button> <button id="retry-held">Retry up to 100 held events</button></section>
+<details id="connection" class="panel"><summary>Server & pairing</summary><p id="paired-server" class="note"></p><a id="connection-settings" href="pairing.html" target="_blank" rel="noreferrer">Open connection settings ↗</a><p class="note">Pairing opens in a normal tab so Chrome’s permission prompt cannot close setup. Your saved device key stays stored when this popup closes.</p></details>
+<p id="notice" role="status"></p><p class="note">The dashboard shows server-saved history and refreshes every 15s. This popup shows this browser’s unsent queue and refreshes every 2s. After installing or reloading the extension, refresh YouTube tabs to reconnect capture.</p><script src="popup.js"></script>
+</body></html>

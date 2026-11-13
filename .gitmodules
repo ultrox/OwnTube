@@ -1,6 +1,6 @@
 [submodule "SharedModules"]
-	path = SharedModules
+	path = apps/android/SharedModules
 	url = https://github.com/yuliskov/SharedModules
 [submodule "MediaServiceCore"]
-	path = MediaServiceCore
+	path = apps/android/MediaServiceCore
 	url = https://github.com/yuliskov/MediaServiceCore

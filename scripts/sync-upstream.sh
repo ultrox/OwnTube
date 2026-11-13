@@ -17,5 +17,6 @@ if [[ "${1:-}" == "--check" ]]; then
 else
   git merge --no-edit upstream/master
   git submodule update --init --recursive
-  echo "Upstream merged. Run the checks in owntube/README.md before installing or pushing."
+  echo "Upstream merged. Review directory renames and root workflow/docs conflicts."
+  echo "Run the checks in apps/android/owntube/README.md before installing or pushing."
 fi

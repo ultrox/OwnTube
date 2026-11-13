@@ -125,10 +125,11 @@ Integration points to review after an upstream merge:
 
 ```sh
 # Start from a clean, committed tree.
-./scripts/sync-upstream.sh --check  # conflict check; working tree is untouched
+./scripts/sync-upstream.sh --check  # from repository root; working tree is untouched
 ./scripts/sync-upstream.sh         # merge upstream/master and update pinned submodules
 
 # JDK 17 and ANDROID_HOME pointing to the Android SDK:
+cd apps/android
 ./gradlew :owntube:testDebugUnitTest :smarttubetv:assembleStownRelease
 ```
 
@@ -146,7 +147,8 @@ in-flight receipt/rejection races, held replacement and mixed legacy/cumulative 
 Run the optional HTTP contract test against a freshly created local Observer database:
 
 ```sh
-python3 owntube/test-observer.py /path/to/youtube-observer/target/debug/youtube-observer
+# From apps/android, after building the server:
+python3 owntube/test-observer.py ../../server/target/debug/youtube-observer
 ```
 
 The script starts/stops an isolated loopback backend and supplies temporary test credentials.

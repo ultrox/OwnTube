@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "YouTube Observer",
+   "version": "0.2.0",
+  "description": "Collect YouTube watch time and source evidence for your own server.",
+  "minimum_chrome_version": "120",
+  "permissions": ["storage", "alarms", "unlimitedStorage"],
+  "host_permissions": ["https://www.youtube.com/*", "https://m.youtube.com/*", "http://127.0.0.1/*", "http://localhost/*"],
+  "optional_host_permissions": ["https://*/*", "http://*/*"],
+  "background": { "service_worker": "sw.js" },
+  "action": { "default_popup": "popup.html" },
+  "options_ui": { "page": "pairing.html", "open_in_tab": true },
+  "content_scripts": [
+    { "matches": ["https://www.youtube.com/*", "https://m.youtube.com/*"], "js": ["page.js"], "world": "MAIN", "run_at": "document_start" },
+    { "matches": ["https://www.youtube.com/*", "https://m.youtube.com/*"], "js": ["content.js"], "run_at": "document_start" }
+  ]
+}

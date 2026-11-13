@@ -1,7 +1,7 @@
 // Run from the repository root on macOS: swift scripts/generate-own-branding.swift
 import AppKit
 
-let destination = URL(fileURLWithPath: "smarttubetv/src/stown/res/mipmap-nodpi")
+let destination = URL(fileURLWithPath: "apps/android/smarttubetv/src/stown/res/mipmap-nodpi")
 try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
 let background = NSColor(srgbRed: 0.06, green: 0.09, blue: 0.12, alpha: 1)
 let accent = NSColor(srgbRed: 0.32, green: 0.91, blue: 0.73, alpha: 1)

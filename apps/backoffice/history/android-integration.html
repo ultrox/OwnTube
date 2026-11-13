@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Android integration · ytdash</title>
+  <style>
+    :root{color-scheme:light dark;font:16px/1.65 system-ui,sans-serif;background:light-dark(#f5f6f8,#0f1115);color:light-dark(#18222c,#eef1f5)}
+    *{box-sizing:border-box}body{margin:0}main{max-width:850px;margin:auto;padding:32px 20px 64px}h1{line-height:1.2;letter-spacing:-.04em}h2{margin-top:32px;font-size:21px}a{color:light-dark(#096b52,#76d9b6)}code{font-size:.9em;overflow-wrap:anywhere}pre{padding:18px;border:1px solid light-dark(#d4dbe2,#343b46);border-radius:12px;overflow:auto;line-height:1.5}pre code{overflow-wrap:normal}li{margin:8px 0}.intro{color:light-dark(#536170,#b1bbc7)}nav{display:flex;flex-wrap:wrap;gap:8px 20px}a:focus-visible{outline:2px solid currentColor;outline-offset:4px}
+  </style>
+</head>
+<body>
+<main>
+  <nav><a href="/">← ytdash portal</a><a href="#pairing">Pairing</a><a href="#events">Viewing records</a><a href="#delivery">Delivery</a><a href="#migration">Migration</a><a href="#verify">Verification</a></nav>
+  <h1>Android collector integration</h1>
+  <p class="intro">Implementation handoff for Android collectors, including OwnTube. New collectors checkpoint cumulative viewing records through the existing ingestion API. Frequent player samples are transient; durable records retain watch time, metadata/evidence, language/context breakdowns and coverage. Contract checked against this repository on 13 November 2026.</p>
+  <p><strong>Production base URL:</strong> <code>https://ytdash.gromobran.com</code>. The Android app is a device collector. The portal remains the owner’s place to view history and manage people/devices.</p>
+
+  <h2 id="pairing">1. Pair one Android installation</h2>
+  <ol>
+    <li>The owner opens <strong>People &amp; devices</strong> in the portal, creates a device such as “Marko’s Android”, and assigns it to a person. Copy the new device key, which is shown once.</li>
+    <li>Ask for the device key and validate it with the request below. OwnTube fixes the origin to production; a configurable client must bind the origin too. Save the returned <code>deviceId</code> with the server and key; do not invent an ID.</li>
+    <li>Keep the device key in Keystore-backed storage. Use it only for requests to the configured HTTPS origin; do not forward it across redirects. The app does not need the owner key or a login cookie.</li>
+  </ol>
+  <pre><code>GET /api/device
+Authorization: Bearer DEVICE_KEY
+
+200 OK
+{"deviceId":"device-uuid","label":"Marko’s Android","person":"Marko","personId":"person-uuid"}</code></pre>
+  <p>A device key can identify its device and upload events. Reading the dashboard/history and managing devices require the owner’s session. <strong>Replace key</strong> rotates credentials for the same device; queued events may resume with that replacement key. Never move pending events to another device or server.</p>
+
+  <h2 id="events">2. Checkpoint cumulative viewing records</h2>
+  <p>Use the player’s actual state and video identity. An open page, a video URL, a QoE report or a notification alone is not proof of playback. Capture from the player integration available to the Android app; the server cannot observe the phone’s player for you.</p>
+  <ul>
+    <li>Sample actual playback about once a second using a monotonic clock. Exclude pauses, buffering, seeking, ads and incognito playback. OwnTube does not infer playback across sampling gaps longer than 20 seconds. <code>seconds</code> is cumulative elapsed playing time, independent of playback speed; pauses do not add time.</li>
+    <li>Generate a <code>viewingId</code> for the playback session and an <code>eventId</code> for each cumulative record. Keep both stable while increasing its integer <code>revision</code>. A checkpoint sends the <strong>whole current total, never a delta</strong>. Persist a snapshot locally about every second. The server replaces totals on a higher revision; do not sum revisions.</li>
+    <li>Split at 15-minute UTC boundaries: <code>bucket = floor(t / 900000) × 900000</code>. Partition a measured interval crossing a boundary, including its continuous media coverage, without duplication. <code>t</code> is this record’s immutable first playback timestamp; <code>lastWatched</code> is the end of its latest measured interval, both Unix milliseconds. Gaps between them are not evidence of watching.</li>
+    <li>Use separate event IDs for different video metadata, evidence IDs, language/source/confidence, duration and playback context. Keep these fields immutable within a record. For Android, a visible player is <code>"foreground"</code>; genuine hidden-UI playback is <code>"background"</code>. Omit unknown context; never send <code>"unspecified"</code>.</li>
+    <li><code>coverage</code> is a required array of merged media-position ranges, such as <code>[[0,10],[120,125]]</code>. Use <code>[]</code> for unknown coverage. Nonempty ranges require known <code>durationSeconds</code>; live streams normally omit duration and send empty coverage. Never bridge a seek jump. Replays add seconds while their overlapping coverage is merged. Completion means 90% coverage in the selected dashboard range.</li>
+    <li>Start fresh identities after process restart, player/source restart, or device/video change. Upload durable old checkpoints alongside the new records. Do not reconstruct an active accumulator from a partial queue or reuse an ID with reset totals. Seal a record and use a new ID before range/size limits or a wall-clock discontinuity would make its successor invalid.</li>
+  </ul>
+  <p>Send <code>Content-Type: application/json</code> and the same bearer header. Substitute the paired device ID, fresh identities and actual timestamps in this example. This record measured five playing seconds, with continuous coverage at 2× speed:</p>
+  <pre><code>POST /api/ingest
+Authorization: Bearer DEVICE_KEY
+Content-Type: application/json
+
+{
+  "deviceId": "device-uuid",
+  "events": [{
+    "eventId": "android-viewing-550e8400-e29b-41d4-a716-446655440000",
+    "kind": "viewing",
+    "viewingId": "550e8400-e29b-41d4-a716-446655440001",
+    "revision": 1,
+    "bucket": 1793999700000,
+    "t": 1794000000000,
+    "lastWatched": 1794000005000,
+    "seconds": 5,
+    "videoId": "abcdefghijk",
+    "title": "Example video",
+    "channel": "Example channel",
+    "isShort": false,
+    "lang": "",
+    "source": "android-player",
+    "conf": "",
+    "playbackContext": "foreground",
+    "durationSeconds": 600,
+    "coverage": [[120, 130]]
+  }],
+  "evidence": {}
+}
+
+200 OK — returned after the database transaction commits
+{"deviceId":"device-uuid","accepted":["android-viewing-550e8400-e29b-41d4-a716-446655440000"]}</code></pre>
+  <p>After three more playing seconds following a pause, the next checkpoint can keep every other field above and set <code>revision: 2</code>, <code>lastWatched: 1794000013000</code>, <code>seconds: 8</code>, <code>coverage: [[120,136]]</code>. The total is <strong>8 seconds</strong>, not 13. A lost response, identical retry or stale revision leaves that total unchanged.</p>
+  <ul>
+    <li><strong>Identity:</strong> <code>eventId</code>/<code>viewingId</code> are 1–100 ASCII letters, digits, underscores or hyphens; the prefix <code>legacy-</code> is reserved. <code>videoId</code> is exactly 11 such characters. Revision is a positive integer (use JSON-safe integers).</li>
+    <li><strong>Time:</strong> nonnegative integer <code>bucket</code>, divisible by 900000; <code>bucket ≤ t &lt; lastWatched ≤ bucket + 900000</code>. Both timestamps have a 60-second future tolerance. Positive cumulative seconds must fit within <code>(lastWatched − t) / 1000</code> (server rounding tolerance 0.001 seconds); one record represents at most 900 seconds of playback.</li>
+    <li><strong>Metadata:</strong> required strings are <code>title</code> (≤500 characters), <code>lang</code>/<code>source</code> (≤64 each), and <code>conf</code> (≤20). Use empty strings for unknown values; do not guess language/confidence. Optional <code>channel</code> and <code>isShort</code> describe the video. Duration, when known, must be 0.001–31,536,000 seconds.</li>
+    <li><strong>Coverage:</strong> at most 2,000 ranges, each <code>0 ≤ start &lt; end ≤ durationSeconds</code>. Merged unique length must be ≤<code>seconds × 16 + 0.5</code>. Each serialized record is ≤64,000 bytes. OwnTube seals at 500 disjoint ranges and bounds active accumulator memory; sealing preserves the last durable checkpoint.</li>
+    <li><strong>Successors:</strong> higher revisions must preserve identity, bucket, first timestamp, metadata and context. Seconds and lastWatched cannot decrease; new coverage must contain every old range. Changed equal revisions or invalid successors return 409. Valid stale revisions are acknowledged without changing totals.</li>
+  </ul>
+  <p>An optional immutable search event needs <code>eventId</code>, <code>kind: "search"</code>, <code>t</code>, and a nonblank <code>query</code> of at most 1,000 characters. Emit it once per actual search. OwnTube currently captures playback only. Supplemental network reports add no watch time and should not be collected by new implementations.</p>
+
+  <h2 id="delivery">3. Use a durable outbox and explicit acknowledgements</h2>
+  <ol>
+    <li>Commit each cumulative checkpoint and referenced evidence atomically to Room/SQLite. Upsert a higher valid revision for the same server/device/event ID; ignore stale or identical revisions and reject conflicting equals. Preserve held status when replacing a held record. Keep independent immutable search/legacy records. Never change identity, timestamps or measurements just to retry.</li>
+    <li>Use one uploader at a time. Send 1–100 events per batch, with at most 100 evidence snapshots and a total request size ≤4 MiB. Each event and each serialized evidence snapshot must be ≤64,000 bytes. Use a bounded timeout; the reference collector uses 20 seconds.</li>
+    <li>Take an immutable batch snapshot before sending. Validate the receipt: matching <code>deviceId</code>, a nonempty <code>accepted</code> array, unique IDs, and every accepted ID in the submitted batch. The receipt returns <strong>IDs, not revisions</strong>. Delete an accepted queued row only if its current payload/revision still matches the submitted snapshot, and commit receipt metadata in that transaction. If revision 8 is queued while revision 7 is in flight, acknowledging 7 must leave 8 queued. A malformed receipt or lost response deletes nothing.</li>
+    <li>Retry offline failures, timeouts, 429 and server failures with persisted exponential backoff and jitter; honor a longer <code>Retry-After</code>. Deduplication is scoped to <code>(deviceId, eventId)</code> with revision replacement. Pause automatic uploads on 401/403 and prompt for a valid/replacement device key.</li>
+    <li>On 409/413/422, split rejected batches to isolate a bad record. Mark it held only if the queued payload still matches the submitted snapshot; an old rejection must not hold a newer revision. Retain held data/evidence and the error, with explicit retry/export. Keep it held on subsequent cumulative upserts until explicitly retried. One invalid record rejects the entire batch.</li>
+  </ol>
+  <p>Use Android lifecycle-appropriate scheduling: upload while active and use WorkManager for deferred/retry work. WorkManager periodic work is not a 30-second timer. Show pending/held counts, last acknowledgement, errors and an Upload now action. Acknowledged checkpoint counts are delivery diagnostics, not additional watch time. Process death can lose the unsampled or not-yet-committed tail; persisted records must survive. Never evict an offline queue by age.</p>
+
+  <h2>4. Optional source evidence</h2>
+  <p>Start with <code>"evidence": {}</code> and omit <code>evidenceId</code>. To attach a description or source metadata, serialize one JSON object containing string <code>title</code> (≤500 characters) and <code>description</code> (≤10,000). Compute its lowercase SHA-256 hex digest over the <strong>exact UTF-8 JSON string</strong>. Set the event’s <code>evidenceId</code> to that digest and send <code>evidence[digest] = serializedString</code>, not a nested object. Preserve that string on retries. Send each referenced snapshot once per batch; a missing snapshot rejects a new event unless the server already has it. Keep YouTube cookies, credentials, signed URLs and request bodies out of evidence.</p>
+
+  <h2 id="migration">5. Upgrade an existing segment collector</h2>
+  <p>Stop creating durable per-second <code>kind: "watch"</code> events when the cumulative collector starts. Keep already queued legacy events with their original IDs and payloads, including flat optional <code>coverage: [start,end]</code>; the backend still accepts legacy segments up to 20 seconds. <strong>Do not convert or replay the same measured time into new viewing IDs:</strong> a previously delivered legacy segment could then be counted twice. Start fresh viewing IDs for newly measured playback only.</p>
+  <p>OwnTube <code>32.72-owntube.5</code> keeps SQLite schema v2, existing pairing, evidence and pending/held rows. Its transient <code>WatchSegments</code> measurements feed <code>ViewingRecords</code>; only cumulative checkpoints enter the outbox. Restart creates fresh active identities while the durable queue drains normally. Maintain the original signing key and install as an update to preserve app data.</p>
+
+  <h2 id="verify">6. Acceptance checks for the implementing agent</h2>
+  <ul>
+    <li>Pair a test device; upload revision 1 then a higher cumulative total. Confirm the portal shows only the latest total, with correct person/device/context attribution and coverage.</li>
+    <li>Resend identical and stale revisions, simulate a lost response, and attempt conflicting equal/decreasing revisions. Verify no double-counting and transactional rejection.</li>
+    <li>Save a newer revision while an older request is in flight; both acceptance and rejection of the old request must preserve the newer queued record. Check held replacement and explicit retry.</li>
+    <li>Queue offline, kill/restart the app, reconnect and drain. Partial or malformed receipts must not lose unacknowledged records.</li>
+    <li>Check pause, buffering, seeking, ads, 2× playback, Shorts and visible/background transitions. Five seconds at 2× speed means five watch seconds and about ten media seconds of coverage.</li>
+    <li>Cross a 15-minute boundary and midnight; change evidence/language/context; replay overlapping media; jump the wall clock backwards; reach range/size bounds. Preserve total measured time and never bridge a seek.</li>
+    <li>Upgrade with a legacy offline backlog, then restart during new playback. Drain both formats without changing old IDs, losing evidence, or double-counting migrated time.</li>
+    <li>Verify a rotated key resumes the same device’s queue, a revoked key pauses uploads, bad events enter held data, and a server/device switch cannot misattribute existing records.</li>
+  </ul>
+  <p class="intro">Repository references: <code>youtube-observer/src/main.rs</code> (routes/auth), <code>src/store.rs</code> and <code>src/compact.rs</code> (validation, replacement and commit semantics), <code>extension/capture/viewings.js</code>, <code>extension/outbox.js</code> and <code>extension/drain.js</code> (browser reference), <code>src/tests.rs</code> (server examples). OwnTube’s <code>owntube</code> module contains <code>ViewingRecords</code>, <code>TrackingStore</code>, <code>Delivery</code> and their regression tests. There is no negotiated API schema version: <code>kind: "viewing"</code> selects this contract.</p>
+</main>
+</body>
+</html>

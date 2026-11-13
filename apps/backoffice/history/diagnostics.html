@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Observer diagnostics</title>
+<style>
+:root{color-scheme:dark;font:15px system-ui;background:#101217;color:#eee}body{max-width:1100px;margin:36px auto;padding:0 20px}h1{margin-bottom:8px}h2{margin-top:32px}p{line-height:1.6;color:#b9bec9}a{color:#8dc9ff}button{font:inherit;padding:10px 16px;color:inherit;background:#242833;border:1px solid #555;border-radius:8px;cursor:pointer}header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px}.scroll{overflow:auto}table{border-collapse:collapse;width:100%;white-space:nowrap}th,td{text-align:left;padding:10px 14px;border-bottom:1px solid #303541}th{color:#b9bec9;font-size:12px}td:first-child{font-family:monospace}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#1b1f28;padding:18px;border-radius:10px}.over{color:#ffa779}.good{color:#89dfac}.note{font-size:12px}.cards{display:flex;flex-wrap:wrap;gap:12px}.card{padding:16px;border:1px solid #303541;border-radius:10px}.card strong{display:block;font-size:24px;margin-top:8px}
+</style></head><body>
+<header><div><a href="/">← Dashboard</a><h1>Observer diagnostics</h1></div><div><button id="refresh">Refresh</button> <button id="copy">Copy report</button></div></header>
+<p id="status" role="status">Checking owner session…</p><div id="summary" class="cards"></div>
+<h2>Server requests</h2><p>How long the backend takes before the response is ready. Highlighted p95 values exceed the performance budget.</p><div id="requests" class="scroll"></div>
+<h2>Where the time goes</h2><p>Worker scheduling, database lock wait, database work, and analytics. Nested stages overlap.</p><div id="stages" class="scroll"></div>
+<h2>Browser measurements</h2><p>Network timings include transfer. Ready timings include the UI update. Compare these with server timings to locate the delay.</p><div id="browser" class="scroll"></div>
+<h2>Data processing</h2><pre id="pipeline">No measurements yet.</pre>
+<h2>Recent requests</h2><p>Request IDs also appear in response headers and structured server logs. Work counts show how many records were processed.</p><div id="recent" class="scroll"></div>
+<p id="notes" class="note"></p><script src="/diagnostics.js"></script></body></html>
