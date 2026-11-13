@@ -84,12 +84,40 @@ try {
   await ui.waitFor('#watch-total');
   await ui.goto(origin+'/modules/languages/');
   await ui.waitFor('[data-ledger]');
+  const languageHtml=await fetch(origin+'/modules/languages/').then(r=>r.text());
+  assert.equal(languageHtml,await fs.readFile(path.join(dist,'modules/languages/index.html'),'utf8'));
+  for (const [,file] of languageHtml.matchAll(/(?:src|href)="([^"]+\.(?:js|css))"/g)) {
+    await asset(new URL(file,origin+'/modules/languages/'));
+  }
+  const grouped=await ui.eval(async()=>{
+    const response=await fetch('/api/modules/languages?days=90&group=video');
+    if (!response.ok) throw new Error('Grouped Languages unavailable');
+    return response.json();
+  });
+  assert.equal(new Set(grouped.videos.map(v=>v.videoId)).size,grouped.videos.length);
+  assert.ok(grouped.videos.every(v=>v.versions.length===v.versionCount));
+  await ui.type('#f-query','Lead In Silence');
+  await ui.waitFor('[data-count="1"]');
+  await ui.waitFor('[data-row]','Lead In Silence');
+  assert.equal(await ui.count('[data-row]'),1,'Screenshot video appears only once');
+  assert.match(await ui.text('[data-row]'),/English/);
+  assert.equal(await ui.count('[data-row] .flag-review'),0,'Saved selected audio is classified automatically');
+  await ui.click('[data-action="open"]');
+  await ui.waitFor('[data-assessment]');
+  assert.match(await ui.text('[data-group-assessment]'),/English/);
+  assert.match(await ui.text('[data-group-review]'),/Nothing here needs review/);
+  await ui.screenshot(path.join(output,'languages-automatic-english.png'));
+  await ui.setSize(390,844);
+  assert.equal(await ui.eval(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  await ui.screenshot(path.join(output,'languages-automatic-phone.png'));
+  await ui.click('[data-action="close"]');
   assert.equal(errors.length,0,JSON.stringify(errors));
   await fs.writeFile(path.join(output,'report.json'),JSON.stringify({
     origin,checkedAt:new Date().toISOString(),assets:[...checked],seconds:total,
     checks:['public asset hashes','authentication','real History','real Searches','evidence modal',
-      'stable filtered totals','phone layout','session restoration','legacy dashboard','Languages'],
+      'stable filtered totals','phone layout','session restoration','legacy dashboard',
+      'grouped Languages','automatic English classification','Languages asset hashes and phone layout'],
     pageErrors:errors,
   },null,2));
-  console.log('Public History: assets, authentication, real records, evidence, stable filter totals, phone layouts, session restoration, legacy and Languages passed.');
+  console.log('Public desk: asset hashes, authentication, real records, evidence, stable totals, phone layouts, legacy, grouped Languages and automatic English classification passed.');
 } finally { await browser.close(); }

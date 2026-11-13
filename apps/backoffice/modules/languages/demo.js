@@ -20,10 +20,12 @@ const fail = (status, error) => Object.assign(new Error(error), { name: 'ApiErro
 const later = (value, ms = 90) => new Promise((resolve) => setTimeout(() => resolve(structuredClone(value)), ms));
 
 const PEOPLE = [{ id: 'demo-owner', name: 'Owner' }, { id: 'demo-guest', name: 'Guest' }];
+// The living-room TV carries an owner context correction: its playback counts as foreground.
+const OVERRIDE = { context: 'foreground', reason: 'The TV app is in front whenever it plays.', revision: 1, created: Date.now() - 2 * 24 * 3600 * 1000 };
 const DEVICES = [
-  { id: 'demo-living', label: 'Living room TV', personId: 'demo-owner', person: 'Owner' },
-  { id: 'demo-bedroom', label: 'Bedroom TV', personId: 'demo-guest', person: 'Guest' },
-  { id: 'demo-laptop', label: 'Laptop', personId: 'demo-owner', person: 'Owner' },
+  { id: 'demo-living', label: 'Living room TV', personId: 'demo-owner', person: 'Owner', contextOverride: OVERRIDE },
+  { id: 'demo-bedroom', label: 'Bedroom TV', personId: 'demo-guest', person: 'Guest', contextOverride: null },
+  { id: 'demo-laptop', label: 'Laptop', personId: 'demo-owner', person: 'Owner', contextOverride: null },
 ];
 
 const chrome = (title, description, { sel = '', def = '', captions = [], text = null } = {}) => ({
@@ -106,6 +108,26 @@ const RECORDS = [
   // A long multi-word channel name: on a phone it must wrap inside the row, not widen the page.
   ['demo-laptop', 'm-neon', 'demoNeonSign24', 'How neon signs are bent by hand, one glass tube at a time', 'Northfield Workshop Restoration and Repair Notes', ['en', 'audio-track', 'high'],
     (v, t) => chrome(t, 'Bending glass tubes over a ribbon burner.', { sel: 'en', def: 'en' }), [[0, 15, 610, 0, 0]]],
+  // Two later snapshots of the Brahms video (the uploader edited the description): three versions,
+  // one already classified by hand, two still undetermined.
+  ['demo-laptop', 'm-brahms-2', 'demoBrahms006', 'Brahms im Wohnzimmer: Klarinettentrio a-Moll', 'Hausmusik am Sonntag', ['und', 'unknown', 'low'],
+    (v, t) => chrome(t, 'Johannes Brahms, Klarinettentrio a-Moll op. 114. Hausmusik. (Programm ergänzt)', { def: 'und' }), [[3, 21, 0, 820, 0]]],
+  ['demo-laptop', 'm-brahms-3', 'demoBrahms006', 'Brahms im Wohnzimmer: Klarinettentrio a-Moll', 'Hausmusik am Sonntag', ['und', 'unknown', 'low'],
+    (v, t) => chrome(t, 'Johannes Brahms, Klarinettentrio a-Moll op. 114. Hausmusik. (Besetzung korrigiert)', { def: 'und' }), [[5, 20, 0, 640, 0]]],
+  // An older snapshot with a hostile title and channel; the newest one is plain.
+  ['demo-laptop', 'm-market-1', 'demoMarket25', '<img src=x onerror="window.__langXss=8"> Night market, first cut', '<b>Old channel</b>', ['en', 'audio-track', 'high'],
+    (v, t) => chrome(t, '<script>window.__langXss=9</script> first upload', { sel: 'en', def: 'en' }), [[6, 21, 300, 0, 0]]],
+  ['demo-laptop', 'm-market-2', 'demoMarket25', 'Night market food tour', 'Street Food Notes', ['en', 'audio-track', 'high'],
+    (v, t) => chrome(t, 'Re-uploaded with a cleaner title.', { sel: 'en', def: 'en' }), [[1, 19, 900, 0, 0]]],
+  // A video updated again and again, watched on the TV without a saved audio language: 17 recorded
+  // versions that all need review, settled with one decision.
+  ...Array.from({ length: 17 }, (_, i) => ['demo-living', `m-nachr-${String(i + 1).padStart(2, '0')}`, 'demoNachr17', 'Abendnachrichten kompakt', 'Tagesnotizen', ['', 'android-player', ''],
+    (v, t) => android(v, t, `Die Meldungen des Abends, Fassung ${i + 1}.`), [[i % 7, 7 + (i % 12), 120 + i * 10, i % 4 === 0 ? 30 : 0, 0]]]),
+  // Five versions whose saved evidence names the selected audio track: estimated with high
+  // confidence and settled without any review. The collector recorded the two oldest as unknown
+  // ("other"), which is no disagreement with the known English of the others.
+  ...Array.from({ length: 5 }, (_, i) => ['demo-laptop', `m-weekly-${i + 1}`, 'demoWeekly05', 'Maker news this week', 'Bench Notes', i < 3 ? ['en', 'audio-track', 'high'] : ['other', 'native-text', 'low'],
+    (v, t) => chrome(t, `Show notes, revision ${i + 1}: links and corrections.`, { sel: 'en', def: 'en' }), [[i, 12 + i, 300 + i * 20, 0, 0]]]),
 ];
 
 // Mirrors `baseline`: the original collector interpretation, always an estimate needing review.
@@ -125,6 +147,14 @@ const needsReview = (a) => a.status !== 'confirmed'
   && !(a.status === 'estimated' && a.confidence === 'high' && ['selected-audio-metadata', 'external-api:audio'].includes(a.source));
 function pick(a) {
   return { lang: a.lang, status: a.status, source: a.source, confidence: a.confidence, reason: a.reason };
+}
+
+// Without an explicit assessment, a usable selected-audio language in the saved evidence is the
+// starting estimate (high confidence, no review); otherwise the original collector estimate.
+// Explicit actions (manual, analyze, reset) replace it, and reset restores the collector's.
+function startingAssessment(rec) {
+  const selected = language(rec.evidence?.selectedAudioLanguage);
+  return selected && selected !== 'und' ? analyzeSaved(rec.evidence) : collectorAssessment(rec.recorded);
 }
 
 // Mirrors `saved_audio`: only the top-level selected-audio language label counts.
@@ -155,8 +185,9 @@ export async function createDemoApi({ external = false } = {}) {
       deviceId, metadataId, videoId, title, channel, recorded, evidence, evidenceText,
       evidenceId: evidenceText ? await sha256(evidenceText) : null,
       plays: plays.map(([daysAgo, hour, fg, bg, un]) => ({ at: Math.min(midnight - daysAgo * DAY + hour * HOUR, now - 5 * MIN), fg, bg, un })),
-      assessment: collectorAssessment(recorded), revision: 0, history: [],
+      assessment: null, revision: 0, history: [],
     };
+    rec.assessment = startingAssessment(rec);
     for (const [action, l, note, daysAgo] of seeded) apply(rec, { action, lang: l, note }, now - daysAgo * DAY);
     records.push(rec);
   }
@@ -183,12 +214,37 @@ export async function createDemoApi({ external = false } = {}) {
     }
     return { n, start, rows };
   };
-  const rowOut = ({ r, seconds, fg, bg, un, lastWatched }) => ({
-    deviceId: r.deviceId, deviceLabel: DEVICES.find((d) => d.id === r.deviceId).label, metadataId: r.metadataId, videoId: r.videoId,
-    title: r.title, channel: r.channel, seconds, foregroundSeconds: fg, backgroundSeconds: bg, unspecifiedSeconds: un, lastWatched,
-    evidenceId: r.evidenceId, recorded: { ...r.recorded }, assessment: pick(r.assessment), revision: r.revision, needsReview: needsReview(r.assessment),
-  });
+  // A device with a context override counts all of its playback as that context.
+  const rowOut = ({ r, seconds, fg, bg, un, lastWatched }) => {
+    const device = DEVICES.find((d) => d.id === r.deviceId);
+    const over = device.contextOverride?.context === 'foreground';
+    return {
+      deviceId: r.deviceId, deviceLabel: device.label, metadataId: r.metadataId, videoId: r.videoId,
+      title: r.title, channel: r.channel, seconds, foregroundSeconds: over ? seconds : fg, backgroundSeconds: over ? 0 : bg, unspecifiedSeconds: over ? 0 : un, lastWatched,
+      evidenceId: r.evidenceId, recorded: { ...r.recorded }, assessment: pick(r.assessment), revision: r.revision, needsReview: needsReview(r.assessment),
+      contextOverride: device.contextOverride ? { ...device.contextOverride } : null,
+    };
+  };
   const find = (deviceId, metadataId) => records.find((r) => r.deviceId === deviceId && r.metadataId === metadataId);
+  // group=video: one group per video with every version in the period/device/person scope.
+  // Summary fields keep a value shared by all versions; otherwise lang "mul" and "mixed".
+  const same = (values, otherwise) => (values.every((x) => x === values[0]) ? values[0] : otherwise);
+  function groupOut(videoId, versions, matched) {
+    const sum = (f) => versions.reduce((s, v) => s + v[f], 0);
+    const a = versions.map((v) => v.assessment);
+    const rec = versions.map((v) => v.recorded);
+    const devices = [];
+    for (const v of versions) if (!devices.some((d) => d.id === v.deviceId)) devices.push({ id: v.deviceId, label: v.deviceLabel, contextOverride: v.contextOverride ? { ...v.contextOverride } : null });
+    return {
+      id: videoId, videoId, title: versions[0].title, channel: versions[0].channel,
+      seconds: sum('seconds'), foregroundSeconds: sum('foregroundSeconds'), backgroundSeconds: sum('backgroundSeconds'), unspecifiedSeconds: sum('unspecifiedSeconds'),
+      lastWatched: versions[0].lastWatched, deviceLabel: devices.map((d) => d.label).join(', '), devices,
+      versionCount: versions.length, matchedVersionCount: matched, versions,
+      assessment: { lang: same(a.map((x) => x.lang), 'mul'), status: same(a.map((x) => x.status), 'mixed'), source: same(a.map((x) => x.source), 'mixed'), confidence: same(a.map((x) => x.confidence), 'mixed'), reason: same(a.map((x) => x.reason), '') },
+      recorded: { lang: same(rec.map((x) => x.lang), 'mul'), source: same(rec.map((x) => x.source), 'mixed'), conf: same(rec.map((x) => x.conf), 'mixed') },
+      needsReview: versions.some((v) => v.needsReview),
+    };
+  }
 
   return {
     mode: 'demo',
@@ -206,11 +262,22 @@ export async function createDemoApi({ external = false } = {}) {
         byLang.set(x.r.assessment.lang, e);
       }
       const text = String(q.query || '').trim().toLowerCase().slice(0, 200);
-      const filtered = rows
-        .filter((x) => !q.language || q.language === 'all' || x.r.assessment.lang === q.language)
-        .filter((x) => !q.status || q.status === 'all' || (q.status === 'review' ? needsReview(x.r.assessment) : x.r.assessment.status === q.status))
-        .filter((x) => !text || [x.r.title, x.r.channel, x.r.videoId].join(' ').toLowerCase().includes(text))
-        .sort((a, b) => b.lastWatched - a.lastWatched);
+      const matches = (x) => (!q.language || q.language === 'all' || x.r.assessment.lang === q.language)
+        && (!q.status || q.status === 'all' || (q.status === 'review' ? needsReview(x.r.assessment) : x.r.assessment.status === q.status))
+        && (!text || [x.r.title, x.r.channel, x.r.videoId].join(' ').toLowerCase().includes(text));
+      let filtered;
+      if (q.group === 'video') {
+        // Filters pick groups in which at least one version matches; a group keeps all its versions.
+        const byVideo = new Map();
+        for (const x of rows) byVideo.set(x.r.videoId, [...(byVideo.get(x.r.videoId) || []), x]);
+        filtered = [...byVideo.entries()]
+          .map(([videoId, xs]) => [videoId, xs.sort((a, b) => b.lastWatched - a.lastWatched), xs.filter(matches).length])
+          .filter(([, , matched]) => matched > 0)
+          .map(([videoId, xs, matched]) => groupOut(videoId, xs.map(rowOut), matched))
+          .sort((a, b) => b.lastWatched - a.lastWatched);
+      } else {
+        filtered = rows.filter(matches).sort((a, b) => b.lastWatched - a.lastWatched).map(rowOut);
+      }
       const pages = Math.max(1, Math.ceil(filtered.length / PAGE));
       const page = Math.min(pages, Math.max(1, Number(q.page) || 1));
       return later({
@@ -223,8 +290,24 @@ export async function createDemoApi({ external = false } = {}) {
         estimatedSeconds: sum((x) => (x.r.assessment.status === 'estimated' ? x.seconds : 0)),
         videoCount: new Set(rows.map((x) => x.r.videoId)).size,
         count: filtered.length, page, pages,
-        videos: filtered.slice((page - 1) * PAGE, page * PAGE).map(rowOut),
+        videos: filtered.slice((page - 1) * PAGE, page * PAGE),
       });
+    },
+    // Classify or reset every listed version of one video at once: all or nothing.
+    assessBulk(body) {
+      const targets = Array.isArray(body?.targets) ? body.targets : [];
+      if (!targets.length || targets.length > 1000) return Promise.reject(fail(400, 'Choose between 1 and 1000 recorded versions.'));
+      if (new Set(targets.map((t) => `${t.deviceId}|${t.metadataId}`)).size !== targets.length) return Promise.reject(fail(400, 'Each recorded version can be listed once.'));
+      const recs = targets.map((t) => find(t.deviceId, t.metadataId));
+      if (recs.some((r) => !r)) return Promise.reject(fail(404, 'A listed version was not found.'));
+      if (recs.some((r) => r.videoId !== body.videoId)) return Promise.reject(fail(400, 'Every version must belong to this video.'));
+      if (!['manual', 'reset'].includes(body.action)) return Promise.reject(fail(400, 'Only manual and reset apply to several versions.'));
+      const lang = body.action === 'manual' ? language(body.lang) : null;
+      if (body.action === 'manual' && !lang) return Promise.reject(fail(400, 'Invalid language code.'));
+      const stale = recs.filter((r, i) => Number(targets[i].baseRevision) !== r.revision);
+      if (stale.length) return Promise.reject(fail(409, `${stale.length} of these versions changed since they were loaded. Nothing was saved.`));
+      for (const r of recs) apply(r, { action: body.action, lang, note: body.note });
+      return later({ ok: true, updated: recs.length, versions: recs.map((r) => ({ deviceId: r.deviceId, metadataId: r.metadataId, revision: r.revision, assessment: pick(r.assessment) })) }, 200);
     },
     evidence(device, metadata) {
       const r = find(device, metadata);

@@ -119,6 +119,7 @@ code, .mono { font-family: var(--font-data); font-variant-numeric: tabular-nums;
 .btn:disabled { opacity: 0.45; background: transparent; }
 .btn--primary { background: var(--ink); border-color: var(--ink); color: var(--desk); }
 .btn--primary:hover { background: color-mix(in srgb, var(--ink) 86%, var(--desk)); }
+.btn--primary:disabled { background: var(--ink); color: var(--desk); opacity: 0.4; }
 .btn--sm { min-height: 30px; padding: 5px 10px; font-size: 13px; }
 .btn--quiet { border-color: transparent; color: var(--ink-2); padding-left: 8px; padding-right: 8px; }
 .btn--quiet:hover { color: var(--ink); }
@@ -288,6 +289,14 @@ dialog::backdrop { background: var(--backdrop); }
 .ins__row > div { flex: 1 1 200px; }
 .ins__form .label { display: block; margin-bottom: 6px; }
 .ins__actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+/* Video groups: the languages its versions carry, which versions a decision covers, and the
+   selected version's own facts. */
+.ins__langs { display: grid; gap: 4px; margin: 2px 0 4px; font-size: 13.5px; }
+.ins__langs li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+.ins__target { margin-top: 6px; }
+.ins__vmeta { margin-top: 8px; }
+.ins__now--version { margin-top: 12px; }
+.ins__vlang { font-weight: 600; }
 .alert { margin-top: 12px; padding: 10px 12px; border-left: 3px solid var(--review); background: var(--review-tint); font-size: 13.5px; line-height: 1.45; }
 .alert--bad { border-left-color: var(--bad); background: var(--bad-tint); }
 .alert--ok { border-left-color: var(--ok); background: var(--ok-tint); }

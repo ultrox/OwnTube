@@ -360,28 +360,45 @@ own, listed apart from *unknown* (`und`), which is marked as needing a decision.
   background and unspecified.
 - **Languages table:** share of watch time, with a quiet proportion rule. Each row is a toggle that
   filters the videos.
-- **Videos:** one row per recorded version on one device. Each shows the current interpretation
-  (status glyph and word, plus "Needs review") beside the collector's own value, watch time with its
-  context, and *Review* or *Inspect*. Status, language and search narrow rows only; the scope
-  numbers never move. The channel · device · last-played line keeps each item whole when it fits
-  on the next line. A channel or device name longer than the row wraps inside it, never widening
-  the page.
+- **Videos: one row per video** (`group=video`), however often its uploader updated it. The owner
+  asked for this after one video appeared 17 times.
+  - A row covers every recorded version in the period, device and person scope. It shows their
+    summed watch time and context, the devices they played on, and "N recorded versions".
+  - The language line gives the shared language and status with a quiet provenance ("from the
+    selected audio track"). Versions that disagree read **Mixed** with quiet counts, never one
+    confident language.
+  - Filters keep a whole video when any version matches ("2 of 7 versions match"); the scope numbers
+    never move.
+  - The channel · devices · last-played line keeps each item whole when it fits on the next line;
+    longer names wrap inside the row.
+- **Starting estimates.** A version without an explicit decision whose saved evidence names the
+  selected audio language reads "English · Estimated" (high confidence) and needs no review.
 
-**Inspector, for one recorded version.**
-- **Scope notice:** this exact metadata version on this device; other devices, dubs and versions
-  keep their own.
-- **Current interpretation:** language, status, confidence (including "human"), source and reason,
-  with the collector's recorded value.
+**Inspector, for one video.**
+- **Scope notice:** one line, "Applies to all N recorded versions in this scope (last 30 days, all
+  devices)". Versions recorded later start from their own evidence. A quiet note names any device
+  whose context the owner corrected.
+- **Current interpretation:** the video's language, or *Mixed* with each language's versions,
+  statuses and time.
 - **Spoken-language form:** common languages, `mul`/`zxx`/`und`, or another BCP 47 code, with a
   recommended note.
-- **Automatic:** *Analyze saved evidence*, with a provider selector only when the server advertises
-  one, and *Reset to collector*. Analysis is disabled while a manual classification stands, and its
-  results are always called estimates. The external provider's note says only saved evidence is
-  sent.
-- **Audit:** newest first and append-only, saying so when older entries are kept. A stale-revision
-  409 asks you to refresh and keeps your note.
-- **Saved evidence:** source values, text detector, and the exact raw text with its SHA-256
-  checked. This is the History inspector's model (§8a).
+  - It starts from an earlier manual choice, or else the most-watched known language.
+  - One *Save* or *Reset* covers every version in a single atomic request with each expected
+    revision. A stale version refuses the whole decision (nothing saved), asks you to refresh, and
+    keeps your note.
+  - When versions name different known audio languages (a possible dub), the inspector says so
+    and offers *Selected version only*. Interpretations are compared first, then the collector's
+    recorded values, and the warning says which. Unknown values (`und`, empty, the collector's
+    `other`) never count.
+- **Recorded version** (quiet picker, newest first):
+  - that version's interpretation, recorded value and audit;
+  - *Analyze saved evidence* for that version only, with a provider selector when the server
+    advertises one; it is disabled while a manual decision stands, and its results are always called
+    estimates;
+  - its saved evidence: source values, text detector, and the exact raw text with its SHA-256
+    checked (the History inspector's model, §8a).
+
+  After a save the same version stays selected.
 
 **Demo, never as a fallback.** `?demo=1` loads a separate in-memory adapter with fictional data,
 behind a permanent strip, and makes no API calls. Live failures show the server's error and *Try

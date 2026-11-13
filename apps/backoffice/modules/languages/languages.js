@@ -64,6 +64,15 @@ function when(t, timeZone) {
     return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(ms);
   }
 }
+function day(t, timeZone) {
+  const ms = toMs(t);
+  if (!Number.isFinite(ms)) return '';
+  try {
+    return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone }).format(ms);
+  } catch {
+    return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(ms);
+  }
+}
 function span(since, until, timeZone) {
   const a = toMs(since), b = toMs(until);
   if (!Number.isFinite(a) || !Number.isFinite(b)) return '';
@@ -137,9 +146,9 @@ async function load({ keepPage = false } = {}) {
   render();
   try {
     const f = state.filters;
-    const data = await api.languages({ days: f.days, device: f.device, person: f.person, language: f.language, status: f.status, query: f.query, page: f.page });
+    const data = await api.languages({ days: f.days, device: f.device, person: f.person, language: f.language, status: f.status, query: f.query, page: f.page, group: 'video' });
     if (mine !== generation) return;
-    state.data = data;
+    state.data = readable(data);
     state.error = null;
     if (Number(data?.page) && Number(data.page) !== f.page) { f.page = Number(data.page); writeFilters(); }
   } catch (error) {
@@ -149,6 +158,23 @@ async function load({ keepPage = false } = {}) {
   } finally {
     if (mine === generation) { state.loading = false; render(); }
   }
+}
+
+// One row is one video with every recorded version of it in the period/device/person scope. A
+// server that ignores group=video returns version rows; each is then shown as a one-version group.
+function asGroup(x) {
+  if (Array.isArray(x?.versions) && x.versions.length) return x;
+  return {
+    id: `${x.deviceId}:${x.metadataId}`, videoId: x.videoId, title: x.title, channel: x.channel,
+    seconds: x.seconds, foregroundSeconds: x.foregroundSeconds, backgroundSeconds: x.backgroundSeconds, unspecifiedSeconds: x.unspecifiedSeconds,
+    lastWatched: x.lastWatched, deviceLabel: x.deviceLabel, devices: [{ id: x.deviceId, label: x.deviceLabel, contextOverride: x.contextOverride || null }],
+    versionCount: 1, matchedVersionCount: 1, versions: [x], assessment: x.assessment, recorded: x.recorded, needsReview: x.needsReview,
+  };
+}
+// A successful answer must still look like the contract before it is shown as numbers.
+function readable(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data) || !Array.isArray(data.videos)) throw new ApiError(200, 'The server’s answer couldn’t be read.');
+  return { ...data, videos: data.videos.map(asGroup) };
 }
 
 function signedOut(message = '') {
@@ -287,7 +313,7 @@ function workspaceHTML() {
       <div class="side__note">
         <p><b>Language</b> means the audio that actually played: the selected audio track, not the title’s or captions’ language.</p>
         <p><b>Mixed</b> and <b>no speech</b> are their own answers, separate from <b>unknown</b>.</p>
-        <p>A correction applies to one recorded version on one device. It never relabels other dubs or devices.</p>
+        <p>One row is one video. A decision covers all its recorded versions in this scope; for a dub, apply it to the selected version only.</p>
       </div>
     </aside>`;
 
@@ -306,6 +332,15 @@ function workspaceHTML() {
 }
 
 const problemHTML = (message) => `<div class="problem" role="alert"><p><b>Languages couldn’t be loaded.</b> ${esc(message)}</p><button type="button" class="btn btn--sm" data-action="retry" data-key="retry">Try again</button></div>`;
+
+// The current scope inside a sentence: "last 30 days, all devices".
+function scopePhrase() {
+  const f = state.filters;
+  const d = state.data || {};
+  const dev = f.device ? deviceById(f.device)?.label || 'one device' : 'all devices';
+  const person = f.person ? `, ${d.people?.find((p) => p.id === f.person)?.name || 'one person'}` : '';
+  return `last ${d.days || f.days} days, ${dev}${person}`;
+}
 
 function scopeText(d) {
   const f = state.filters;
@@ -370,20 +405,20 @@ function videosHTML(d) {
   let list;
   if (!rows.length) {
     list = narrowed
-      ? `<div class="empty"><p class="empty__title">No recorded versions match.</p><p class="empty__hint"><button type="button" class="link-btn" data-action="clear" data-key="clear">Clear language, status and search</button></p></div>`
+      ? `<div class="empty"><p class="empty__title">No videos match.</p><p class="empty__hint"><button type="button" class="link-btn" data-action="clear" data-key="clear">Clear language, status and search</button></p></div>`
       : '<div class="empty"><p class="empty__title">Nothing played in this period.</p></div>';
   } else {
     list = `<ol class="vrows" data-videos>${rows.map(videoRow).join('')}</ol>`;
   }
   return `<section class="section" aria-labelledby="videos-h">
-      <div class="section__head"><h2 class="section__title" id="videos-h">Videos</h2><span class="section__aside">One row per recorded version on one device</span></div>
+      <div class="section__head"><h2 class="section__title" id="videos-h">Videos</h2><span class="section__aside">One row per video, with all its recorded versions in this scope</span></div>
       <div class="toolbar">
         <div class="seg" role="group" aria-label="Status">${STATUSES.map(([v, label]) => `<button type="button" aria-pressed="${f.status === v}" data-action="status" data-value="${v}" data-key="f:status:${v}">${label}</button>`).join('')}</div>
         <label class="vh" for="f-language">Language</label>
         <select class="select" id="f-language" data-action="language-select" data-key="f:language"><option value="all">All languages</option>${codes.map((c) => `<option value="${esc(c)}" ${f.language === c ? 'selected' : ''}>${esc(langName(c))} (${esc(c)})</option>`).join('')}</select>
         <div class="search">${ICON.search}<label class="vh" for="f-query">Search videos</label><input class="input" id="f-query" type="search" maxlength="200" autocomplete="off" spellcheck="false" placeholder="Title, channel or video ID" value="${esc(f.query)}" data-action="query" data-key="f:query"></div>
       </div>
-      <p class="count" data-count="${count}">${esc(plural(count, 'recorded version'))}${narrowed ? ' match' : ''}${state.loading ? ' · updating…' : ''}</p>
+      <p class="count" data-count="${count}">${esc(plural(count, 'video'))}${narrowed ? ' match' : ''}${state.loading ? ' · updating…' : ''}</p>
       ${list}
       ${pages > 1 ? `<nav class="pager" aria-label="Pages">
         <button type="button" class="btn btn--sm" data-action="page" data-value="${page - 1}" data-key="page:prev" ${page <= 1 ? 'disabled' : ''}>Previous</button>
@@ -408,21 +443,108 @@ function recordedText(r) {
   return `Collector: ${esc(r.lang)}${src}${r.conf ? ` · ${esc(confText(r.conf))}` : ''}`;
 }
 
-function videoRow(v) {
-  const key = `${v.deviceId}:${v.metadataId}`;
-  const a = v.assessment || {};
-  const title = v.title || `Untitled · ${v.videoId || 'no video ID'}`;
-  const ctx = ctxSentence(v.foregroundSeconds, v.backgroundSeconds, v.unspecifiedSeconds, v.deviceId);
-  return `<li class="vrow ${v.needsReview ? 'vrow--review' : ''}" data-row="${esc(key)}" data-status="${esc(a.status || '')}" data-lang="${esc(a.lang || '')}">
-      <div class="vrow__media">${thumbHTML(v.videoId)}</div>
+/* ------------------------------------------------------------------ video groups */
+
+const versionKey = (v) => `${v.deviceId}:${v.metadataId}`;
+const groupDevices = (g) => (Array.isArray(g.devices) && g.devices.length ? g.devices : [{ id: '', label: g.deviceLabel }]).map((d) => d.label || 'Device');
+const versionsText = (n) => (n === 1 ? '1 recorded version' : `${n} recorded versions`);
+
+// Assessed languages across a group's versions, longest-watched first, with status counts.
+function groupLangs(g) {
+  const m = new Map();
+  for (const v of g.versions || []) {
+    const lang = v.assessment?.lang || 'und';
+    const status = v.assessment?.status || 'undetermined';
+    const e = m.get(lang) || { lang, versions: 0, seconds: 0, statuses: {}, devices: new Set() };
+    e.versions += 1;
+    e.seconds += Number(v.seconds) || 0;
+    e.statuses[status] = (e.statuses[status] || 0) + 1;
+    e.devices.add(v.deviceLabel || 'a device');
+    m.set(lang, e);
+  }
+  return [...m.values()].sort((a, b) => b.seconds - a.seconds || b.versions - a.versions);
+}
+const STATUS_ORDER = ['confirmed', 'estimated', 'undetermined'];
+const statusesText = (counts) => STATUS_ORDER.filter((s) => counts[s]).map((s) => `${counts[s]} ${STATUS_WORD[s].toLowerCase()}`).join(' · ');
+// A known audio language as the server reads one (server/src/languages.rs `language`): a lowercased,
+// bounded BCP-47-shaped code. The collector's "other", empty and malformed values are unknown, like
+// "und", and return null.
+function knownLang(value) {
+  const v = String(value ?? '').trim().toLowerCase();
+  const parts = v.split('-');
+  const primary = parts[0];
+  if (v.length > 35 || primary === 'other' || primary === 'und' || !/^[a-z]{2,3}$/.test(primary)
+    || parts.slice(1).some((p) => !/^[a-z0-9]{1,8}$/.test(p))
+    || (['mul', 'zxx'].includes(primary) && parts.length !== 1)) return null;
+  return v;
+}
+// Versions that name different known audio languages: a possible dub. Read from the current
+// interpretations, else from the collector's recorded values; unknown never counts, so a version
+// recorded as unknown beside a known one is no conflict. Each language comes with its devices.
+function disagreement(g) {
+  for (const [from, pick] of [['assessment', (v) => v.assessment?.lang], ['recorded', (v) => v.recorded?.lang]]) {
+    const m = new Map();
+    for (const v of g.versions || []) {
+      const lang = knownLang(pick(v));
+      if (!lang) continue;
+      if (!m.has(lang)) m.set(lang, new Set());
+      m.get(lang).add(v.deviceLabel || 'a device');
+    }
+    if (m.size > 1) return { from, langs: [...m].map(([lang, devices]) => ({ lang, devices: [...devices] })) };
+  }
+  return null;
+}
+
+// Where an interpretation comes from, in a few quiet words.
+const SOURCE_WORDS = {
+  'selected-audio-metadata': 'from the selected audio track', manual: 'your classification', 'external-api:audio': 'analysis of the audio',
+  'saved-evidence': 'no selected audio language saved', 'collector:audio-track': 'collector, from the audio track', 'collector:asr-caption': 'collector, from auto-generated captions',
+  'collector:native-text': 'collector, from text', 'collector:description-heuristic': 'collector, from the description', 'collector:title-heuristic': 'collector, from the title',
+  'collector:android-player': 'no audio language saved',
+};
+function sourceWords(source) {
+  if (!source) return '';
+  if (SOURCE_WORDS[source]) return SOURCE_WORDS[source];
+  if (source.startsWith('external-api:')) return `analysis of ${source.slice(13)}`;
+  if (source.startsWith('collector:')) return 'collector estimate';
+  return source;
+}
+
+// The row's language: the shared one, or "Mixed" with quiet counts when versions differ.
+function groupLangHTML(g) {
+  const langs = groupLangs(g);
+  if (langs.length > 1) {
+    return `<span class="assess__lang" data-mixed>Mixed</span><span class="why">versions differ: ${langs.map((l) => `${esc(langName(l.lang))} ×${l.versions}`).join(' · ')}</span>`;
+  }
+  const lang = langs[0]?.lang || g.assessment?.lang || 'und';
+  const counts = langs[0]?.statuses || {};
+  const statuses = Object.keys(counts).length > 1
+    ? `<span class="status status--estimated" data-statuses>${esc(statusesText(counts))}</span>`
+    : statusHTML(Object.keys(counts)[0] || g.assessment?.status);
+  const sources = new Set((g.versions || []).map((v) => v.assessment?.source || ''));
+  const from = sources.size > 1 ? 'sources vary' : sourceWords([...sources][0]);
+  return `<span class="assess__lang">${esc(langName(lang))}<code>${esc(lang)}</code></span>${statuses}${from ? `<span class="recorded" data-source>${esc(from)}</span>` : ''}`;
+}
+
+function videoRow(g) {
+  const id = String(g.id ?? g.videoId);
+  const title = g.title || `Untitled · ${g.videoId || 'no video ID'}`;
+  const n = Number(g.versionCount) || g.versions?.length || 1;
+  const matched = Number(g.matchedVersionCount) || 0;
+  const f = state.filters;
+  const narrowed = f.language !== 'all' || f.status !== 'all' || !!f.query;
+  const devices = groupDevices(g);
+  const ctx = ctxSentence(g.foregroundSeconds, g.backgroundSeconds, g.unspecifiedSeconds, devices.length === 1 ? g.devices?.[0]?.id : null);
+  return `<li class="vrow ${g.needsReview ? 'vrow--review' : ''}" data-row="${esc(id)}" data-versions="${n}" data-seconds="${Number(g.seconds) || 0}">
+      <div class="vrow__media">${thumbHTML(g.videoId)}</div>
       <div class="vrow__body">
-        <h3 class="vrow__title"><button type="button" data-action="open" data-device="${esc(v.deviceId)}" data-metadata="${esc(v.metadataId)}" data-key="open:${esc(key)}">${esc(title)}</button></h3>
-        <p class="meta">${v.channel ? `<span>${esc(v.channel)}</span>` : ''}<span>${esc(v.deviceLabel || deviceById(v.deviceId)?.label || 'Device')}</span>${v.lastWatched ? `<span>last played ${esc(ago(v.lastWatched))}</span>` : ''}</p>
-        <p class="assess"><span class="assess__lang">${esc(langName(a.lang))}<code>${esc(a.lang || 'und')}</code></span>${statusHTML(a.status)}${v.needsReview ? '<span class="flag-review">Needs review</span>' : ''}<span class="recorded">${recordedText(v.recorded)}</span></p>
+        <h3 class="vrow__title"><button type="button" data-action="open" data-id="${esc(id)}" data-key="open:${esc(id)}">${esc(title)}</button></h3>
+        <p class="meta">${g.channel ? `<span>${esc(g.channel)}</span>` : ''}<span>${esc(devices.length > 3 ? `${devices.length} devices` : devices.join(', '))}</span>${g.lastWatched ? `<span>last played ${esc(ago(g.lastWatched))}</span>` : ''}${n > 1 ? `<span data-version-count>${n} recorded versions</span>` : ''}</p>
+        <p class="assess">${groupLangHTML(g)}${g.needsReview ? '<span class="flag-review">Needs review</span>' : ''}${narrowed && n > 1 && matched && matched < n ? `<span class="why" data-matched>${matched} of ${n} versions match</span>` : ''}</p>
       </div>
       <div class="vrow__side">
-        <p class="nums"><span><b>${esc(spent(v.seconds))}</b> watched</span>${ctx ? `<span class="nums__ctx">${esc(ctx)}</span>` : ''}</p>
-        <button type="button" class="btn btn--sm ${v.needsReview ? 'btn--review' : ''}" data-action="open" data-device="${esc(v.deviceId)}" data-metadata="${esc(v.metadataId)}" data-key="act:${esc(key)}">${v.needsReview ? 'Review' : 'Inspect'}<span class="vh"> ${esc(title)}</span></button>
+        <p class="nums"><span><b>${esc(spent(g.seconds))}</b> watched</span>${ctx ? `<span class="nums__ctx">${esc(ctx)}</span>` : ''}</p>
+        <button type="button" class="btn btn--sm ${g.needsReview ? 'btn--review' : ''}" data-action="open" data-id="${esc(id)}" data-key="act:${esc(id)}">${g.needsReview ? 'Review' : 'Inspect'}<span class="vh"> ${esc(title)}</span></button>
       </div>
     </li>`;
 }
@@ -434,38 +556,83 @@ const providerList = () => {
   return list.filter((p) => p && p.id);
 };
 
-async function openInspector(deviceId, metadataId, opener) {
-  const row = state.data?.videos?.find((v) => v.deviceId === deviceId && v.metadataId === metadataId) || null;
+// The inspector holds one video group. Its classification applies to every version in the group
+// by default; evidence, audit and analysis belong to the selected version (newest first).
+async function openInspector(id, opener) {
+  const group = state.data?.videos?.find((g) => String(g.id) === id);
+  if (!group) return;
   state.dialog = {
-    deviceId, metadataId, row, data: null, loading: true, error: null, alert: null, busy: false,
+    id, group, selected: versionKey(group.versions[0]), target: 'all',
+    data: null, loading: true, error: null, alert: null, busy: false,
     raw: 'exact', rawOpen: false, openerKey: opener?.getAttribute?.('data-key') || null,
     form: { lang: null, other: '', note: '', provider: providerList()[0].id },
   };
   renderDialog();
   const dlg = $('#dlg');
   if (!dlg.open) dlg.showModal();
-  await refreshInspector();
+  await loadVersion();
 }
 
-async function refreshInspector({ reloadList = false } = {}) {
+const selectedVersion = (d) => d.group.versions.find((v) => versionKey(v) === d.selected) || d.group.versions[0];
+
+// The language a new decision starts from: an existing manual choice, else the most-watched known
+// language, so one click never records "unknown" over a language some version already names.
+function defaultLang(g) {
+  const manual = (g.versions || []).find((v) => v.assessment?.source === 'manual');
+  if (manual?.assessment?.lang) return manual.assessment.lang;
+  return groupLangs(g).find((l) => l.lang !== 'und')?.lang || 'und';
+}
+
+// Evidence, audit and revision of the selected version. An answer for a version that is no longer
+// selected (or a closed inspector) is dropped.
+async function loadVersion() {
   const d = state.dialog;
   if (!d) return;
+  const v = selectedVersion(d);
+  const key = versionKey(v);
   d.loading = true;
+  d.error = null;
   renderDialog();
   try {
-    const data = await api.evidence(d.deviceId, d.metadataId);
-    if (state.dialog !== d) return;
+    const data = await api.evidence(v.deviceId, v.metadataId);
+    if (state.dialog !== d || d.selected !== key) return;
     d.data = data;
-    d.error = null;
-    if (d.form.lang == null) d.form.lang = data?.assessment?.lang || 'und';
+    if (d.form.lang == null) d.form.lang = defaultLang(d.group);
   } catch (error) {
-    if (state.dialog !== d) return;
-    if (error instanceof ApiError && error.status === 401) return signedOut();
+    if (state.dialog !== d || d.selected !== key) return;
+    if (error instanceof ApiError && error.status === 401) { signedOut(); return; }
     d.error = error.message;
   } finally {
-    if (state.dialog === d) { d.loading = false; renderDialog(); }
+    if (state.dialog === d && d.selected === key) { d.loading = false; renderDialog(); }
   }
-  if (reloadList) load({ keepPage: true });
+}
+
+// After a decision (or a conflict) re-read the list and this video's group, keeping the same
+// selected version while it is still part of the group.
+async function refreshGroup() {
+  const d = state.dialog;
+  if (!d) return;
+  await load({ keepPage: true });
+  if (state.dialog !== d) return;
+  let group = state.data?.videos?.find((g) => String(g.id) === d.id);
+  if (!group) {
+    // Filtered out of the list now (for example no longer "Needs review"): read the group alone.
+    try {
+      const f = state.filters;
+      const one = readable(await api.languages({ days: f.days, device: f.device, person: f.person, language: 'all', status: 'all', query: d.group.videoId, page: 1, group: 'video' }));
+      group = one.videos.find((g) => String(g.id) === d.id);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) { signedOut(); return; }
+    }
+  }
+  if (state.dialog !== d) return;
+  if (group) {
+    d.group = group;
+    if (!group.versions.some((v) => versionKey(v) === d.selected)) d.selected = versionKey(group.versions[0]);
+  }
+  // The selected version's details are re-read rather than shown stale beside the new summary.
+  d.data = null;
+  await loadVersion();
 }
 
 function closeDialog() {
@@ -475,70 +642,67 @@ function closeDialog() {
 
 function inspectorHTML() {
   const d = state.dialog;
-  const data = d.data;
-  const row = d.row || {};
-  const title = data?.title || row.title || `Untitled · ${data?.videoId || row.videoId || ''}`;
-  const deviceLabel = row.deviceLabel || deviceById(d.deviceId)?.label || d.deviceId;
+  const g = d.group;
+  const n = g.versions.length;
+  const v = selectedVersion(d);
+  const tz = state.data?.timezone;
+  const title = g.title || `Untitled · ${g.videoId || ''}`;
+  const devices = groupDevices(g);
   const head = `<div class="dialog__head">
-      <h2 id="dlg-title"><span class="label" style="display:block;margin-bottom:6px" aria-hidden="true">Language · this recorded version</span><span class="vh">Language for </span>${esc(title)}</h2>
+      <h2 id="dlg-title"><span class="label" style="display:block;margin-bottom:6px" aria-hidden="true">Language · this video</span><span class="vh">Language for </span>${esc(title)}</h2>
       <button type="button" class="icon-btn" data-action="close" data-key="dlg:close" aria-label="Close">${ICON.close}</button>
     </div>`;
   const foot = `<div class="dialog__foot"><span class="why">${DEMO ? 'Demo data · nothing is saved to a server' : 'Saved evidence · not a fresh YouTube lookup'}</span><button type="button" class="btn btn--sm" data-action="close" data-key="dlg:done">Done</button></div>`;
-  if (!data) {
-    const inner = d.error
-      ? `<div class="problem" role="alert"><p>${esc(d.error)}</p><button type="button" class="btn btn--sm" data-action="ins-refresh" data-key="dlg:retry">Try again</button></div>`
-      : '<p class="boot" style="padding:24px 0">Loading the saved evidence…</p>';
-    return `${head}<div class="dialog__body">${inner}</div>${foot}`;
-  }
-  const a = data.assessment || {};
-  // A manual classification (source "manual", including a manual "und") locks out automatic analysis.
-  const manualLock = a.source === 'manual' || a.status === 'confirmed';
-  const meta = `<p class="ins__meta">${row.channel ? `<span>${esc(row.channel)}</span>` : ''}<span class="mono">${esc(data.videoId || row.videoId || '')}</span><span>${esc(deviceLabel)}</span><span class="mono" title="Recorded metadata version">version ${esc(String(data.metadataId || d.metadataId).slice(0, 12))}</span></p>
-    <p class="notice notice--scope"><strong>This recorded version on ${esc(deviceLabel)}.</strong> A classification here applies to every play of this exact version on this device. Other devices, dubs and versions of the video keep their own language.</p>`;
+  const meta = `<p class="ins__meta">${g.channel ? `<span>${esc(g.channel)}</span>` : ''}<span class="mono">${esc(g.videoId || '')}</span><span>${esc(devices.join(', '))}</span><span data-version-count>${esc(versionsText(n))}</span><span>${esc(spent(g.seconds))} watched</span></p>`;
 
+  // What a decision here changes, in one sentence.
+  const all = d.target === 'all' || n === 1;
+  const scope = all
+    ? `<p class="notice notice--scope" data-scope="all"><strong>${n === 1 ? 'Applies to this video’s recorded version in this scope' : `Applies to all ${n} recorded versions in this scope`}</strong> (${esc(scopePhrase())}). Versions recorded later start from their own evidence.</p>`
+    : `<p class="notice notice--scope" data-scope="one"><strong>Applies only to the selected version</strong> (${esc(v.deviceLabel || 'device')}, last played ${esc(when(v.lastWatched, tz))}). The other ${n - 1} keep their own.</p>`;
+  const differ = n > 1 && all ? disagreement(g) : null;
+  const conflict = differ
+    ? `<p class="alert" data-conflict="${differ.from}">${differ.from === 'recorded' ? 'The collector recorded different audio for these versions' : 'These versions don’t agree on the audio'}: ${esc(differ.langs.map((l) => `${langName(l.lang)} on ${l.devices.join(' and ')}`).join('; '))}. If one of them is a dub, apply your answer to the selected version only.</p>` : '';
+  const overrides = (g.devices || []).filter((x) => x?.contextOverride);
+  const override = overrides.length
+    ? `<p class="ev__note" data-context-override>${overrides.map((x) => `Playback on ${esc(x.label || 'this device')} counts as ${esc(x.contextOverride.context || 'foreground')} (owner correction${x.contextOverride.created ? `, ${esc(day(x.contextOverride.created, tz))}` : ''})${x.contextOverride.reason ? `: ${esc(x.contextOverride.reason)}` : '.'}`).join(' ')}</p>` : '';
+
+  const langs = groupLangs(g);
+  const a = v.assessment || {};
+  const summary = n === 1
+    ? `<p class="ins__big">${esc(langName(a.lang))}<code>${esc(a.lang || 'und')}</code></p>
+       <p>${statusHTML(a.status)}${a.confidence != null && a.confidence !== '' ? ` <span class="why">· confidence ${esc(confText(a.confidence))}</span>` : ''}${a.source ? ` <span class="why">· ${esc(sourceWords(a.source))}</span>` : ''}</p>`
+    : `<p class="ins__big">${langs.length > 1 ? 'Mixed <span class="why">versions differ</span>' : `${esc(langName(langs[0]?.lang))}<code>${esc(langs[0]?.lang || 'und')}</code>`}</p>
+       <ul class="ins__langs" data-langs>${langs.map((l) => `<li><span>${esc(langName(l.lang))} <span class="mono">(${esc(l.lang)})</span></span><span class="why">${esc(statusesText(l.statuses))} · ${esc(l.versions === 1 ? '1 version' : `${l.versions} versions`)} · ${esc(spent(l.seconds))}</span></li>`).join('')}</ul>`;
   const now = `<section class="ins__section" aria-labelledby="ins-now">
-      <h3 class="label" id="ins-now">Current interpretation · revision ${Number(data.revision) || 0}</h3>
-      <div class="ins__now" data-assessment data-revision="${Number(data.revision) || 0}">
-        <p class="ins__big">${esc(langName(a.lang))}<code>${esc(a.lang || 'und')}</code></p>
-        <p>${statusHTML(a.status)}${a.confidence != null && a.confidence !== '' ? ` <span class="why">· confidence ${esc(confText(a.confidence))}</span>` : ''}${a.source ? ` <span class="why">· source <span class="mono">${esc(a.source)}</span></span>` : ''}</p>
-        ${a.reason ? `<p class="why">${esc(a.reason)}</p>` : ''}
-        <p class="recorded">${recordedText(data.recorded)}</p>
-        <p class="why">${manualLock ? 'Your classification. Automatic analysis can’t replace it until you reset.' : 'This is an estimate. Confirm it with a classification, or analyze the saved evidence again.'}</p>
+      <h3 class="label" id="ins-now">Current interpretation · this video</h3>
+      <div class="ins__now" data-group-assessment>
+        ${summary}
+        <p class="why" data-group-review>${g.needsReview ? (n === 1 ? 'Needs review.' : 'At least one version needs review.') : 'Nothing here needs review.'}</p>
       </div>
-      ${formHTML(data, manualLock)}
+      ${formHTML(g, d)}
       ${d.alert ? alertHTML(d.alert) : ''}
     </section>`;
 
-  const hist = Array.isArray(data.history) ? data.history : [];
-  const audit = `<section class="ins__section" aria-labelledby="ins-audit">
-      <h3 class="label" id="ins-audit">History · newest first</h3>
-      ${hist.length ? `<ol class="audit" data-audit>${hist.map((h) => `<li>
-          <span class="audit__rev">r${esc(h.revision)}</span>
-          <span class="audit__what"><b>${esc(ACTION_WORD[h.action] || h.action || 'Change')}</b> · ${esc(langName(h.lang))} <span class="mono">(${esc(h.lang || 'und')})</span> · ${esc(STATUS_WORD[h.status] || h.status || '')}</span>
-          <span class="audit__meta">${esc(when(h.createdAt, state.data?.timezone))}${h.source ? ` · ${esc(h.source)}` : ''}${h.confidence != null && h.confidence !== '' ? ` · ${esc(confText(h.confidence))}` : ''}${h.reason ? ` · ${esc(h.reason)}` : ''}</span>
-          ${h.note ? `<span class="audit__note">“${esc(h.note)}”</span>` : ''}
-        </li>`).join('')}</ol>` : '<p class="why">No changes yet. The interpretation above is the collector’s, as recorded.</p>'}
-      ${data.historyHasMore ? `<p class="ev__note" data-history-more>Showing the latest ${esc(data.historyLimit || hist.length)} entries. Older entries are kept on the server.</p>` : ''}
-      <p class="ev__note">Every action is appended; nothing is overwritten. Reset restores the collector’s interpretation and is recorded too.</p>
-    </section>`;
-
-  return `${head}<div class="dialog__body">${meta}${now}${audit}${evidenceHTML(data)}</div>${foot}`;
+  return `${head}<div class="dialog__body">${meta}${scope}${conflict}${override}${now}${versionHTML(d, v)}</div>${foot}`;
 }
 
 const ACTION_WORD = { manual: 'Classified', analyze: 'Analyzed', reset: 'Reset to collector', collector: 'Collector' };
 
-function formHTML(data, manualLock) {
-  const d = state.dialog;
-  const lang = d.form.lang ?? (data.assessment?.lang || 'und');
+function formHTML(g, d) {
+  const n = g.versions.length;
+  const lang = d.form.lang ?? defaultLang(g);
   const known = [...COMMON, 'mul', 'zxx', 'und'];
   // "__other" is the select's own value for a free code; any unlisted current code also opens it.
   const isOther = lang === '__other' || !known.includes(lang);
   const otherValue = lang === '__other' ? d.form.other : isOther ? lang : d.form.other;
   const option = (c) => `<option value="${esc(c)}" ${lang === c ? 'selected' : ''}>${esc(langName(c))} (${esc(c)})</option>`;
-  const providers = providerList();
-  const provider = providers.find((p) => p.id === d.form.provider) || providers[0];
-  const external = provider.id !== 'saved-evidence';
   const busy = d.busy || d.loading;
+  const all = d.target === 'all' || n === 1;
+  const manual = all ? g.versions.filter((x) => x.assessment?.source === 'manual').length : 0;
+  const hint = !all ? 'Saved for the selected version only; the others keep theirs.'
+    : n === 1 ? 'Saved as your decision; it stays until you reset.'
+      : `One decision for every version; it stays until you reset.${manual ? ` It replaces your earlier classification on ${manual === 1 ? '1 version' : `${manual} versions`}.` : ''}`;
   return `<form class="ins__form" data-form="manual" novalidate>
       <div class="ins__row">
         <div><label class="label" for="f-lang">Spoken language</label>
@@ -552,17 +716,63 @@ function formHTML(data, manualLock) {
       </div>
       <div><label class="label" for="f-note">Note · why (recommended)</label>
         <textarea class="input" id="f-note" rows="2" maxlength="500" placeholder="What you heard, e.g. German dub, original is English" data-key="ins:note">${esc(d.form.note)}</textarea></div>
+      ${n > 1 ? `<div><span class="label" id="f-target">Apply to</span>
+        <div class="seg ins__target" role="group" aria-labelledby="f-target">
+          <button type="button" aria-pressed="${d.target === 'all'}" data-action="target" data-value="all" data-key="ins:target:all">All ${n} versions</button>
+          <button type="button" aria-pressed="${d.target === 'one'}" data-action="target" data-value="one" data-key="ins:target:one">Selected version only</button>
+        </div></div>` : ''}
       <div class="ins__actions">
-        <button type="submit" class="btn btn--primary" data-key="ins:save" ${busy ? 'disabled' : ''}>Save classification</button>
-        <span class="why">Saved as your decision for this version; it stays until you reset.</span>
+        <button type="submit" class="btn btn--primary" data-key="ins:save" ${busy ? 'disabled' : ''}>${n === 1 ? 'Save classification' : all ? `Save for all ${n} versions` : 'Save for this version'}</button>
+        <button type="button" class="btn btn--quiet" data-action="reset" data-key="ins:reset" ${busy ? 'disabled' : ''}>${n > 1 && all ? `Reset all ${n} to collector` : 'Reset to collector'}</button>
       </div>
-    </form>
+      <p class="ev__note" data-form-hint>${esc(hint)}</p>
+    </form>`;
+}
+
+// The selected recorded version: its own interpretation, analysis, audit and saved evidence.
+function versionHTML(d, v) {
+  const g = d.group;
+  const n = g.versions.length;
+  const tz = state.data?.timezone;
+  const index = g.versions.indexOf(v);
+  const label = (x, i) => `${i === 0 ? 'Newest · ' : ''}${when(x.lastWatched, tz)} · ${x.deviceLabel || 'device'} · ${langName(x.assessment?.lang)} (${x.assessment?.lang || 'und'}), ${(STATUS_WORD[x.assessment?.status] || x.assessment?.status || '').toLowerCase()}${x.title && x.title !== g.title ? ` · “${x.title}”` : ''}`;
+  const picker = n > 1
+    ? `<label class="vh" for="f-version">Recorded version</label>
+       <select class="select" id="f-version" data-action="version" data-key="ins:version">${g.versions.map((x, i) => `<option value="${esc(versionKey(x))}" ${x === v ? 'selected' : ''}>${esc(label(x, i))}</option>`).join('')}</select>` : '';
+  const facts = `<p class="why ins__vmeta" data-version-meta>${esc(v.deviceLabel || 'Device')} · last played ${esc(when(v.lastWatched, tz))} · ${esc(spent(v.seconds))} watched · <span class="mono" title="Recorded metadata version">version ${esc(String(v.metadataId || '').slice(0, 12))}</span>${v.title && v.title !== g.title ? ` · saved title “${esc(v.title)}”` : ''}</p>`;
+  let inner;
+  if (!d.data) {
+    inner = d.error
+      ? `<div class="problem" role="alert"><p>${esc(d.error)}</p><button type="button" class="btn btn--sm" data-action="ins-retry" data-key="dlg:retry">Try again</button></div>`
+      : '<p class="boot" style="padding:16px 0">Loading this version’s saved evidence…</p>';
+  } else {
+    inner = versionNowHTML(d);
+  }
+  return `<section class="ins__section" aria-labelledby="ins-ver" data-version="${esc(versionKey(v))}">
+      <h3 class="label" id="ins-ver">${n > 1 ? `Recorded version · ${index + 1} of ${n}, newest first` : 'Recorded version'}</h3>
+      ${picker}${facts}${inner}
+    </section>${d.data ? auditHTML(d.data) + evidenceHTML(d.data) : ''}`;
+}
+
+function versionNowHTML(d) {
+  const data = d.data;
+  const a = data.assessment || {};
+  // A manual classification (source "manual", including a manual "und") locks out automatic analysis.
+  const manualLock = a.source === 'manual' || a.status === 'confirmed';
+  const providers = providerList();
+  const provider = providers.find((p) => p.id === d.form.provider) || providers[0];
+  const external = provider.id !== 'saved-evidence';
+  const busy = d.busy || d.loading;
+  return `<div class="ins__now ins__now--version" data-assessment data-revision="${Number(data.revision) || 0}">
+      <p><b class="ins__vlang">${esc(langName(a.lang))}</b> <code>${esc(a.lang || 'und')}</code> ${statusHTML(a.status)}${a.confidence != null && a.confidence !== '' ? ` <span class="why">· confidence ${esc(confText(a.confidence))}</span>` : ''}${a.source && a.source !== 'manual' ? ` <span class="why">· ${esc(sourceWords(a.source))}</span>` : ''}</p>
+      ${a.reason ? `<p class="why">${esc(a.reason)}${a.source ? ` <span class="mono">${esc(a.source)}</span>` : ''} · revision ${Number(data.revision) || 0}</p>` : ''}
+      <p class="recorded">${recordedText(data.recorded)}</p>
+    </div>
     <div class="ins__form" role="group" aria-labelledby="ins-auto">
-      <span class="label" id="ins-auto">Automatic</span>
+      <span class="label" id="ins-auto">Automatic · this version</span>
       <div class="ins__actions">
         ${providers.length > 1 ? `<label class="vh" for="f-provider">Analysis source</label><select class="select" id="f-provider" style="width:auto" data-action="form-provider" data-key="ins:provider">${providers.map((p) => `<option value="${esc(p.id)}" ${p.id === provider.id ? 'selected' : ''}>${esc(p.label || p.id)}</option>`).join('')}</select>` : ''}
         <button type="button" class="btn" data-action="analyze" data-key="ins:analyze" ${busy || manualLock ? 'disabled' : ''}>${external ? 'Analyze with the API' : 'Analyze saved evidence'}</button>
-        <button type="button" class="btn btn--quiet" data-action="reset" data-key="ins:reset" ${busy ? 'disabled' : ''}>Reset to collector</button>
       </div>
       <p class="ev__note" data-provider-note>${external
         ? `Sends this version’s saved evidence (no media, no keys) to ${esc(provider.label || 'the configured analysis API')}. The answer is an estimate and needs review unless it is based on the audio.`
@@ -571,10 +781,25 @@ function formHTML(data, manualLock) {
     </div>`;
 }
 
+function auditHTML(data) {
+  const hist = Array.isArray(data.history) ? data.history : [];
+  return `<section class="ins__section" aria-labelledby="ins-audit">
+      <h3 class="label" id="ins-audit">History of this version · newest first</h3>
+      ${hist.length ? `<ol class="audit" data-audit>${hist.map((h) => `<li>
+          <span class="audit__rev">r${esc(h.revision)}</span>
+          <span class="audit__what"><b>${esc(ACTION_WORD[h.action] || h.action || 'Change')}</b> · ${esc(langName(h.lang))} <span class="mono">(${esc(h.lang || 'und')})</span> · ${esc(STATUS_WORD[h.status] || h.status || '')}</span>
+          <span class="audit__meta">${esc(when(h.createdAt, state.data?.timezone))}${h.source ? ` · ${esc(h.source)}` : ''}${h.confidence != null && h.confidence !== '' ? ` · ${esc(confText(h.confidence))}` : ''}${h.reason ? ` · ${esc(h.reason)}` : ''}</span>
+          ${h.note ? `<span class="audit__note">“${esc(h.note)}”</span>` : ''}
+        </li>`).join('')}</ol>` : '<p class="why">No changes yet: the interpretation above is this version’s starting estimate.</p>'}
+      ${data.historyHasMore ? `<p class="ev__note" data-history-more>Showing the latest ${esc(data.historyLimit || hist.length)} entries. Older entries are kept on the server.</p>` : ''}
+      <p class="ev__note">Every action is appended; nothing is overwritten. Reset restores the collector’s original interpretation and is recorded too.</p>
+    </section>`;
+}
+
 function alertHTML(al) {
   return `<div class="alert ${al.kind === 'ok' ? 'alert--ok' : al.kind === 'bad' ? 'alert--bad' : ''}" role="${al.kind === 'ok' ? 'status' : 'alert'}" tabindex="-1" data-key="ins:alert" data-alert="${esc(al.kind)}">
       <p>${esc(al.text)}</p>
-      ${al.refresh ? '<button type="button" class="btn btn--sm" data-action="ins-refresh" data-key="ins:refresh">Refresh this version</button>' : ''}
+      ${al.refresh ? '<button type="button" class="btn btn--sm" data-action="ins-refresh" data-key="ins:refresh">Refresh this video</button>' : ''}
     </div>`;
 }
 
@@ -627,7 +852,7 @@ function evidenceHTML(data) {
         <summary>Raw source snapshot</summary>
         ${facts([
           ['Evidence ID', data.evidenceId ? `<code class="raw__id" data-evidence-id>${esc(data.evidenceId)}</code>` : notRecorded()],
-          ['Digest', text && data.evidenceId ? `<span data-digest>${digestText(data.evidenceId)}</span>` : notRecorded(text ? 'no evidence ID' : 'exact text not returned')],
+          ['Digest', text && data.evidenceId ? `<span data-digest>${digestText(data.evidenceId, text)}</span>` : notRecorded(text ? 'no evidence ID' : 'exact text not returned')],
           ['Exact text', text ? `<span class="mono">${new TextEncoder().encode(text).length.toLocaleString('en')} bytes</span>` : notRecorded('only the parsed snapshot was returned')],
         ])}
         ${text && ev ? `<div class="seg" role="group" aria-label="Snapshot text" style="margin-top:12px">
@@ -639,30 +864,35 @@ function evidenceHTML(data) {
     if (text && data.evidenceId) checkDigest(text, data.evidenceId);
   }
   return `<section class="ins__section" aria-labelledby="ins-ev">
-      <h3 class="label" id="ins-ev">Saved evidence · source values</h3>
+      <h3 class="label" id="ins-ev">Saved evidence · this version</h3>
       ${sources}${raw}
     </section>`;
 }
 
+// Re-hash the exact saved text in this browser. Results are kept per ID and exact text, and are only
+// written into an inspector still showing that same snapshot (versions can be switched meanwhile).
 const digests = new Map();
-const digestText = (id) => ({
+const digestKey = (id, text) => `${id}\n${text}`;
+const digestText = (id, text) => ({
   match: '<span class="ok">Matches</span> <span class="why">SHA-256 recomputed in this browser</span>',
-  mismatch: '<span class="bad">Does not match</span> <span class="why">the saved text differs from what this ID names</span>',
+  mismatch: '<span class="bad">Does not match</span> <span class="why">the saved text differs from what this ID names; it is shown exactly as stored</span>',
   unavailable: notRecorded('can’t be checked here (needs a secure context)'),
-})[digests.get(id)] || '<span class="why">Checking…</span>';
+})[digests.get(digestKey(id, text))] || '<span class="why">Checking…</span>';
 async function checkDigest(text, id) {
-  if (digests.has(id)) return;
-  if (!globalThis.crypto?.subtle) { digests.set(id, 'unavailable'); return; }
-  digests.set(id, 'pending');
+  const key = digestKey(id, text);
+  if (digests.has(key)) return;
+  if (!globalThis.crypto?.subtle) { digests.set(key, 'unavailable'); return; }
+  digests.set(key, 'pending');
   try {
     const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
     const hex = [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
-    digests.set(id, hex === String(id).toLowerCase() ? 'match' : 'mismatch');
+    digests.set(key, hex === String(id).toLowerCase() ? 'match' : 'mismatch');
   } catch {
-    digests.set(id, 'unavailable');
+    digests.set(key, 'unavailable');
   }
+  const d = state.dialog;
   const el = $('#dlg [data-digest]');
-  if (el) el.innerHTML = digestText(id);
+  if (el && d?.data?.evidenceId === id && d.data.evidenceText === text) el.innerHTML = digestText(id, text);
 }
 
 function renderDialog() {
@@ -685,48 +915,72 @@ function readLang() {
   return ($('#f-other')?.value || '').trim();
 }
 
+// Classify or reset every version of the video at once (one atomic request carrying each
+// version's expected revision), or only the selected version. Analysis is always that version's.
 async function assess(action) {
   const d = state.dialog;
   if (!d?.data || d.busy) return;
-  const body = { deviceId: d.deviceId, metadataId: d.metadataId, baseRevision: Number(d.data.revision) || 0, action };
+  const g = d.group;
+  const n = g.versions.length;
+  const v = selectedVersion(d);
+  const bulk = action !== 'analyze' && (d.target === 'all' || n === 1);
   const note = ($('#f-note')?.value || '').trim();
   d.form.note = note;
+  let lang = null;
   if (action === 'manual') {
-    const lang = readLang();
+    lang = readLang();
     if (!lang || !(LANG_CODE.test(lang) || SPECIAL[lang])) {
       d.alert = { kind: 'bad', text: 'Enter a language code such as de, en or pt-BR, or choose mixed, no speech or unknown.' };
       renderDialog();
       $('#f-other')?.focus();
       return;
     }
-    body.lang = lang;
     d.form.lang = lang;
-  }
-  if (note && action !== 'analyze') body.note = note;
-  if (action === 'analyze') {
-    const providers = providerList();
-    body.provider = (providers.find((p) => p.id === d.form.provider) || providers[0]).id;
   }
   d.busy = true;
   d.alert = null;
   renderDialog();
   try {
-    const res = await api.assess(body);
-    if (state.dialog !== d) return;
-    const a = res?.assessment || {};
-    const words = { manual: 'Saved your classification', analyze: 'Analysis finished', reset: 'Reset to the collector’s interpretation' };
-    d.alert = { kind: 'ok', text: `${words[action]}: ${langName(a.lang)} (${a.lang || 'und'}), ${STATUS_WORD[a.status] || a.status || 'updated'}. Revision ${res?.revision ?? ''}.` };
-    d.form.note = '';
+    let text;
+    if (bulk) {
+      const body = { videoId: g.videoId, targets: g.versions.map((x) => ({ deviceId: x.deviceId, metadataId: x.metadataId, baseRevision: Number(x.revision) || 0 })), action };
+      if (lang) body.lang = lang;
+      if (note) body.note = note;
+      const res = await api.assessBulk(body);
+      if (state.dialog !== d) return;
+      const count = Number(res?.updated) || body.targets.length;
+      const what = n === 1 ? 'this video' : `all ${count} recorded versions`;
+      text = action === 'manual'
+        ? `Saved for ${what}: ${langName(lang)} (${lang}), ${lang === 'und' ? 'undetermined' : 'confirmed'}.`
+        : `Reset ${what} to the collector’s original interpretation.`;
+    } else {
+      const body = { deviceId: v.deviceId, metadataId: v.metadataId, baseRevision: Number(d.data.revision) || 0, action };
+      if (lang) body.lang = lang;
+      if (note && action !== 'analyze') body.note = note;
+      if (action === 'analyze') {
+        const providers = providerList();
+        body.provider = (providers.find((p) => p.id === d.form.provider) || providers[0]).id;
+      }
+      const res = await api.assess(body);
+      if (state.dialog !== d) return;
+      const a = res?.assessment || {};
+      const words = { manual: 'Saved for the selected version', analyze: 'Analysis of the selected version finished', reset: 'Reset the selected version to the collector’s original interpretation' };
+      text = `${words[action]}: ${langName(a.lang)} (${a.lang || 'und'}), ${STATUS_WORD[a.status] || a.status || 'updated'}. Revision ${res?.revision ?? ''}.`;
+    }
+    d.alert = { kind: 'ok', text };
+    if (action !== 'analyze') d.form.note = '';
     d.busy = false;
-    await refreshInspector({ reloadList: true });
-    say(d.alert.text);
+    await refreshGroup();
+    say(text);
     $('#dlg [data-key="ins:alert"]')?.focus();
   } catch (error) {
     if (state.dialog !== d) return;
     d.busy = false;
-    if (error instanceof ApiError && error.status === 401) return signedOut('Your session ended. Sign in again.');
+    if (error instanceof ApiError && error.status === 401) { signedOut('Your session ended. Sign in again.'); return; }
     if (error instanceof ApiError && error.status === 409) {
-      d.alert = { kind: 'review', refresh: true, text: `${error.message} This version may have changed since you opened it. Refresh it, check the latest interpretation, then decide again.` };
+      d.alert = { kind: 'review', refresh: true, text: bulk
+        ? `Nothing was saved: ${error.message} Refresh this video, check it, then decide again.`
+        : `${error.message} This version may have changed since you opened it. Refresh it, check the latest interpretation, then decide again.` };
     } else {
       d.alert = { kind: 'bad', text: error.message || 'That didn’t work.' };
     }
@@ -760,11 +1014,13 @@ document.addEventListener('click', (e) => {
     case 'page': f.page = Math.max(1, Number(el.dataset.value) || 1); load({ keepPage: true }).then(() => $('#videos-h')?.scrollIntoView({ block: 'start' })); break;
     case 'clear': f.language = 'all'; f.status = 'all'; f.query = ''; f.page = 1; load(); break;
     case 'retry': load({ keepPage: true }); break;
-    case 'open': openInspector(el.dataset.device, el.dataset.metadata, el); break;
+    case 'open': openInspector(el.dataset.id, el); break;
     case 'close': closeDialog(); break;
     case 'analyze': assess('analyze'); break;
     case 'reset': assess('reset'); break;
-    case 'ins-refresh': if (state.dialog) { state.dialog.alert = null; refreshInspector({ reloadList: true }); } break;
+    case 'ins-refresh': if (state.dialog) { state.dialog.alert = null; refreshGroup(); } break;
+    case 'ins-retry': loadVersion(); break;
+    case 'target': if (state.dialog) { state.dialog.target = el.dataset.value === 'one' ? 'one' : 'all'; state.dialog.form.note = $('#f-note')?.value ?? state.dialog.form.note; renderDialog(); } break;
     case 'raw': if (state.dialog) { state.dialog.raw = el.dataset.value; state.dialog.rawOpen = true; renderDialog(); } break;
     case 'logout': api.logout().catch(() => {}).finally(() => signedOut()); break;
     default: break;
@@ -777,7 +1033,16 @@ document.addEventListener('change', (e) => {
   if (t.dataset.action === 'device') { f.device = t.value; f.page = 1; load(); }
   else if (t.dataset.action === 'person') { f.person = t.value; f.page = 1; load(); }
   else if (t.dataset.action === 'language-select') { f.language = t.value; f.page = 1; load(); }
-  else if (t.dataset.action === 'form-lang' && state.dialog) {
+  else if (t.dataset.action === 'version' && state.dialog) {
+    // Another recorded version: its own evidence and audit; the decision form keeps its values.
+    const d = state.dialog;
+    d.form.note = $('#f-note')?.value ?? d.form.note;
+    d.selected = t.value;
+    d.data = null;
+    d.raw = 'exact';
+    d.rawOpen = false;
+    loadVersion();
+  } else if (t.dataset.action === 'form-lang' && state.dialog) {
     state.dialog.form.lang = t.value;
     state.dialog.form.note = $('#f-note')?.value || '';
     renderDialog();
