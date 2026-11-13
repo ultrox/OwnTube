@@ -73,4 +73,8 @@ the local-registry transfer path was not needed. Git archives supply tracked
 server/backoffice/deploy sources, excluding local data and credentials. The actual
 AMD64 image passed runtime-user asset checks and a restored-production-copy
 comparison before handover. Backups, image identity and rollback are recorded in
-[`server/README.md`](../server/README.md#current-release-owntube-languages-20261113-1).
+[`server/README.md`](../server/README.md#backend-release-owntube-languages-20261113-1).
+
+The current follow-up `owntube-languages-20261113-2` uses the same process from
+commit `4369a6835`, with mobile wrapping and content-hashed module assets. Its
+backend binary is identical to `-1`; the same backup and image-only rollback apply.

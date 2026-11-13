@@ -275,7 +275,30 @@ All 45 Android unit regressions, a disposable-backend HTTP contract test and the
 The ARM64 APK was installed on the Shield on 2026-11-13; versionCode 2466 and the retained app-data
 directory were verified. Post-update playback capture has not yet been checked on-device.
 
-### Current release: `owntube-languages-20261113-1`
+### Current release: `owntube-languages-20261113-2`
+
+Follow-up from commit `4369a6835`, deployed on 2026-11-13: long channel/device
+names wrap within the mobile review list and inspector. CSS and the entire module
+JavaScript graph now use content-hashed filenames to avoid stale CDN/browser
+assets. The actual AMD64 image matches the local module build byte-for-byte;
+its backend binary is identical to `-1`.
+
+Container `68d781aae765`, image
+`sha256:378f6933d5e05a5c474243ef84e3e647de1f6507d468ea14b1303d06027f4962`.
+Source archive SHA-256:
+`1c1dfb1ac1c0021f958dce609c8ffde476145df38171905521792c0bdf1ff567`.
+Source: `/home/marko/releases/youtube-observer/owntube-languages-20261113-2/`.
+The 53-assertion module suite passes; the new wrapping regressions fail against
+the old CSS. Read-only browser validation of the fix against 458 production rows
+across 23 pages found no overflowing row values or pages.
+
+Final public HTTPS Chromium checks passed: matching HTML and all four hashed
+assets, unauthenticated API rejection, owner login with secure HttpOnly cookie,
+real-data ledger, independent review filter, evidence inspector, 390 px phone
+layout, session restoration, and the original History page/link. No JavaScript
+exceptions were observed.
+
+### Backend release: `owntube-languages-20261113-1`
 
 Deployed from OwnTube commit `7e3b61811` on 2026-11-13 through Kamal's
 health-gated handover. Languages review is live at
