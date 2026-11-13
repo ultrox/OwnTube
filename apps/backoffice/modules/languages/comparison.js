@@ -38,7 +38,7 @@ export function createComparison({ api, scope, render, expired, esc, spent, lang
     const disabled = s.busy || s.loading ? 'disabled' : '';
     const selected = s.draft.selectedLanguages || [];
     const editor = s.draft.groups.map((g, i) => `<fieldset class="compare__group" ${disabled}>
-      <legend>${i === 0 ? '01 · Using Search Like a Native' : '02 · Not using it'}</legend>
+      <legend>0${i + 1} · ${esc(g.label)}</legend>
       <label class="label" for="group-${i}">Group name</label>
       <input class="input compare__name" id="group-${i}" maxlength="80" value="${esc(g.label)}" data-compare-field="label" data-group="${i}" data-key="compare:name:${i}">
       ${g.ranges.map((r, j) => `<div class="compare__range">
@@ -46,22 +46,24 @@ export function createComparison({ api, scope, render, expired, esc, spent, lang
         <label><span class="label">Through</span><input class="input" type="date" min="2000-01-01" max="${esc(d?.today)}" value="${esc(r.end)}" data-compare-field="end" data-group="${i}" data-range="${j}" data-key="compare:${i}:${j}:end" aria-label="${esc(g.label)} period ${j + 1} end"></label>
         <button type="button" class="btn btn--sm btn--quiet" data-compare="remove" data-group="${i}" data-range="${j}" aria-label="Remove ${esc(g.label)} period ${j + 1}">×</button>
       </div>`).join('')}
-      <button type="button" class="btn btn--sm" data-compare="add" data-group="${i}" data-key="compare:add:${i}" ${g.ranges.length >= 64 ? 'disabled' : ''}>+ Add period</button>
+      <div class="compare__chips">
+        <button type="button" class="btn btn--sm" data-compare="add" data-group="${i}" data-key="compare:add:${i}" ${g.ranges.length >= 64 ? 'disabled' : ''}>+ Add period</button>
+        <button type="button" class="btn btn--sm" data-compare="add-language" data-key="compare:add-language${i ? ':1' : ''}" ${selected.length >= 128 ? 'disabled' : ''}>+ Add language</button>
+      </div>
     </fieldset>`).join('');
     return `<section class="compare" aria-labelledby="compare-h">
       <h2 id="compare-h">Did your listening change?</h2>
       <p class="lede">Combine the periods when you used Search Like a Native, then compare them with the times you didn’t.</p>
+      <div class="compare__groups">${editor}</div>
+      <p class="note">Both dates are included · ${esc(d?.timezone || '')}. Overlapping dates within a group count once. A date cannot belong to both groups.</p>
       <fieldset class="compare__languages" ${disabled}>
         <legend>Languages to compare · shared by both groups</legend>
         <div class="compare__chips">
           ${selected.length ? selected.map((lang) => `<button type="button" class="btn btn--sm" data-compare="remove-language" data-lang="${esc(lang)}" aria-label="Remove ${esc(langName(lang))}" data-key="compare:language:${esc(lang)}">${esc(langName(lang))} <span aria-hidden="true">×</span></button>`).join('') : '<span class="why">All languages</span>'}
-          <button type="button" class="btn btn--sm" data-compare="add-language" data-key="compare:add-language" ${selected.length >= 128 ? 'disabled' : ''}>+ Add language</button>
           ${selected.length ? '<button type="button" class="btn btn--sm btn--quiet" data-compare="all-languages">Use all languages</button>' : ''}
         </div>
-        <p class="note">Choose languages to compare their combined watch time and individual results. Save & compare applies your selection to both period groups.</p>
+        <p class="note">Add language offers only languages recorded in the saved periods and selected device/person scope. Save & compare applies your selection to both period groups.</p>
       </fieldset>
-      <div class="compare__groups">${editor}</div>
-      <p class="note">Both dates are included · ${esc(d?.timezone || '')}. Overlapping dates within a group count once. A date cannot belong to both groups.</p>
       <div class="compare__actions"><button type="button" class="btn btn--primary" data-compare="save" ${disabled}>${s.busy ? 'Saving…' : 'Save & compare'}</button>
         <button type="button" class="btn btn--quiet" data-compare="reload" ${disabled}>${s.dirty ? 'Discard edits & reload saved' : 'Refresh saved comparison'}</button>
         <span class="why" role="status">${s.dirty ? 'Unsaved changes' : demo ? 'Demo · resets on reload' : 'Saved on your server'}</span></div>
@@ -121,12 +123,13 @@ export function createComparison({ api, scope, render, expired, esc, spent, lang
       const draft = s.draft;
       return pickLanguage({
         heading: 'Add a comparison language', title: 'The same selection applies to both period groups.',
-        note: 'Adds to your comparison draft. Choose Save & compare to save the selection.',
+        availableCodes: s.data?.availableLanguages || [],
+        note: 'Only languages recorded in the saved periods for this device/person scope. Choose Save & compare to save your selection.',
         returnFocus: el, save: (_id, lang) => {
           if (draft !== s.draft || s.busy || s.loading) return;
           draft.selectedLanguages = [...new Set([...(draft.selectedLanguages || []), lang])];
           dirty();
-          document.querySelector('[data-key="compare:add-language"]')?.focus();
+          document.querySelector(`[data-key="${el.dataset.key}"]`)?.focus();
         },
       });
     }

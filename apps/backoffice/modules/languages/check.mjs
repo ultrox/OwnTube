@@ -812,6 +812,17 @@ try {
   ok(result.groups.every((g) => Math.abs(g.minutesPerDay - g.seconds / 60 / g.calendarDays) < 1e-8
     && Math.abs(g.languages.reduce((n, l) => n + l.seconds, 0) - g.seconds) < 1e-6), 'daily averages and language totals reconcile for both groups');
   const allLanguageGroups = structuredClone(result.groups);
+  ok(await p.eval(() => [...document.querySelectorAll('.compare__group')].every((g) => {
+    const period = g.querySelector('[data-compare="add"]');
+    return period?.parentElement === g.querySelector('[data-compare="add-language"]')?.parentElement;
+  })), 'each period group places Add language beside Add period');
+  await p.click('[data-key="compare:add-language:1"]');
+  ok(await p.eval((available) => JSON.stringify([...document.querySelectorAll('[data-picker-code]')].map((b) => b.dataset.pickerCode).sort()) === JSON.stringify(available.slice().sort()), result.availableLanguages),
+    'comparison suggestions are exactly the languages recorded across the saved periods');
+  await p.click('#language-search'); await p.type('eo');
+  ok(await p.eval(() => !document.querySelector('[data-picker-code]') && document.querySelector('.language-picker__results').textContent.includes('No matching recorded language')),
+    'search cannot introduce an unrecorded language code into comparison suggestions');
+  await p.key('Escape', 27);
   for (const [name, lang] of [['German', 'de'], ['Japanese', 'ja'], ['German', 'de']]) {
     await p.click('[data-key="compare:add-language"]');
     await p.click('#language-search'); await p.type(name);
@@ -832,6 +843,8 @@ try {
     && result.groups.every((g, i) => Math.abs(g.seconds - allLanguageGroups[i].languages.filter((l) => ['de', 'ja'].includes(l.lang)).reduce((n, l) => n + l.seconds, 0)) < 1e-6
       && g.allSeconds === allLanguageGroups[i].seconds && g.calendarDays === allLanguageGroups[i].calendarDays),
     'saved German + Japanese totals combine only chosen languages in both groups, preserving calendar days and all-language share denominators');
+  ok(result.availableLanguages.includes('en') && !result.availableLanguages.includes('eo'),
+    'narrowing to chosen languages still offers other recorded languages, not the full catalog');
   ok(await p.eval(() => document.querySelectorAll('.compare__table tbody tr').length === 3
     && [...document.querySelectorAll('.compare__table tbody code')].every((c) => ['de', 'ja'].includes(c.textContent))), 'results show the combined selection plus only its individual languages');
   await p.shot(`${LIVE ? 'live' : 'mock'}-comparison-desktop`);

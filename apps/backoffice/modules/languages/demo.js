@@ -279,6 +279,7 @@ export async function createDemoApi({ external = false } = {}) {
       return later(comparisonConfig);
     },
     comparison({ device = '', person = '' } = {}) {
+      const availableLanguages = new Set();
       const groups = comparisonDays(comparisonConfig).map((dates) => {
         const selected = comparisonConfig.selectedLanguages || [];
         const active = new Set(), langs = new Map(selected.map((l) => [l, 0]));
@@ -290,6 +291,7 @@ export async function createDemoApi({ external = false } = {}) {
             if (!dates.has(localDate(p.at))) continue;
             const time = p.fg + p.bg + p.un;
             allSeconds += time;
+            if (time > 0) availableLanguages.add(r.assessment.lang);
             if (selected.length && !selected.includes(r.assessment.lang)) continue;
             seconds += time; langs.set(r.assessment.lang, (langs.get(r.assessment.lang) || 0) + time);
             if (time) active.add(localDate(p.at));
@@ -304,7 +306,7 @@ export async function createDemoApi({ external = false } = {}) {
           minutesPerDay: dates.size ? seconds / 60 / dates.size : null,
           languages: [...langs].map(([lang, time]) => ({ lang, seconds: time, minutesPerDay: dates.size ? time / 60 / dates.size : null, share: allSeconds ? time / allSeconds : null })) };
       });
-      return later({ config: comparisonConfig, groups, today: localDate(now), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, asOf: now });
+      return later({ config: comparisonConfig, groups, availableLanguages: [...availableLanguages].sort(), today: localDate(now), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, asOf: now });
     },
     languages(q) {
       const { n, start, rows } = scopeOf(q);

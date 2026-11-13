@@ -171,6 +171,7 @@ impl Store {
                 .collect::<rusqlite::Result<_>>()?;
             let mut assessments = BTreeMap::new();
             let mut groups = vec![];
+            let mut available_languages = BTreeSet::new();
             for selected_days in &selected_days {
                 let mut context = [0.; 3];
                 let mut langs: BTreeMap<String, f64> = config.selected_languages.iter().map(|l| (l.clone(), 0.)).collect();
@@ -187,6 +188,7 @@ impl Store {
                         }
                         let assessment = &assessments[&key];
                         all_seconds += fact.seconds;
+                        if fact.seconds > 0. { available_languages.insert(assessment.lang.clone()); }
                         if !config.selected_languages.is_empty() && !config.selected_languages.contains(&assessment.lang) { continue; }
                         *langs.entry(assessment.lang.clone()).or_default() += fact.seconds;
                         context[fact.context] += fact.seconds;
@@ -212,7 +214,8 @@ impl Store {
                     })).collect::<Vec<_>>()
                 }));
             }
-            Ok(json!({"config":config, "groups":groups, "timezone":tz.to_string(), "today":today.to_string(), "asOf":at}))
+            Ok(json!({"config":config, "groups":groups, "availableLanguages":available_languages,
+                "timezone":tz.to_string(), "today":today.to_string(), "asOf":at}))
         }).await
     }
 }
@@ -320,6 +323,8 @@ mod tests {
         assert_eq!(chosen["groups"][0]["languages"][0]["share"], 0.25);
         assert_eq!(chosen["groups"][0]["languages"][1]["seconds"], 0.);
         assert_eq!(chosen["groups"][1]["seconds"], 40.);
+        assert_eq!(chosen["availableLanguages"], json!(["ja","und"]),
+            "Suggestions use recorded assessed languages before selection, never zero-only chosen languages");
         let mut invalid_choice: Config = serde_json::from_value(chosen["config"].clone()).unwrap();
         invalid_choice.selected_languages = vec!["Japanese".into()];
         assert!(s.save_language_comparison(invalid_choice,tz).await.is_err());
@@ -327,6 +332,7 @@ mod tests {
         assert_eq!(excluded["groups"][0]["seconds"], 0.);
         assert_eq!(excluded["groups"][0]["calendarDays"], 1);
         assert_eq!(excluded["groups"][0]["minutesPerDay"], 0.);
+        assert_eq!(excluded["availableLanguages"], json!([]));
         let count = s.read(|db| Ok(db.query_row("SELECT count(*) FROM events", [], |r| r.get::<_, i64>(0))?)).await.unwrap();
         assert_eq!(count, 5);
     }

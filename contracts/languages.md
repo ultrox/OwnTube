@@ -35,7 +35,12 @@ while setting up. Dates are strict YYYY-MM-DD, from 2000 onward, no later than
 today in the server time zone; both endpoints of a range are included.
 Within-group repeated/overlapping days count once. Across-group overlap is 422.
 
-Read returns `{config, groups, timezone, today, asOf}`. Each result group has
+Read returns `{config, groups, availableLanguages, timezone, today, asOf}`.
+`availableLanguages` lists current assessed language codes with positive playback
+in either group's saved periods and selected device/person scope, before the
+language selection is applied. The comparison picker only offers these codes;
+it never falls back to the global catalog or arbitrary typed codes.
+Each result group has
 `calendarDays`, `activeDays`, `includesToday`, `seconds`, `minutesPerDay`,
 `foregroundSeconds`, `backgroundSeconds`, `unspecifiedSeconds`, `reviewSeconds`
 and `languages: [{lang, seconds, minutesPerDay, share}]`. Share is a fraction

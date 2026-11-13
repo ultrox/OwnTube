@@ -24,11 +24,15 @@ Today is explicitly partial. On phones the editor stacks and the table has its
 own labelled horizontal scroll region.
 
 **Languages to compare** is a shared saved selection for both period groups.
-Use **+ Add language** to search, remove a chip to exclude a language, then
+Use **+ Add language** beside **+ Add period** in either column to search, remove a chip to exclude a language, then
 **Save & compare**. Results show only chosen languages plus their combined time
 and differences. **Use all languages** restores the full view. Shares stay relative
 to all recorded watch time; selecting two languages does not rebase their sum to
 100%. Period lengths are unchanged, and zero-watch selected languages stay visible.
+Suggestions contain only assessed languages with recorded playback in either
+saved period group for the current device/person scope. Saving changed periods
+refreshes the suggestions. The row-classification **Other…** picker still supports
+the full catalog so genuinely new audio languages can be classified.
 
 | File | Role |
 | --- | --- |
