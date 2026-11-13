@@ -61,7 +61,7 @@ async function versionLanguageAsset(file, contents) {
   return versioned;
 }
 let languageScript = sharedImports(await fs.readFile(`${languageRoot}/languages.js`, 'utf8'));
-for (const file of ['api.js', 'demo.js']) {
+for (const file of ['api.js', 'demo.js', 'comparison.js', 'language-picker.js']) {
   const name = await versionLanguageAsset(file, await fs.readFile(`${languageRoot}/${file}`));
   languageScript = languageScript.replaceAll(`./${file}`, `./${name}`);
 }

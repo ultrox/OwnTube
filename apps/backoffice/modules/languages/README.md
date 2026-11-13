@@ -6,11 +6,30 @@ standalone page in the approved backoffice design, served at `/modules/languages
 owner session cookie. Contract: [`contracts/languages.md`](../../../../contracts/languages.md).
 Design notes: [`docs/backoffice-design.md`](../../../../docs/backoffice-design.md) §14.
 
+## Compare periods
+
+Open **Compare periods**, add inclusive From/Through ranges under **Using it**
+and **Not using it**, then choose **Save & compare**. Group names and all ranges
+are saved on the server; reload them in any signed-in browser. Multiple ranges
+combine into one result per group. Repeated days count once; groups cannot share
+dates. Changing device/person keeps unsaved date edits. Conflicting saves retain
+the draft and offer an explicit reload of the saved version.
+
+The ruled comparison lists minutes per calendar day, total time, share and the
+first-minus-second differences (minutes/day and percentage points) per language.
+Unknown, mixed and no-speech time remain included. Each group shows selected days,
+recorded active days, context totals and review time. Empty groups have no average;
+days with no playback still count in a populated group's daily denominator.
+Today is explicitly partial. On phones the editor stacks and the table has its
+own labelled horizontal scroll region.
+
 | File | Role |
 | --- | --- |
 | `index.html`, `languages.css` | Page shell and styles. Self-contained; no fonts or files from elsewhere. |
 | `languages.js` | The UI (ES module): sign-in, scope, language table, one row per video, the video inspector. |
 | `api.js` | Live adapter: same-origin `fetch` with the owner cookie; `{error}` and unreadable answers → `ApiError`. |
+| `comparison.js` | Saved two-group date editor, daily comparisons, conflict handling and independent drafts. |
+| `language-picker.js` | Searchable occasional-language dialog, names/codes/native names and audited row saving. |
 | `demo.js` | Demo adapter: the same contract (video groups and bulk decisions included) in memory with fictional data. Loaded **only** for `?demo=1`; the check's mock serves it too. |
 | `check.mjs` | Behaviour check (mock contract or live local server). Not shipped. |
 | `tests/seed-dev.mjs` | Seeds fictional fixtures into a local dev server through the real APIs. Not shipped. |
@@ -56,6 +75,9 @@ The build copies `*.html|css|js|svg|woff2` to `dist/modules/languages/` and skip
     recorded version in that row's scope. `?` explicitly marks the language unknown;
     BCS means Bosnian / Croatian / Serbian (`bcs`). The saved choice is highlighted.
     Pending saves disable the row's buttons; failures stay inline, with Refresh.
+  - **Other…** opens a searchable picker (e.g. Russian/`ru`, Japanese/`ja`).
+    Selecting a result saves through the same revision-checked bulk flow.
+    Escape cancels and restores focus; rare languages do not become shortcuts.
   - The form opens on the existing manual choice, or else the most-watched known language. One
     *Save* or *Reset* covers **all N recorded versions in this scope**.
   - The inspector footer says **Close** until the language or note is edited, then

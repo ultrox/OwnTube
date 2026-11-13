@@ -90,6 +90,9 @@ async function startMock() {
       if (!authed) return send(res, 401, { error: 'Unauthorized' });
       if (url.pathname === '/api/session') return send(res, 200, { ok: true });
       try {
+        if (url.pathname === '/api/modules/languages/comparison') {
+          return send(res, 200, req.method === 'POST' ? await api.saveComparison(body) : await api.comparison(Object.fromEntries(url.searchParams)));
+        }
         if (url.pathname === '/api/modules/languages') {
           if (mock.fail === 'list500') return send(res, 500, { error: 'Database is busy.' });
           const params = Object.fromEntries(url.searchParams);
@@ -753,6 +756,90 @@ try {
       'live Save & close persists the selected language before closing');
     await p.shot('live-desktop');
   }
+
+  console.log('Searchable occasional languages');
+  const video = LIVE ? 'fxDeskDerby' : 'demoWeekly05';
+  await p.go(`${MODULE}#days=30&query=${video}`);
+  await p.waitFor((id) => !!document.querySelector(`[data-key="other:${id}"]`), video);
+  const group = async () => (await inPage('/api/modules/languages', { days: 30, group: 'video', query: video })).videos[0];
+  const beforeOther = await group();
+  const originalTotal = await ledgerSeconds();
+  for (const [search, lang] of [['Russian', 'ru'], ['Japanese', 'ja']]) {
+    await p.click(`[data-key="other:${video}"]`);
+    await p.waitFor(() => !!document.querySelector('.language-picker[open]'));
+    await p.click('#language-search'); await p.type(search);
+    ok(await p.eval((code) => document.querySelectorAll('[data-picker-code]').length === 1 && document.querySelector('[data-picker-code]').dataset.pickerCode === code, lang), `${search} is found by name`);
+    await p.click(`[data-picker-code="${lang}"]`);
+    await p.waitFor((id) => document.querySelector(`[data-row="${id}"] .quick-language`)?.getAttribute('aria-busy') === 'false'
+      && document.querySelector(`[data-row="${id}"] [data-quick-status]`)?.textContent.startsWith('Saved'), video);
+    ok((await group()).versions.every((v) => v.assessment.lang === lang), `${search} saves every scoped version through the audited bulk flow`);
+  }
+  ok((await ledgerSeconds()) === originalTotal && (await group()).versions.every((v) => v.revision === beforeOther.versions.find((old) => old.metadataId === v.metadataId && old.deviceId === v.deviceId).revision + 2), 'occasional languages preserve totals and add exactly two audit revisions');
+  await p.click(`[data-key="other:${video}"]`);
+  await p.click('#language-search'); await p.type('ja');
+  ok(await p.eval(() => !!document.querySelector('[data-picker-code="ja"]')), 'language codes are searchable too');
+  await p.size(390, 844, true);
+  ok(await p.eval(() => { const d = document.querySelector('.language-picker'); return d.scrollWidth <= d.clientWidth && d.getBoundingClientRect().right <= innerWidth; }), 'searchable picker fits the phone');
+  await p.shot(`${LIVE ? 'live' : 'mock'}-language-picker`);
+  await p.key('Escape', 27);
+  ok(await p.eval((id) => document.activeElement?.dataset.key === `other:${id}`, video), 'Escape closes the picker and restores row focus');
+
+  console.log('Saved period comparison');
+  const compareApi = (body) => p.eval(async (body) => {
+    const r = await fetch('/api/modules/languages/comparison', body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
+    return { status: r.status, data: await r.json() };
+  }, body);
+  const initial = (await compareApi()).data;
+  await compareApi({ baseRevision: initial.config.baseRevision, groups: [{ label: 'Using it', ranges: [] }, { label: 'Not using it', ranges: [] }] });
+  await p.size(1440, 1000);
+  await p.click('[data-key="view:compare"]');
+  await p.waitFor(() => !!document.querySelector('[data-compare="save"]'));
+  ok(await p.eval(() => document.querySelector('#f-days').parentElement.hidden && location.hash.includes('view=compare')), 'comparison has its own date ranges and a bookmarkable view');
+  const dates = Array.from({ length: 9 }, (_, n) => new Date(Date.parse(initial.today + 'T12:00:00Z') - n * 86400000).toISOString().slice(0, 10));
+  async function field(key, value) {
+    await p.eval((key, value) => { const el = document.querySelector(`[data-key="${key}"]`); el.value = value; el.dispatchEvent(new Event('input', { bubbles: true })); }, key, value);
+  }
+  for (const [i, start, end] of [[0, dates[2], dates[0]], [0, dates[2], dates[0]], [0, dates[8], dates[8]], [1, dates[6], dates[3]]]) {
+    await p.click(`[data-key="compare:add:${i}"]`);
+    const j = await p.eval((i) => document.querySelectorAll(`input[data-group="${i}"][data-compare-field="start"]`).length - 1, i);
+    await field(`compare:${i}:${j}:start`, start); await field(`compare:${i}:${j}:end`, end);
+  }
+  await p.click('[data-compare="save"]');
+  await p.waitFor(() => document.querySelector('[data-compare="save"]')?.textContent === 'Save & compare' && !!document.querySelector('.compare__table'));
+  const result = (await compareApi()).data;
+  ok(result.groups[0].calendarDays === 4 && result.groups[1].calendarDays === 4 && result.config.groups[0].ranges.length === 3, 'multiple ranges persist, with duplicate days counted only once');
+  ok(result.groups[0].includesToday && await p.eval(() => document.querySelector('.compare').textContent.includes('Today is partial')), 'today is identified as partial');
+  ok(result.groups.every((g) => Math.abs(g.minutesPerDay - g.seconds / 60 / g.calendarDays) < 1e-8
+    && Math.abs(g.languages.reduce((n, l) => n + l.seconds, 0) - g.seconds) < 1e-6), 'daily averages and language totals reconcile for both groups');
+  await p.shot(`${LIVE ? 'live' : 'mock'}-comparison-desktop`);
+  await p.go(`${MODULE}#days=30&query=${video}&view=compare`);
+  await p.waitFor(() => !!document.querySelector('.compare__table'));
+  ok(await p.eval(() => document.querySelectorAll('[data-compare-field="start"]').length === 4), 'saved ranges are restored after a fresh page load');
+  await field('compare:1:0:start', dates[0]); await field('compare:1:0:end', dates[0]);
+  await p.click('[data-compare="save"]');
+  ok(await p.waitFor(() => document.querySelector('.compare [role="alert"]')?.textContent.includes('both groups'))
+    && (await compareApi()).data.config.baseRevision === result.config.baseRevision, 'cross-group overlap is rejected without replacing saved periods');
+  await p.click('[data-compare="reload"]');
+  await p.waitFor((end) => document.querySelector('[data-key="compare:1:0:end"]')?.value === end, dates[3]);
+  const fresh = (await compareApi()).data;
+  await compareApi({ ...fresh.config, groups: fresh.config.groups.map((g, i) => ({ ...g, label: i ? g.label : 'Changed elsewhere' })) });
+  await field('compare:name:0', 'My unsaved label');
+  await p.click('[data-compare="save"]');
+  ok(await p.waitFor(() => document.querySelector('.compare [role="alert"]')?.textContent.includes('another browser'))
+    && await p.eval(() => document.querySelector('#group-0').value === 'My unsaved label'), 'concurrent saves are refused and your draft survives');
+  await p.click('[data-compare="reload"]');
+  await p.waitFor(() => document.querySelector('#group-0')?.value === 'Changed elsewhere');
+  const device = await p.eval(() => document.querySelector('#f-device option[value]:not([value=""])').value);
+  await field('compare:name:0', 'Draft kept across scopes');
+  await p.select('#f-device', device);
+  await p.waitFor(() => !!document.querySelector('.compare__totals') && !document.querySelector('.compare [role="alert"]'));
+  ok(await p.eval(() => document.querySelector('#group-0').value === 'Draft kept across scopes'), 'changing device keeps unsaved period edits');
+  await p.size(390, 844, true);
+  ok(await p.eval(() => document.documentElement.scrollWidth <= innerWidth && [...document.querySelectorAll('.compare input')].every((e) => e.getBoundingClientRect().right <= innerWidth)), 'comparison editor fits 390 px; only its labelled table scrolls');
+  await p.shot(`${LIVE ? 'live' : 'mock'}-comparison-phone`);
+  await p.click('[data-key="view:overview"]');
+  await p.waitFor((id) => !!document.querySelector(`[data-row="${id}"]`), video);
+  ok(await p.eval((id) => document.querySelector('#f-query').value === id && document.querySelector('[data-key="f:days:30"]').getAttribute('aria-pressed') === 'true', video), 'returning to Overview retains its search and period');
 } catch (error) {
   failures.push(`threw: ${error.message}`);
   console.log(`  FAIL threw: ${error.message}`);

@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
 mod inference;
+pub mod comparison;
 
 pub fn initialize(db: &Connection) -> rusqlite::Result<()> {
     db.execute_batch(
@@ -26,7 +27,10 @@ pub fn initialize(db: &Connection) -> rusqlite::Result<()> {
           revision INTEGER NOT NULL,action TEXT NOT NULL,assessment TEXT NOT NULL,
           note TEXT NOT NULL,created INTEGER NOT NULL,
           PRIMARY KEY(device,metadata_id,revision));
-         CREATE INDEX IF NOT EXISTS language_observations ON viewing_slices(device,metadata_id);",
+         CREATE INDEX IF NOT EXISTS language_observations ON viewing_slices(device,metadata_id);
+         CREATE TABLE IF NOT EXISTS language_comparison(
+           id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL,
+           config TEXT NOT NULL, updated INTEGER NOT NULL);",
     )
 }
 

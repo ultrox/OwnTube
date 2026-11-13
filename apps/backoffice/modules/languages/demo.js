@@ -174,6 +174,25 @@ async function sha256(text) {
 
 export async function createDemoApi({ external = false } = {}) {
   const now = Date.now();
+  let comparisonConfig = { baseRevision: 0, groups: [{ label: 'Using it', ranges: [] }, { label: 'Not using it', ranges: [] }] };
+  const localDate = (at) => {
+    const d = new Date(at);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  function comparisonDays(config) {
+    const sets = config.groups.map((g) => {
+      if (!g.label.trim() || g.label.length > 80 || g.ranges.length > 64) throw fail(422, 'Use a group name and at most 64 periods.');
+      const days = new Set();
+      for (const range of g.ranges) {
+        const start = Date.parse(`${range.start}T00:00:00Z`), end = Date.parse(`${range.end}T00:00:00Z`);
+        if (!Number.isFinite(start) || !Number.isFinite(end) || end < start || range.end > localDate(now) || (end - start) / DAY > 3660) throw fail(422, 'Choose valid start and end dates, no later than today.');
+        for (let t = start; t <= end; t += DAY) days.add(new Date(t).toISOString().slice(0, 10));
+      }
+      return days;
+    });
+    if ([...sets[0]].some((d) => sets[1].has(d))) throw fail(422, 'A date belongs to both groups. Choose non-overlapping groups.');
+    return sets;
+  }
   const midnight = (() => { const d = new Date(now); d.setHours(0, 0, 0, 0); return d.getTime(); })();
   const providers = [{ id: 'saved-evidence', label: 'Saved audio metadata' }, ...(external ? [{ id: 'external', label: 'Configured analysis API (demo)' }] : [])];
   const records = [];
@@ -251,6 +270,37 @@ export async function createDemoApi({ external = false } = {}) {
     session: () => later({ ok: true }, 20),
     login: () => later({ ok: true }, 20),
     logout: () => later({ ok: true }, 20),
+    saveComparison(config) {
+      comparisonDays(config);
+      if (config.baseRevision !== comparisonConfig.baseRevision) throw fail(409, 'Comparison changed in another browser. Reload saved periods before saving.');
+      comparisonConfig = structuredClone({ ...config, baseRevision: config.baseRevision + 1 });
+      return later(comparisonConfig);
+    },
+    comparison({ device = '', person = '' } = {}) {
+      const groups = comparisonDays(comparisonConfig).map((dates) => {
+        const active = new Set(), langs = new Map();
+        let seconds = 0, foregroundSeconds = 0, backgroundSeconds = 0, unspecifiedSeconds = 0, reviewSeconds = 0;
+        for (const r of records) {
+          const dev = DEVICES.find((d) => d.id === r.deviceId);
+          if ((device && dev.id !== device) || (person && dev.personId !== person)) continue;
+          for (const p of r.plays) {
+            if (!dates.has(localDate(p.at))) continue;
+            const time = p.fg + p.bg + p.un;
+            seconds += time; langs.set(r.assessment.lang, (langs.get(r.assessment.lang) || 0) + time);
+            if (time) active.add(localDate(p.at));
+            if (needsReview(r.assessment)) reviewSeconds += time;
+            foregroundSeconds += dev.contextOverride ? time : p.fg;
+            backgroundSeconds += dev.contextOverride ? 0 : p.bg;
+            unspecifiedSeconds += dev.contextOverride ? 0 : p.un;
+          }
+        }
+        return { seconds, foregroundSeconds, backgroundSeconds, unspecifiedSeconds, reviewSeconds,
+          calendarDays: dates.size, activeDays: active.size, includesToday: dates.has(localDate(now)),
+          minutesPerDay: dates.size ? seconds / 60 / dates.size : null,
+          languages: [...langs].map(([lang, time]) => ({ lang, seconds: time, minutesPerDay: dates.size ? time / 60 / dates.size : null, share: seconds ? time / seconds : null })) };
+      });
+      return later({ config: comparisonConfig, groups, today: localDate(now), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, asOf: now });
+    },
     languages(q) {
       const { n, start, rows } = scopeOf(q);
       const sum = (f) => rows.reduce((s, x) => s + f(x), 0);

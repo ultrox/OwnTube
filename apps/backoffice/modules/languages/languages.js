@@ -2,6 +2,8 @@
 // Live by default. `?demo` loads an in-memory sample adapter instead, behind a permanent demo strip;
 // demo mode makes no /api requests and live mode never contains sample data.
 import { ApiError, liveApi } from './api.js';
+import { createComparison } from './comparison.js';
+import { openLanguagePicker } from './language-picker.js';
 import { versionKey, findVersion, versionPickerHTML, savedEvidence, EvidenceDigests } from '/shared/recorded-versions.js';
 
 const params = new URLSearchParams(location.search);
@@ -111,7 +113,13 @@ const state = {
   error: null,
   dialog: null,
   quick: new Map(),
+  view: new URLSearchParams(location.hash.slice(1)).get('view') === 'compare' ? 'compare' : 'overview',
 };
+const comparison = createComparison({
+  api: () => api,
+  scope: () => ({ device: state.filters.device, person: state.filters.person }),
+  render, expired: () => signedOut('Your session ended. Sign in again.'), esc, spent, langName, demo: DEMO,
+});
 let generation = 0;
 let linkedMetadata = new URLSearchParams(location.hash.replace(/^#/, '')).get('metadata');
 
@@ -138,6 +146,7 @@ function writeFilters() {
   if (f.status !== 'all') h.set('status', f.status);
   if (f.page > 1) h.set('page', f.page);
   if (linkedMetadata) h.set('metadata', linkedMetadata);
+  if (state.view === 'compare') h.set('view', 'compare');
   const next = h.toString();
   if (location.hash.replace(/^#/, '') !== next) history.replaceState(null, '', `${location.pathname}${location.search}${next ? `#${next}` : ''}`);
 }
@@ -148,6 +157,7 @@ async function load({ keepPage = false } = {}) {
   if (!keepPage) state.filters.page = Math.max(1, state.filters.page);
   writeFilters();
   const mine = ++generation;
+  if (state.auth === 'signedIn' && state.view === 'compare') comparison.load();
   state.loading = true;
   render();
   try {
@@ -196,6 +206,7 @@ function readable(data) {
 }
 
 function signedOut(message = '') {
+  comparison.reset();
   state.quick.clear();
   state.auth = 'signedOut';
   state.data = null;
@@ -326,7 +337,7 @@ function workspaceHTML() {
           <select class="select" id="f-device" data-action="device" data-key="f:device"><option value="">All devices</option>${deviceOptions()}</select></div>
         ${people.length > 1 ? `<div><label class="label" for="f-person">Person</label>
           <select class="select" id="f-person" data-action="person" data-key="f:person"><option value="">Everyone</option>${people.map((p) => `<option value="${esc(p.id)}" ${f.person === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></div>` : ''}
-        <div><span class="label" id="f-days">Period</span>
+        <div ${state.view === 'compare' ? 'hidden' : ''}><span class="label" id="f-days">Period</span>
           <div class="seg" role="group" aria-labelledby="f-days">${DAYS.map((n) => `<button type="button" aria-pressed="${f.days === n}" data-action="days" data-value="${n}" data-key="f:days:${n}">${n} days</button>`).join('')}</div></div>
       </div>
       <div class="side__note">
@@ -340,11 +351,16 @@ function workspaceHTML() {
   if (state.error && !d) body = problemHTML(state.error);
   else if (!d) body = '<p class="boot">Loading languages…</p>';
   else body = (state.error ? problemHTML(state.error) : '') + ledgerHTML(d) + languagesHTML(d) + videosHTML(d);
+  if (state.view === 'compare') body = comparison.html();
 
   return `<div class="ws">${side}
     <section class="content"><div class="page">
       <div class="page__head"><h1 class="title" id="title" tabindex="-1" data-heading>Languages</h1>
         <p class="lede">Watch time by the language of the audio that actually played, background included.</p></div>
+      <div class="view-tabs" role="group" aria-label="Languages view">
+        <button class="btn btn--quiet" type="button" data-action="view" data-value="overview" aria-pressed="${state.view === 'overview'}" data-key="view:overview">Overview</button>
+        <button class="btn btn--quiet" type="button" data-action="view" data-value="compare" aria-pressed="${state.view === 'compare'}" data-key="view:compare">Compare periods</button>
+      </div>
       ${body}
     </div></section>
   </div>`;
@@ -587,6 +603,7 @@ function quickLanguagesHTML(g) {
       ${QUICK_LANGS.map(([code, label]) => `<button type="button" data-action="quick-language" data-id="${esc(id)}" data-lang="${code}" data-key="quick:${esc(id)}:${code}"
         aria-pressed="${current === code}" aria-label="${esc(langName(code))}" title="Set ${esc(scope)} to ${esc(langName(code))}" ${disabled ? 'disabled' : ''}>${label}</button>`).join('')}
     </div>
+    <button type="button" class="btn btn--sm btn--quiet" data-action="other-language" data-id="${esc(id)}" data-key="other:${esc(id)}" ${disabled ? 'disabled' : ''}>Other…</button>
     <span class="why">${g.versions.length > 1 ? `All ${g.versions.length} versions` : 'Set language'}</span>
     ${youtubeLinkHTML(g, 'row')}
     ${job ? `<span class="${job.error ? 'flag-review' : 'why'}" data-quick-status role="${job.error ? 'alert' : 'status'}">${esc(job.text)}</span>` : ''}
@@ -947,7 +964,7 @@ function renderDialog() {
 async function quickLanguage(id, lang) {
   const g = state.data?.videos.find((g) => String(g.id) === id);
   if (!g || state.loading || state.error || state.quick.get(id)?.busy || state.quick.get(id)?.refresh
-    || !QUICK_LANGS.some(([code]) => code === lang)) return;
+    || !(lang === 'und' || knownLang(lang))) return;
   const job = { busy: true, text: 'Saving…' };
   state.quick.set(id, job);
   render();
@@ -1089,11 +1106,25 @@ function say(text) {
 /* ------------------------------------------------------------------ events */
 
 document.addEventListener('click', (e) => {
+  const compare = e.target.closest('[data-compare]');
+  if (compare && !compare.disabled) { comparison.click(compare); return; }
   const el = e.target.closest('[data-action]');
   if (!el || el.disabled) return;
   const a = el.dataset.action;
   const f = state.filters;
   switch (a) {
+    case 'view':
+      state.view = el.dataset.value; writeFilters(); render();
+      if (state.view === 'compare') comparison.load();
+      break;
+    case 'other-language': {
+      const g = state.data?.videos.find((v) => String(v.id) === el.dataset.id);
+      if (g && !state.quick.get(String(g.id))?.busy) openLanguagePicker({
+        id: String(g.id), title: g.title || g.videoId, current: g.assessment?.lang,
+        esc, langName, save: quickLanguage, returnFocus: el,
+      });
+      break;
+    }
     case 'days': f.days = Number(el.dataset.value) || 7; f.page = 1; load(); break;
     case 'status': f.status = el.dataset.value; f.page = 1; load(); break;
     case 'language': f.language = f.language === el.dataset.lang ? 'all' : el.dataset.lang; f.page = 1; load(); break;
@@ -1147,6 +1178,7 @@ document.addEventListener('change', (e) => {
 let queryTimer = null;
 document.addEventListener('input', (e) => {
   const t = e.target;
+  if (t.dataset.compareField) { comparison.input(t); return; }
   if (t.dataset.action === 'query') {
     clearTimeout(queryTimer);
     queryTimer = setTimeout(() => { state.filters.query = t.value.slice(0, 200); state.filters.page = 1; load(); }, 300);
@@ -1199,7 +1231,11 @@ dlg.addEventListener('close', () => {
 
 window.addEventListener('hashchange', () => {
   const next = readFilters();
-  if (JSON.stringify(next) !== JSON.stringify(state.filters)) { state.filters = next; if (state.auth === 'signedIn') load({ keepPage: true }); }
+  const view = new URLSearchParams(location.hash.slice(1)).get('view') === 'compare' ? 'compare' : 'overview';
+  if (view !== state.view || JSON.stringify(next) !== JSON.stringify(state.filters)) {
+    state.view = view; state.filters = next;
+    if (state.auth === 'signedIn') load({ keepPage: true });
+  }
 });
 
 boot();

@@ -64,6 +64,8 @@ export const liveApi = {
   logout: () => request('POST', '/api/logout', {}, { emptyOk: true }),
   // {days, device, person, language, status, query, page, group: 'video'}
   languages: (params) => request('GET', `/api/modules/languages?${query(params)}`),
+  comparison: (params) => request('GET', `/api/modules/languages/comparison?${query(params)}`),
+  saveComparison: (body) => request('POST', '/api/modules/languages/comparison', body),
   evidence: (device, metadata) => request('GET', `/api/modules/languages/evidence?${query({ device, metadata })}`),
   // One version: {deviceId, metadataId, baseRevision, action: 'manual'|'analyze'|'reset', lang?, note?, provider?}
   assess: (body) => request('POST', '/api/modules/languages/assessment', body),

@@ -7,6 +7,50 @@ versions; assessments remain audited per device/version.
 
 ## Read
 
+### Saved period comparison
+
+`GET /api/modules/languages/comparison?device=&person=` reads the owner's single
+saved two-group comparison and calculates current assessed language watch time.
+It is independent of Overview's days, language, status and search filters.
+
+`POST /api/modules/languages/comparison` saves the complete configuration:
+
+```json
+{
+  "baseRevision": 0,
+  "groups": [
+    {"label": "Using it", "ranges": [{"start": "2026-10-01", "end": "2026-10-14"}]},
+    {"label": "Not using it", "ranges": [{"start": "2026-09-01", "end": "2026-09-14"}]}
+  ]
+}
+```
+
+Both endpoints require the owner session. Save returns the configuration with
+the next `baseRevision`; stale revisions fail atomically with 409. Configurations
+are stored in the singleton `language_comparison` table and survive restart.
+There are exactly two groups, each with a nonempty label up to 80 characters,
+up to 64 ranges and at most 3,660 unique calendar days. Empty groups are allowed
+while setting up. Dates are strict YYYY-MM-DD, from 2000 onward, no later than
+today in the server time zone; both endpoints of a range are included.
+Within-group repeated/overlapping days count once. Across-group overlap is 422.
+
+Read returns `{config, groups, timezone, today, asOf}`. Each result group has
+`calendarDays`, `activeDays`, `includesToday`, `seconds`, `minutesPerDay`,
+`foregroundSeconds`, `backgroundSeconds`, `unspecifiedSeconds`, `reviewSeconds`
+and `languages: [{lang, seconds, minutesPerDay, share}]`. Share is a fraction
+of **all** watch time, including unknown/mixed/no-speech. Empty groups have a
+null daily average. Selected days with no recording count in the denominator;
+recorded active days are separate. A group with selected days but no playback
+has zero time and no language rows; shares are undefined, not zero.
+
+Local midnight boundaries respect DST. Measurements use the existing compact
+facts, legacy boundary clipping, assessment precedence and device context
+corrections, in a consistent read transaction. Cumulative measurements are never
+interpolated. Today counts as one partial calendar day and is flagged explicitly.
+No recording or language audit rows are changed by comparison saves.
+
+### Overview
+
 `GET /api/modules/languages?days=7&device=&person=&language=all&status=all&query=&page=1`
 
 Days: 7/30/90 in the server time zone. `language`: `all` or a language code,

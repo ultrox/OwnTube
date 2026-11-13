@@ -549,6 +549,14 @@ async fn routes_require_owner_and_run_real_saved_evidence_analysis() {
         StatusCode::UNAUTHORIZED
     );
     let cookie = Some("observer_session=owner-session");
+    let comparison = "/api/modules/languages/comparison";
+    let config = json!({"baseRevision":0,"groups":[{"label":"Using it","ranges":[]},{"label":"Not using it","ranges":[]}]});
+    for method in ["GET", "POST"] {
+        assert_eq!(request(&app, method, comparison, None, config.clone()).await.0, StatusCode::UNAUTHORIZED);
+    }
+    assert_eq!(request(&app, "POST", comparison, cookie, config.clone()).await.0, StatusCode::OK);
+    assert_eq!(request(&app, "POST", comparison, cookie, config).await.0, StatusCode::CONFLICT);
+    assert_eq!(request(&app, "GET", comparison, cookie, Value::Null).await.1["config"]["baseRevision"], 1);
     for query in [
         "?days=1",
         "?page=0",

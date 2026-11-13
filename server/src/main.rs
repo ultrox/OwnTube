@@ -415,6 +415,7 @@ fn router(app: App, public: PathBuf) -> Router {
         .route("/api/languages", get(languages))
         .route("/api/language-videos", get(language_videos))
         .route("/api/modules/languages", get(languages::dashboard))
+        .route("/api/modules/languages/comparison", get(languages::comparison::get).post(languages::comparison::save))
         .route("/api/modules/languages/evidence", get(languages::evidence))
         .route("/api/modules/languages/assessment", post(languages::assess))
         .route("/api/diagnostics", get(diagnostics))
