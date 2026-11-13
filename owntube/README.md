@@ -21,29 +21,50 @@ OwnTube now requires Android 6+ for Keystore-backed AES; the upstream variants r
 ## Capture and delivery
 
 - ExoPlayer's actual `isPlaying` and `isPlayingAd`, not UI button intent, control capture.
-- Approximately one-second monotonic intervals are persisted as immutable SQLite events on a
-  dedicated disk executor. A process kill can lose the not-yet-persisted tail, not committed records.
+- Approximately one-second monotonic measurements feed `ViewingRecords`. Starting with
+  **32.72-owntube.5 / versionCode 2466**, a dedicated disk executor persists cumulative checkpoints
+  (`kind: "viewing"`) with stable event/viewing IDs and increasing revisions. Higher revisions replace
+  queued/server totals rather than adding them. A process kill can lose the not-yet-persisted tail,
+  not committed records.
 - Pause, buffer, seek, source, speed and visibility transitions split intervals. Watch time is
   elapsed wall time; 2× speed does not double it. Gaps over 20 seconds are not extrapolated.
 - Coverage is attached only for continuous plausible positions with a known non-live duration.
   Seek jumps never contribute coverage. Unknown context is omitted; started/stopped player-host
   activities distinguish foreground/background. Incognito playback is excluded.
-- This first collector sends **watch events only**. Search collection and JEV filtering are future work.
+- Records split at 15-minute UTC boundaries and metadata/evidence/language/context changes.
+  Coverage is a merged array of ranges; unknown coverage is `[]`. Replays add time, not duplicate
+  coverage. Each accumulator seals before 501 disjoint ranges or an invalid clock-span change;
+  memory retains at most 64 records in current/previous buckets. Sealed records remain durable.
+- Source/process restarts and device/video changes start fresh identities. New checkpoints include
+  the whole accumulated total; never reconstruct an active session from only the remaining queue.
+- This collector sends **playback only**. Search collection and JEV filtering are future work.
 - SQLite binds each event to its original production origin and device. Switching keys to another
   device retains the original queue, which resumes only when that device's key is paired again.
 - Unique WorkManager work uploads while active; constrained periodic work provides a 15-minute
   fallback. A process-wide lock also serializes periodic/one-shot workers and key rotation.
-- Receipts are validated in full, then accepted IDs and receipt metadata are committed together.
-  Partial, malformed, foreign and lost receipts cannot delete unacknowledged records.
+- Receipts are validated in full, then matching accepted payloads and receipt metadata are committed
+  together. An old acknowledgement or rejection cannot remove/hold a newer queued revision.
+  Partial, malformed, foreign and lost receipts cannot delete unacknowledged records. Acknowledged
+  counts measure uploaded checkpoints, not extra watch time. Held replacements remain held.
 - Backoff with jitter is persisted, respects longer `Retry-After`, and survives restarts.
   401/403 pause delivery until successful pairing. 409/413/422 split batches; isolated failures
   remain held with an error and can be retried unchanged or exported.
 - The client follows no redirects and sends no cookies. It uses a 20-second call timeout,
   at most 100 records / 3 MB including escaped evidence per batch.
 
+### Upgrade from immutable watch events
+
+Install using the existing signing key without clearing app data. SQLite schema stays at v2:
+pairing, pending/held legacy rows, evidence and delivery state are preserved. Legacy `watch` rows
+drain unchanged alongside new `viewing` rows; never convert those old measurements into new IDs
+because a lost response may already have committed them on the server. Transient `WatchSegments`
+samples are no longer stored separately. Only newly measured time enters the new accumulator.
+
+Public protocol and valid examples: https://ytdash.gromobran.com/android-integration.html.
+
 ## Source evidence
 
-Watch events now reference SHA-256-addressed evidence snapshots. The digest is computed over the
+Viewing records and legacy watch events reference SHA-256-addressed evidence snapshots. The digest is computed over the
 exact UTF-8 JSON string; the ingestion envelope sends that same **string**, not a JSON object.
 SQLite schema v2 migrates v1 queues without rewriting their events or delivery state. Event and
 snapshot are committed together. Snapshots are deduplicated in storage and each request, retained
@@ -119,6 +140,22 @@ increment it for each installed release, and keep its suffix explicit.
 Tests cover wall-time/coverage, pause/buffer/ad-state intervals, seeks, visibility, device changes,
 unknown metadata, incognito, receipt validation, partial acknowledgements, durable restart,
 lost responses/idempotent retries, key rotation, Retry-After, rejected-event isolation and export.
+Viewing regressions cover bucket splitting, replay/pause totals, immutable snapshots/metadata,
+fresh restart identities, backwards clocks, range bounds, stale/conflicting/decreasing revisions,
+in-flight receipt/rejection races, held replacement and mixed legacy/cumulative restart recovery.
+Run the optional HTTP contract test against a freshly created local Observer database:
+
+```sh
+python3 owntube/test-observer.py /path/to/youtube-observer/target/debug/youtube-observer
+```
+
+The script starts/stops an isolated loopback backend and supplies temporary test credentials.
+It checks the actual accumulator, SQLite outbox and uploader against server replacement semantics,
+including a lost receipt, concurrent revision, restart, evidence, stale retry, legacy backlog and conflict.
+Verification on 2026-11-13: all 45 unit regressions and this separate HTTP contract test passed;
+signed `32.72-owntube.5` release APKs built successfully. The ARM64 APK was installed as an update
+on the Shield (`192.168.8.245:5555`) on 2026-11-13; versionCode 2466 and the retained app-data
+directory were verified. Post-update playback capture has not yet been checked on-device.
 Evidence tests cover source provenance, unavailable/foreign metadata, translated-caption filtering,
 partial getter failures, selected-format fields, immutable segment binding, UTF-8 hashing and size
 limits, v1 migration, transaction rollback, cross-device retention, and exact-byte retry/export.

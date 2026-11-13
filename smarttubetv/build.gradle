@@ -163,8 +163,8 @@ android {
             applicationId "com.ultrox.owntube"
             minSdkVersion 23
             targetSdkVersion project.properties.compileSdkVersion
-            versionCode 2465
-            versionNameSuffix "-owntube.4"
+            versionCode 2466
+            versionNameSuffix "-owntube.5"
             matchingFallbacks = ['ststable']
         }
         stbeta {

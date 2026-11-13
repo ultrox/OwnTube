@@ -16,12 +16,15 @@ import com.google.android.exoplayer2.Timeline;
 /** Small ExoPlayer adapter. Actual playing state, ad state and discontinuities drive capture. */
 public final class PlayerCollector implements Player.EventListener, Application.ActivityLifecycleCallbacks {
     public interface VideoSource { WatchSegments.VideoInfo current(); }
+    interface WallClock { long now(); }
     private final Tracking tracking;
+    private final WallClock wallClock;
     private final VideoSource source;
     private final Activity host;
     private final Application application;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final WatchSegments segments;
+    private final ViewingRecords viewings;
     private final SelectedEvidence selectedEvidence = new SelectedEvidence();
     private Player player;
     private boolean visible, seeking, awaitingSource;
@@ -37,12 +40,17 @@ public final class PlayerCollector implements Player.EventListener, Application.
         return Tracking.supported(context) ? new PlayerCollector(context, source) : null;
     }
     PlayerCollector(Context context, VideoSource source) {
+        this(context, source, System::currentTimeMillis);
+    }
+    PlayerCollector(Context context, VideoSource source, WallClock wallClock) {
         this.source = source;
+        this.wallClock = wallClock;
         tracking = Tracking.get(context);
         host = activity(context);
         application = (Application) context.getApplicationContext();
         visible = host != null && host.getWindow().getDecorView().isShown();
-        segments = new WatchSegments(tracking::persist);
+        viewings = new ViewingRecords(tracking::persist);
+        segments = new WatchSegments(viewings::add);
     }
 
     public void attach(Player player) {
@@ -56,13 +64,13 @@ public final class PlayerCollector implements Player.EventListener, Application.
 
     public void beforeVideoChange() {
         sample(true, true);
-        segments.reset();
+        resetCapture();
         awaitingSource = true;
     }
 
     public void preparingSource() {
         sample(true, true);
-        segments.reset();
+        resetCapture();
         awaitingSource = false;
         seeking = false;
     }
@@ -73,7 +81,7 @@ public final class PlayerCollector implements Player.EventListener, Application.
             player.removeListener(this);
             application.unregisterActivityLifecycleCallbacks(this);
             player = null;
-            segments.reset();
+            resetCapture();
             UploadWorker.schedule(tracking.context, false);
         }
         handler.removeCallbacks(tick);
@@ -88,17 +96,18 @@ public final class PlayerCollector implements Player.EventListener, Application.
                     video != null && !video.incognito && player.isPlaying() && !player.isPlayingAd();
             if (active) video = selectedEvidence.attach(video, player);
             String context = host == null ? null : visible ? "foreground" : "background";
-            segments.sample(new WatchSegments.Frame(SystemClock.elapsedRealtime(), System.currentTimeMillis(),
+            segments.sample(new WatchSegments.Frame(SystemClock.elapsedRealtime(), wallClock.now(),
                     player.getCurrentPosition(), player.getDuration(), player.getPlaybackParameters().speed,
                     active, pair == null ? null : pair.deviceId, context, video), boundary);
         } catch (RuntimeException e) {
             // Collector failures must not stop video playback. Do not infer time across this gap.
-            segments.reset();
+            resetCapture();
             tracking.localError = "Playback capture interrupted; check tracking status.";
         }
     }
 
     @Override public void onIsPlayingChanged(boolean isPlaying) { sample(false, false); }
+    private void resetCapture() { segments.reset(); viewings.reset(); }
     @Override public void onPlayerStateChanged(boolean playWhenReady, int state) { sample(false, false); }
     @Override public void onPlaybackParametersChanged(PlaybackParameters parameters) { sample(false, false); }
     @Override public void onPlayerError(ExoPlaybackException error) { sample(false, true); }

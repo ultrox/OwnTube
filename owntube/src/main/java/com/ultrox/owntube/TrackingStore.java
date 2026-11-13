@@ -16,7 +16,7 @@ import java.util.Set;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-/** Immutable, device-bound records. Kept outside Android backup along with delivery state. */
+/** Device-bound legacy events and replaceable cumulative checkpoints, outside Android backup. */
 final class TrackingStore extends SQLiteOpenHelper {
     static final class Event {
         final String id, json, evidenceId, evidence;
@@ -75,12 +75,28 @@ final class TrackingStore extends SQLiteOpenHelper {
         SQLiteDatabase db = getWritableDatabase();
         db.beginTransaction();
         try {
+            boolean replace = false;
+            try (Cursor old = db.rawQuery("SELECT origin,device,payload FROM events WHERE event_id=?", new String[]{event.getString("eventId")})) {
+                if (old.moveToFirst()) {
+                    if (!YtdashApi.ORIGIN.equals(old.getString(0)) || !device.equals(old.getString(1))) throw new IOException("Record belongs to another device");
+                    JSONObject previous = new JSONObject(old.getString(2));
+                    if ("viewing".equals(previous.optString("kind")) && "viewing".equals(event.optString("kind"))) {
+                        long revision = event.getLong("revision"), prior = previous.getLong("revision");
+                        if (revision < prior || (revision == prior && payload.equals(old.getString(2)))) { db.setTransactionSuccessful(); return; }
+                        if (revision == prior) throw new IOException("Conflicting viewing revision");
+                        ViewingRecords.validateSuccessor(previous, event);
+                        replace = true;
+                    } else if (payload.equals(old.getString(2))) { db.setTransactionSuccessful(); return; }
+                    else throw new android.database.SQLException("Event ID already has different data");
+                }
+            }
             if (evidence != null) {
                 ContentValues snapshot = new ContentValues();
                 snapshot.put("id", evidence.id); snapshot.put("snapshot", evidence.json);
                 db.insertWithOnConflict("evidence", null, snapshot, SQLiteDatabase.CONFLICT_IGNORE);
             }
-            db.insertOrThrow("events", null, values);
+            if (replace) db.update("events", values, "event_id=?", new String[]{event.getString("eventId")});
+            else db.insertOrThrow("events", null, values);
             db.setTransactionSuccessful();
         } finally { db.endTransaction(); }
     }
@@ -177,13 +193,12 @@ final class TrackingStore extends SQLiteOpenHelper {
         SQLiteDatabase db = getWritableDatabase();
         db.beginTransaction();
         try {
-            int deleted = 0;
-            for (String id : ids) {
-                deleted += db.delete("events", "origin=? AND device=? AND event_id=? AND held=0",
-                        new String[]{YtdashApi.ORIGIN, device, id});
+            for (Event event : submitted) if (ids.contains(event.id)) {
+                db.delete("events", "origin=? AND device=? AND event_id=? AND payload=? AND held=0",
+                        new String[]{YtdashApi.ORIGIN, device, event.id, event.json});
             }
             State state = state(device);
-            state.lastAck = now; state.acknowledged += deleted;
+            state.lastAck = now; state.acknowledged += ids.size();
             state.failures = 0; state.nextAttempt = 0; state.error = ""; state.paused = false;
             saveState(db, device, state);
             db.execSQL("DELETE FROM evidence WHERE NOT EXISTS (SELECT 1 FROM events WHERE evidence_id=evidence.id)");
@@ -194,8 +209,8 @@ final class TrackingStore extends SQLiteOpenHelper {
     synchronized void hold(String device, Event event, int status) {
         ContentValues values = new ContentValues();
         values.put("held", 1); values.put("error", "HTTP " + status);
-        getWritableDatabase().update("events", values, "origin=? AND device=? AND event_id=?",
-                new String[]{YtdashApi.ORIGIN, device, event.id});
+        getWritableDatabase().update("events", values, "origin=? AND device=? AND event_id=? AND payload=?",
+                new String[]{YtdashApi.ORIGIN, device, event.id, event.json});
     }
 
     synchronized void retryHeld(String device) {

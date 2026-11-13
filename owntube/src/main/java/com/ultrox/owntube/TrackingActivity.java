@@ -106,7 +106,8 @@ public final class TrackingActivity extends Activity {
             try { startActivityForResult(intent, 10); }
             catch (RuntimeException e) { message.setText("No document picker available on this device."); }
         });
-        message = text(column, "Only actual playback is collected. Pauses, buffering, ads and incognito videos are excluded. " +
+        message = text(column, "Cumulative viewing records replace their totals on each revision. Acknowledgements count uploaded checkpoints, not extra watch time. " +
+                "Only actual playback is collected. Pauses, buffering, ads and incognito videos are excluded. " +
                 "Previously queued events still upload when capture is paused.", 15);
         button(column, "Back", this::finish);
         pairButton.requestFocus();

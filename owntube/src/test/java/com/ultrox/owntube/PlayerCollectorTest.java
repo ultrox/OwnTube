@@ -48,7 +48,9 @@ public class PlayerCollectorTest {
                 default: throw new AssertionError(method.getName());
             }
         });
-        collector = new PlayerCollector(activity, () -> new WatchSegments.VideoInfo("abcdefghijk", "Test", "Channel", false, false, false));
+        // Looper time is simulated; the JVM's wall clock does not advance with idleFor.
+        collector = new PlayerCollector(activity, () -> new WatchSegments.VideoInfo("abcdefghijk", "Test", "Channel", false, false, false),
+                () -> ViewingRecordsTest.BASE + android.os.SystemClock.elapsedRealtime());
         collector.attach(player);
         collector.onActivityStarted(activity);
         shadowOf(Looper.getMainLooper()).idle();
@@ -71,7 +73,8 @@ public class PlayerCollectorTest {
         second(4000);
         playing = false; listener.onIsPlayingChanged(false);
         second(4000); second(4000);
-        assertEquals(2, tracking.store.count("device-a", false));
+        assertEquals(1, tracking.store.count("device-a", false));
+        assertEquals(2, new JSONObject(tracking.store.pending("device-a").get(0).json).getDouble("seconds"), .001);
     }
 
     @Test public void seekDoesNotMeasureTimeUntilThePlayerProcessesIt() throws Exception {
@@ -80,9 +83,11 @@ public class PlayerCollectorTest {
         second(120_000); second(120_000);
         listener.onSeekProcessed();
         second(121_000);
-        assertEquals(2, tracking.store.count("device-a", false));
-        JSONObject last = new JSONObject(tracking.store.pending("device-a").get(1).json);
-        assertEquals(120, last.getJSONArray("coverage").getDouble(0), 0.001);
+        assertEquals(1, tracking.store.count("device-a", false));
+        JSONObject last = new JSONObject(tracking.store.pending("device-a").get(0).json);
+        assertEquals(2, last.getDouble("seconds"), .001);
+        assertEquals(2, last.getJSONArray("coverage").length());
+        assertEquals(120, last.getJSONArray("coverage").getJSONArray(1).getDouble(0), 0.001);
     }
 
     @Test public void stoppedHostWithPlayingAudioIsBackground() throws Exception {
