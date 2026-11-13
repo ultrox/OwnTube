@@ -81,7 +81,23 @@ The Languages follow-up `owntube-languages-20261113-2` uses the same process fro
 commit `4369a6835`, with mobile wrapping and content-hashed module assets. Its
 backend binary is identical to `-1`; the same backup and image-only rollback apply.
 
-## Current grouped History release
+## Current video History and selected-audio release
+
+`owntube-video-audio-20261113-1`, source `3a4dbaec8`, groups History once per
+video across the scope, retaining visits and exact evidence underneath. It decodes
+the actual selected audio in historical browser/TV evidence and preserves manual
+decisions. The AMD64 candidate passed 21 scopes, 470 exact evidence versions and
+desktop/phone checks against a fresh online backup.
+Post-deployment public HTTPS checks passed, including release assets, exact
+evidence, corrected languages and phone layouts. Production matched all six
+frozen baselines and preserved credentials, assessments and the TV correction.
+
+Chrome 0.2.1 is a separate collector update staged at its existing installed path;
+reload YouTube Observer and refresh YouTube tabs to activate it.
+Release identity, verification and image-only rollback:
+[`server/README.md`](../server/README.md#current-release-owntube-video-audio-20261113-1).
+
+## Previous grouped History release
 
 `owntube-grouped-history-20261113-1`, source commit `2e44ac20a`, groups History
 metadata revisions within their recorded viewing. History and Languages share
@@ -92,7 +108,7 @@ The non-root AMD64 candidate passed 21 production-copy scope comparisons, all 46
 evidence versions, source-table preservation and desktop/phone browser checks.
 Fresh online backups include all 12 assessments and the active TV foreground
 override. Release identity, verification and image-only rollback:
-[`server/README.md`](../server/README.md#current-release-owntube-grouped-history-20261113-1).
+[`server/README.md`](../server/README.md#previous-release-owntube-grouped-history-20261113-1).
 
 ## Previous review release
 

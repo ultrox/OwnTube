@@ -301,7 +301,72 @@ All 45 Android unit regressions, a disposable-backend HTTP contract test and the
 The ARM64 APK was installed on the Shield on 2026-11-13; versionCode 2466 and the retained app-data
 directory were verified. Post-update playback capture has not yet been checked on-device.
 
-### Current release: `owntube-grouped-history-20261113-1`
+### Current release: `owntube-video-audio-20261113-1`
+
+Source `3a4dbaec8`, deployed through
+`kamal app boot -c deploy/deploy.yml --version owntube-video-audio-20261113-1`.
+Production container `1026a9a5e936`; AMD64 image
+`sha256:b4954f4e258cfdb5196afae3f93c25271bf0deef36f00dec4e895a4e6cb96f1a`.
+Source archive SHA-256:
+`13288a5e32e79b8bd608275f4505e9bf020eff13480de5ebd7fd0c97627ece0a`.
+Release directory:
+`/home/marko/releases/youtube-observer/owntube-video-audio-20261113-1/`.
+
+History now has one row per video across the selected period/device/person scope.
+Nested visits retain their device, day, recorded viewing ID and evidence versions.
+Time sums all contributions; coverage unions ranges. Daily playback totals remain
+actual-day totals, separately labelled from the rows' last-watched dates.
+
+Languages decodes saved selected audio from YouTube's bounded protobuf track IDs,
+legacy IDs and TV original/dubbed labels. Default audio, captions and text do not
+substitute for the selected track. Exact evidence, explicit decisions and resets
+are preserved. On the fresh 281-video / 470-version copy, review videos fell from
+256 to 137; 220 additional versions resolved, and 262 versions use selected-audio
+metadata. The reported English tracks resolve correctly; the Zigbee video's
+German original and English dub remain distinct. An older Croatia-video version
+saved only `und` and remains unresolved.
+
+Chrome 0.2.1 (`language-v3`) also saves raw selected IDs and selected original/dub
+metadata. A real isolated YouTube player passed English → German → English
+switching with the built extension. Its files are staged in the existing installed
+extension directory; **reload YouTube Observer in chrome://extensions, then
+refresh YouTube tabs**. Running-browser activation is not verified. Pairing and
+queue identity are retained. The TV was not restarted or reinstalled.
+
+Checks: 37 Rust tests (optional migration test ignored), Clippy with warnings
+denied, 28 extension tests, the Chrome offline/retry/restart ingestion pipeline,
+110 History mock + 24 live checks, and 83 Languages mock + 19 live checks.
+The actual non-root AMD64 candidate passed 21 scope comparisons, 470 exact
+evidence versions, 714 paged searches, desktop/phone checks, nested TV-visit
+selection, and selected-version Languages links. Six frozen baselines matched;
+all source records, credentials, 12 assessments, one TV context override and both
+historical digest mismatches were preserved. Candidate container and SSH tunnel
+were removed after verification.
+
+Post-deployment public HTTPS checks passed: release asset hashes, authentication,
+real History/Searches, exact evidence, Languages navigation, corrected English
+classifications and phone layouts. Production preservation checks again matched
+all six frozen scopes and retained the original records, credentials, all 12
+assessments, the TV override and unchanged-revision slices. Database integrity
+and foreign keys passed. Production confirmed 281 video groups, 470 versions and
+137 review videos; TV time remained 34,193.027 seconds, all foreground.
+The release directory retains `production-verification.json`; public browser
+results and screenshots are locally under
+`/private/var/folders/6b/8j1c23tx6_3frkvf28lskx600000gn/T/opencode/video-audio-production-browser/`.
+
+Online backup `before-owntube-video-audio-20261113-1` is retained remotely under
+`/home/marko/Backups/youtube-observer/` and locally under
+`~/.local/state/youtube-observer/backups/`.
+SHA-256: `8e6f7c266c181d4a53d33972201fa605ff454fe2bddd179c02a7d4987d5dbc24`.
+It contains 297,130 events, 456 evidence, 702 slices, 470 metadata versions,
+3 devices, 2 people, 12 assessments and 1 context override. Integrity and foreign
+keys passed. Extension rollback files are under the same local backup parent in
+`extension-before-selected-audio-20261113/`.
+
+Image-only rollback, retaining current records and decisions:
+`kamal rollback owntube-grouped-history-20261113-1 -c deploy/deploy.yml`.
+
+### Previous release: `owntube-grouped-history-20261113-1`
 
 Source commit `2e44ac20a`, deployed using
 `kamal app boot -c deploy/deploy.yml --version owntube-grouped-history-20261113-1`.
