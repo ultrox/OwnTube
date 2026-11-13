@@ -14,6 +14,10 @@ export function isEvidence(value) {
   return isRecord(value) && value.schemaVersion === 1 && text(value.algorithmVersion,40) && text(value.title,500) && text(value.description,10000) &&
     ['videoDetails.shortDescription','microformat.description','none'].includes(value.descriptionSource) && typeof value.descriptionTruncated === 'boolean' &&
     text(value.selectedAudioLanguage,200) && text(value.defaultAudioLanguage,200) &&
+    (value.selectedAudioTrackId === undefined || text(value.selectedAudioTrackId,2000)) &&
+    (value.selectedAudioTrackMetadata == null || (isRecord(value.selectedAudioTrackMetadata) &&
+      text(value.selectedAudioTrackMetadata.id,2000) && text(value.selectedAudioTrackMetadata.name,200) &&
+      typeof value.selectedAudioTrackMetadata.isAutoDubbed === 'boolean')) &&
     Array.isArray(value.captions) && value.captions.length <= 100 && value.captions.every(row => isRecord(row) && text(row.language,64) && ['asr','manual'].includes(row.kind)) &&
     isRecord(value.text) && ['chrome-language-detector','local-trigram'].includes(value.text.engine) &&
     ['available','downloadable','downloading','loading','unavailable','unsupported','error','too-short'].includes(value.text.status) &&

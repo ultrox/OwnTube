@@ -55,6 +55,21 @@ not treat title language, default audio, translated subtitles or available capti
 tracks as proof of audio actually played. Unsupported/missing labels remain
 undetermined. Metadata-based estimates remain visibly different from human review.
 
+Selected-track decoding supports YouTube's `itag;base64url` protobuf IDs (the
+named `lang` entry), legacy IDs such as `en-US.4`, and TV decoder labels such as
+`de‐de (original)` / `en‐us (dubbed-auto)`. Automatic assessments group by primary
+language; exact regional/script labels remain in evidence. Recognized browser/TV
+evidence with unresolved audio is undetermined, rather than falling back to an old
+collector estimate based on defaults or captions.
+
+Chrome `language-v3` saves the raw selected ID and the selected object's audio
+metadata (ID, display name, auto-dub flag), matching its shape without depending
+on YouTube's minified property name. Captions and text estimates remain saved
+context but never supply the playback language. Search-query classification is
+independent. The extension polls the selected track, so audio changes produce
+their own metadata versions. A startup or genuinely unlabelled `und` selection
+does not establish a language.
+
 Optional external analyzer configuration:
 
 ```sh

@@ -847,6 +847,8 @@ function evidenceHTML(data) {
     sources = `${facts([
         ['Saved title', ev.title ? esc(ev.title) : notRecorded()],
         ['Selected audio', selected],
+        ...(ev.selectedAudioTrackId ? [['Selected track ID', `<code class="ev__id">${esc(ev.selectedAudioTrackId)}</code>`]] : []),
+        ...(ev.selectedAudioTrackMetadata ? [['Selected track label', `${esc(ev.selectedAudioTrackMetadata.name)} · <code>${esc(ev.selectedAudioTrackMetadata.id)}</code>${ev.selectedAudioTrackMetadata.isAutoDubbed ? ' · auto-dubbed' : ''}`]] : []),
         ['Default audio', deflt],
         ['Caption tracks', captions + (android && ev.captionTranslationOptionsOmitted ? ` <span class="why">${esc(ev.captionTranslationOptionsOmitted)} translation options counted, not listed</span>` : '')],
         ['Text detector', t ? `${t.language ? lang(t.language) : notRecorded()}${t.confidence != null ? ` <span class="mono">${esc(confText(t.confidence))}</span>` : ''} <span class="why">· ${esc(t.engine || 'engine not recorded')} · ${esc(t.status || 'status not recorded')} · input ${esc(t.input || '—')}</span>` : notRecorded(android ? 'language analysis is not run on OwnTube TV' : '')],

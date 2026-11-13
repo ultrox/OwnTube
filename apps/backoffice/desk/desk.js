@@ -308,7 +308,7 @@ function loginHTML() {
 }
 
 const LEDE = {
-  watched: 'What played on your devices, newest first. Background playback is included and named.',
+  watched: 'One row per video, most recently watched first. Background playback is included and named.',
   searches: 'YouTube searches your devices recorded, newest first.',
 };
 
@@ -358,7 +358,7 @@ function personField(devices, people) {
 const NOTES = {
   watched: `<p>History is a record, not a goal. It is here so you can act on what actually played.</p>
     <p><b>Watched</b> is wall-clock playback, background included. <b>On-tab</b> (browser) and <b>foreground</b> (TV) say what was in front, not who paid attention; <b>unspecified</b> means the collector didn’t record it.</p>
-    <p>An <b>entry</b> is one recorded viewing of a video on one device and day. Metadata updates stay inside its evidence details. Older collectors saved samples per day instead, shown as <b>Recorded that day</b>. <b>Covered</b> is the share of the video that played at least once.</p>`,
+    <p>Each <b>video</b> appears once across the selected period and devices. Its visits, dates and saved versions are inside Evidence. Older samples without a visit ID stay grouped by device and day. <b>Covered</b> counts each part of the video once across all visits.</p>`,
   searches: `<p>A search is recorded when a YouTube results page opens in a browser with the collector; the same query again within 5 seconds counts once.</p>
     <p>OwnTube on Android TV records playback only. The small code beside a query is a language estimated from its text, not from anything spoken.</p>`,
 };
@@ -484,7 +484,7 @@ function pagerHTML(d, v) {
 
 // Group this page's rows by the server's date, in the server's order. Day headers carry the whole
 // day's numbers from `daily`, so they stay true when a day continues on another page.
-function daysHTML(d, v, { counted, total, row, list }) {
+function daysHTML(d, v, { counted, total, row, list, latest = false }) {
   const rows = Array.isArray(d.rows) ? d.rows : [];
   const tz = d.timezone;
   const today = has(d.until) ? dateIn(d.until, tz) : dateIn(Date.now(), tz);
@@ -513,7 +513,7 @@ function daysHTML(d, v, { counted, total, row, list }) {
     const id = `day-${i}-${esc(g.date)}`;
     return `<section class="day" aria-labelledby="${id}" data-date="${esc(g.date)}">
         <div class="day__head">
-          <h2 class="day__title" id="${id}">${esc(title)}</h2>
+           <h2 class="day__title" id="${id}">${latest ? 'Last watched · ' : ''}${esc(title)}</h2>
           ${title === 'Today' || title === 'Yesterday' ? `<span class="day__date">${esc(shortDate(g.date))}</span>` : ''}
           ${extras.length ? `<span class="day__shown">${extras.map(esc).join(' · ')}</span>` : ''}
           ${info ? `<span class="day__total" ${total.attr(info)}>${esc(total.text(info))}</span>` : ''}
@@ -558,6 +558,7 @@ function artHTML(r) {
 // First and last recorded playback as one range. Rows are sorted by the latest recording, so the
 // range's end follows the list order; neither end is a reconstructed session start or end.
 function timeCell(r, tz) {
+  if (r.rowKind === 'video') return `<span class="vh">Last recorded at </span><time datetime="${isoTime(r.lastWatched)}">${clockTime(r.lastWatched, tz)}</time>`;
   if (r.rowKind === 'legacy-day') return '<span class="hrow__day">Recorded <span class="hrow__daypart">that day</span></span>';
   const a = clockTime(r.firstWatched, tz);
   const b = clockTime(r.lastWatched, tz);
@@ -580,7 +581,7 @@ function watchedRow(r, d) {
       <div class="hrow__media">${artHTML(r)}</div>
       <div class="hrow__body">
         <h3 class="hrow__title"><button type="button" data-action="evidence" data-id="${esc(id)}" data-key="title:${esc(id)}">${esc(title)}</button></h3>
-        <p class="meta">${clean(r.channel) ? `<span>${esc(clean(r.channel))}</span>` : ''}<span>${esc(clean(r.deviceLabel) || 'Device')}</span></p>
+        <p class="meta">${clean(r.channel) ? `<span>${esc(clean(r.channel))}</span>` : ''}<span>${esc(r.devices?.map(d => clean(d.label) || 'Device').join(' · ') || clean(r.deviceLabel) || 'Device')}</span>${r.visitCount ? `<span>${plural(r.visitCount, 'visit / day record', 'visit / day records')}</span>` : ''}</p>
       </div>
       <div class="hrow__side">
         <p class="hrow__numbers">
@@ -609,6 +610,10 @@ function watchedHTML(v) {
       </dl>
       ${total ? `<p class="split" data-split data-fg="${num(d.foregroundSeconds)}" data-bg="${num(d.backgroundSeconds)}" data-un="${num(d.unspecifiedSeconds)}"><span class="split__lead">Of that</span>${split.map(([s, w]) => `<span><b>${esc(spent(s))}</b> ${esc(w)}</span>`).join('')}</p>` : ''}
       <p class="note">Period, device${people.length > 1 || state.scope.person ? ' and person' : ''} set these numbers; the filter only narrows the list. Background playback counts in every total. Calendar days follow the server’s time zone${d.timezone ? ` (${esc(d.timezone)})` : ''}, counting today and days without recorded playback.</p>
+      <details class="ev__raw" data-daily-totals><summary>Playback by calendar day</summary>
+        ${facts((d.daily || []).slice().reverse().map(day => [esc(shortDate(day.date)), `<span data-calendar-date="${esc(day.date)}" data-seconds="${num(day.seconds)}">${esc(spent(day.seconds))}</span>`]))}
+        <p class="note">Actual playback on each day. Video rows below include their whole selected-period time and appear under the date last watched.</p>
+      </details>
     </section>`;
 
   const rows = Array.isArray(d.rows) ? d.rows : [];
@@ -624,17 +629,18 @@ function watchedHTML(v) {
     list = '<div class="empty"><p class="empty__title">No entries on this page.</p></div>';
   } else {
     list = `<div class="days" data-days-list>${daysHTML(d, v, {
-      counted: (x) => num(v.dataQ ? x.filteredCount : x.rowCount),
+      counted: (x) => num(v.dataQ ? x.lastWatchedFilteredCount : x.lastWatchedCount),
       total: {
-        text: (x) => `${spent(x.seconds)} watched`,
+        text: (x) => `${spent(x.seconds)} played that day`,
         attr: (x) => `data-day-seconds="${num(x.seconds)}" title="Recorded playback that day in this scope, background included"`,
-        match: (x) => `${num(x.filteredCount).toLocaleString('en')} of ${plural(x.rowCount, 'entry', 'entries')} match`,
+        match: (x) => `${num(x.lastWatchedFilteredCount).toLocaleString('en')} of ${plural(x.lastWatchedCount, 'video')} match`,
       },
       row: watchedRow,
       list: 'hrows',
+      latest: true,
     })}</div>${pagerHTML(d, v)}`;
   }
-  return ledger + (count ? statusHTML(v, d, 'recorded entry', 'recorded entries') : '') + list;
+  return ledger + (count ? statusHTML(v, d, 'video', 'videos') : '') + list;
 }
 
 /* ------------------------------------------------------------------ render: Searches */
@@ -801,19 +807,23 @@ function contextHTML(r, tz) {
   const front = frontWord(kind);
   const first = clockTime(r.firstWatched, tz);
   const last = clockTime(r.lastWatched, tz);
-  const recorded = !first && !last ? notRecorded()
+  const recorded = r.rowKind === 'video'
+    ? `${esc(dateRange(dateIn(r.firstWatched, tz), dateIn(r.lastWatched, tz)))} <span class="why">first to latest recorded playback in this scope</span>`
+    : !first && !last ? notRecorded()
     : legacy
       ? `First sample <span class="mono">${esc(first || '—')}</span>, latest <span class="mono">${esc(last || '—')}</span> <span class="why">samples an older collector saved, not a session</span>`
       : `<span class="mono">${esc(first)}${last && last !== first ? `–${esc(last)}` : ''}</span> <span class="why">first and last recorded playback, not when a session started or ended</span>`;
   const partial = r.coverageComplete === false && (has(r.coveragePercent) || has(r.coveredSeconds));
   const covered = `${coverageHTML(r)}${has(r.durationSeconds) && num(r.durationSeconds) > 0 ? ` <span class="why">of ${clock(r.durationSeconds)}</span>` : ''}${partial ? ' <span class="why">· some samples have no ranges, so more may have played</span>' : ''}`;
   const device = clean(r.deviceLabel) || 'this device';
-  const scope = legacy
+  const scope = r.rowKind === 'video'
+    ? `This video combines ${plural(r.visitCount, 'visit / day record', 'visit / day records')} across ${plural(r.deviceCount, 'device')} in the selected period.`
+    : legacy
     ? `This entry is everything an older collector recorded for this video on ${esc(device)} on ${esc(longDate(r.date))}. It saved samples without a visit identity, so this is one day’s record, not separate plays.`
     : `This entry is one recorded viewing of this video on ${esc(device)}, ${esc(longDate(r.date))}.`;
   const meaning = kind === 'browser' ? 'On-tab means the YouTube tab was visible' : kind === 'tv' ? 'Foreground means the player was the app in front' : 'On-tab (browser) or foreground (TV) means the video was in front';
   return `<section class="ev__section" aria-labelledby="ev-ctx">
-      <h3 class="label" id="ev-ctx">Playback context · this entry</h3>
+      <h3 class="label" id="ev-ctx">Playback context · ${r.rowKind === 'video' ? 'this video' : 'this entry'}</h3>
       ${facts([
         [esc(front[0].toUpperCase() + front.slice(1)), `<span class="mono" data-ev-fg="${num(r.foregroundSeconds)}">${esc(spent(r.foregroundSeconds))}</span>`],
         ['Background', `<span class="mono" data-ev-bg="${num(r.backgroundSeconds)}">${esc(spent(r.backgroundSeconds))}</span>`],
@@ -825,6 +835,20 @@ function contextHTML(r, tz) {
       <p class="ev__note" data-ev-scope>${scope} ${recordedVersions(r).length > 1 ? `It combines all ${recordedVersions(r).length} saved versions. ` : ''}${meaning}; neither proves attention. Covered counts each part of the video once across versions; replays add watched time only.</p>
       ${r.contextOverride?.context === 'foreground' ? `<p class="ev__note" data-context-correction>Foreground by owner correction for this device. ${esc(r.contextOverride.reason)} Original collector records are retained.</p>` : ''}
     </section>`;
+}
+
+function visitsHTML(r, tz) {
+  if (!Array.isArray(r.visits)) return '';
+  return `<section class="ev__section" aria-labelledby="ev-visits">
+    <h3 class="label" id="ev-visits">Visits and day records · ${r.visits.length}</h3>
+    ${r.visits.map(v => `<details class="ev__raw" data-visit="${esc(v.id)}">
+      <summary>${esc(longDate(v.date))} · ${esc(v.deviceLabel)} · ${esc(spent(v.seconds))}${v.rowKind === 'legacy-day' ? ' · recorded that day' : ` · ${esc(clockTime(v.firstWatched, tz))}–${esc(clockTime(v.lastWatched, tz))}`}</summary>
+      <p class="ev__note">${esc(ctxLine(v.foregroundSeconds, v.backgroundSeconds, v.unspecifiedSeconds, v.deviceKind))} · ${coverageHTML(v)}</p>
+      ${v.contextOverride?.context === 'foreground' ? `<p class="ev__note" data-context-correction>Foreground by owner correction for this device. ${esc(v.contextOverride.reason)}</p>` : ''}
+      <ul class="ev__tracks">${recordedVersions(v).map(version => `<li><button type="button" class="link-btn" data-action="visit-version" data-value="${esc(versionKey(version))}">${esc(version.title || version.videoId)} · ${esc(spent(version.seconds))} · ${esc(String(version.metadataId).slice(0,12))}</button></li>`).join('')}</ul>
+    </details>`).join('')}
+    <p class="ev__note">Each visit ID is kept per device and day. Older samples have no visit ID. Select a saved version to inspect its exact evidence.</p>
+  </section>`;
 }
 
 function inspectorHTML() {
@@ -839,18 +863,18 @@ function inspectorHTML() {
   const recordTitle = clean(version.title);
   const heading = clean(r.title) || clean(ev?.title) || clean(data?.title) || `Untitled · ${r.videoId || ''}`;
   const legacy = r.rowKind === 'legacy-day';
-  const when = legacy ? `${longDate(r.date)} · recorded that day` : `${longDate(r.date)}${clockTime(r.firstWatched, tz) ? ` · ${clockTime(r.firstWatched, tz)}` : ''}`;
+  const when = r.rowKind === 'video' ? `Last watched ${longDate(r.date)} · ${clockTime(r.lastWatched, tz)}` : legacy ? `${longDate(r.date)} · recorded that day` : `${longDate(r.date)}${clockTime(r.firstWatched, tz) ? ` · ${clockTime(r.firstWatched, tz)}` : ''}`;
 
   const head = `<div class="dialog__head">
-      <h2 id="dlg-title"><span class="label dialog__kicker" aria-hidden="true">Evidence · this entry</span><span class="vh">Evidence for </span><span data-ev-heading>${esc(heading)}</span></h2>
+      <h2 id="dlg-title"><span class="label dialog__kicker" aria-hidden="true">Evidence · this video</span><span class="vh">Evidence for </span><span data-ev-heading>${esc(heading)}</span></h2>
       <button type="button" class="icon-btn" data-action="close" data-key="dlg:close" aria-label="Close evidence">${ICON.close}</button>
     </div>`;
   const foot = `<div class="dialog__foot"><span class="why">Saved evidence · not a fresh YouTube lookup</span><button type="button" class="btn btn--sm" data-action="close" data-key="dlg:done">Done</button></div>`;
-  const meta = `<p class="ev__meta">${clean(r.channel) ? `<span>${esc(clean(r.channel))}</span>` : ''}<span class="mono">${esc(r.videoId || '')}</span><span>${esc(clean(r.deviceLabel) || 'Device')}</span><span>${esc(when)}</span></p>`;
-  const context = contextHTML(r, tz);
+  const meta = `<p class="ev__meta">${clean(r.channel) ? `<span>${esc(clean(r.channel))}</span>` : ''}<span class="mono">${esc(r.videoId || '')}</span><span>${esc(r.devices?.map(d => d.label).join(' · ') || clean(r.deviceLabel) || 'Device')}</span><span>${esc(when)}</span></p>`;
+  const context = contextHTML(r, tz) + visitsHTML(r, tz);
   const picker = versions.length > 1 ? `<section class="ev__section" aria-labelledby="ev-versions">
       <h3 class="label" id="ev-versions">Saved versions · ${versions.length}</h3>
-      ${versionPickerHTML(r, dl.selected, (v, i) => `${i === 0 ? 'Newest · ' : ''}${clockTime(v.lastWatched, tz)} · ${v.title || v.videoId} · ${String(v.metadataId).slice(0, 12)}`, { key: 'dlg:version' })}
+      ${versionPickerHTML(r, dl.selected, (v, i) => `${i === 0 ? 'Newest · ' : ''}${shortDate(dateIn(v.lastWatched, tz))} ${clockTime(v.lastWatched, tz)} · ${v.deviceLabel || 'Device'} · ${v.title || v.videoId} · ${String(v.metadataId).slice(0, 12)}`, { key: 'dlg:version' })}
       <p class="ev__note" data-version-scope data-metadata="${esc(version.metadataId)}">${esc(spent(version.seconds))} watched with this version. The playback totals above include every version; evidence below belongs only to this selection.</p>
     </section>` : '';
 
@@ -907,6 +931,8 @@ function inspectorHTML() {
         ${facts([
           ['Saved title', ev.title ? `${esc(ev.title)}${android && ev.titleSource ? ` <span class="why mono">${esc(ev.titleSource)}</span>` : ''}` : notRecorded()],
           ['Selected audio', selected],
+          ...(ev.selectedAudioTrackId ? [['Selected track ID', `<code class="ev__id">${esc(ev.selectedAudioTrackId)}</code>`]] : []),
+          ...(ev.selectedAudioTrackMetadata ? [['Selected track label', `${esc(ev.selectedAudioTrackMetadata.name)} · <code>${esc(ev.selectedAudioTrackMetadata.id)}</code>${ev.selectedAudioTrackMetadata.isAutoDubbed ? ' · auto-dubbed' : ''}`]] : []),
           ['Default audio', deflt],
           ['Caption tracks', captions + omitted],
         ])}
@@ -1004,8 +1030,8 @@ function summary(name) {
   const d = state.views[name].data;
   if (!d) return '';
   if (name === 'searches' && d.searchCapability === 'not-recorded') return 'Searches are not recorded in this scope.';
-  const one = name === 'watched' ? 'recorded entry' : 'search';
-  const many = name === 'watched' ? 'recorded entries' : 'searches';
+  const one = name === 'watched' ? 'video' : 'search';
+  const many = name === 'watched' ? 'videos' : 'searches';
   return state.views[name].dataQ ? `${num(d.filteredCount).toLocaleString('en')} of ${plural(d.count, one, many)} match.` : `${plural(d.count, one, many)}.`;
 }
 
@@ -1017,6 +1043,9 @@ document.addEventListener('click', (e) => {
   const name = state.view;
   const v = state.views[name];
   switch (el.dataset.action) {
+    case 'visit-version':
+      if (state.dialog) { state.dialog.selected = el.dataset.value; fetchEvidence(); }
+      break;
     case 'skip': e.preventDefault(); $('#main').focus(); break;
     case 'days': if (Number(el.dataset.value) !== state.scope.days) setScope({ days: Number(el.dataset.value) || 7 }).then(() => announce(name, summary(name))); break;
     case 'page':

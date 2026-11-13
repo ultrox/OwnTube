@@ -12,19 +12,19 @@ test('local trigram detection keeps uncertainty visible', () => {
   for (const query of ['hi','123','猫のかわいい動画','xyzzy qwerty']) assert.equal(classify(query).conf, 'low');
 });
 
-test('fresh player signals prefer spoken audio and ASR over translated captions', () => {
+test('fresh player signals use only selected audio, retaining captions as evidence', () => {
   const response = { videoDetails: { videoId: 'abcdefghijk', title: 'Sauerteig Rezept für Anfänger' }, captions: { playerCaptionsTracklistRenderer: { captionTracks: [{ kind: 'asr', languageCode: 'en-US' }, { languageCode: 'de-DE' }] } } };
   assert.equal(videoSignal(response, { id: 'es.4' }, 'abcdefghijk').source, 'audio-track');
   assert.equal(videoSignal(response, { id: 'es.4' }, 'abcdefghijk').lang, 'es');
-  assert.equal(videoSignal(response, null, 'abcdefghijk').lang, 'en');
+  assert.equal(videoSignal(response, null, 'abcdefghijk').lang, 'other');
   assert.equal(videoSignal(response, null, 'different01'), null);
   response.captions.playerCaptionsTracklistRenderer.captionTracks.pop();
   assert.equal(videoSignal(response, { id: 'es.4' }, 'abcdefghijk').lang, 'es');
-  assert.equal(videoSignal(response, null, 'abcdefghijk').conf, 'medium');
-  assert.equal(videoSignal(response, { id: 'und' }, 'abcdefghijk').source, 'asr-caption');
-  assert.equal(videoSignal(response, { id: 'und' }, 'abcdefghijk').lang, 'en');
+  assert.equal(videoSignal(response, null, 'abcdefghijk').conf, 'low');
+  assert.equal(videoSignal(response, { id: 'und' }, 'abcdefghijk').source, 'unknown');
+  assert.equal(videoSignal(response, { id: 'und' }, 'abcdefghijk').lang, 'other');
   response.streamingData = { adaptiveFormats: [{ audioTrack: { id: 'de.4', audioIsDefault: true } }] };
-  assert.equal(videoSignal(response, { id: 'und' }, 'abcdefghijk').lang, 'de');
+  assert.equal(videoSignal(response, { id: 'und' }, 'abcdefghijk').lang, 'other', 'default audio never overrides unresolved selected audio');
   delete response.streamingData;
   assert.equal(videoSignal(response, { id: 'fr.4' }, 'abcdefghijk').source, 'audio-track');
   assert.equal(videoSignal(response, { id: 'fr.4' }, 'abcdefghijk').lang, 'other');
@@ -41,9 +41,9 @@ test('SWR pizza regression: English subtitles listed first must not classify Ger
     captions: { playerCaptionsTracklistRenderer: { captionTracks: [{ languageCode: 'en' }, { languageCode: 'de' }], audioTracks: [{ defaultCaptionTrackIndex: 0 }] } },
   };
   const signal = videoSignal(response, { id: 'und' }, 'vf0god0LtP8');
-  assert.equal(signal.lang, 'de');
+  assert.equal(signal.lang, 'other');
   assert.equal(signal.conf, 'low');
-  assert.equal(signal.source, 'caption-heuristic');
+  assert.equal(signal.source, 'unknown');
   response.captions.playerCaptionsTracklistRenderer.captionTracks.reverse();
   assert.deepEqual(videoSignal(response, { id: 'und' }, 'vf0god0LtP8'), signal);
   assert.equal(videoSignal(response, { id: 'en.4' }, 'vf0god0LtP8').lang, 'en', 'an explicitly selected English dub must remain English');

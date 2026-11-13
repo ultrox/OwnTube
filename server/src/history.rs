@@ -244,11 +244,92 @@ impl Entry {
     }
 }
 
+// One video across the selected scope. Visits retain their device/day identity;
+// the picker combines repeated uses of the same device + metadata version.
+struct Video {
+    entry: Entry,
+    visits: Vec<Entry>,
+}
+impl Video {
+    fn new(mut visits: Vec<Entry>) -> Self {
+        visits.sort_by(|a, b| {
+            b.row
+                .last
+                .total_cmp(&a.row.last)
+                .then(
+                    a.row.device["id"]
+                        .as_str()
+                        .cmp(&b.row.device["id"].as_str()),
+                )
+                .then(a.row.viewing_id.cmp(&b.row.viewing_id))
+        });
+        let mut versions: BTreeMap<(String, String), Vec<Row>> = BTreeMap::new();
+        for visit in &visits {
+            for row in &visit.versions {
+                versions
+                    .entry((
+                        row.device["id"].as_str().unwrap().into(),
+                        row.metadata_id.clone(),
+                    ))
+                    .or_default()
+                    .push(row.clone());
+            }
+        }
+        let entry = Entry::new(
+            versions
+                .into_values()
+                .map(|rows| Entry::new(rows).row)
+                .collect(),
+        );
+        Self { entry, visits }
+    }
+
+    fn value(&self) -> Value {
+        let mut value = self.entry.value();
+        let devices: BTreeMap<_, _> = self
+            .visits
+            .iter()
+            .map(|v| (v.row.device["id"].as_str().unwrap(), &v.row.device))
+            .collect();
+        value["id"] = json!(hash(
+            &json!(["video", self.entry.row.meta.video_id]).to_string()
+        ));
+        value["rowKind"] = json!("video");
+        value["viewingId"] = Value::Null;
+        value["visitCount"] = json!(self.visits.len());
+        value["visits"] = json!(self.visits.iter().map(Entry::value).collect::<Vec<_>>());
+        value["devices"] = json!(devices.values().collect::<Vec<_>>());
+        value["deviceCount"] = json!(devices.len());
+        if devices.len() > 1 {
+            for field in [
+                "deviceId",
+                "deviceLabel",
+                "personId",
+                "person",
+                "contextOverride",
+            ] {
+                value[field] = Value::Null;
+            }
+            value["deviceKind"] = json!(if devices
+                .values()
+                .all(|d| d["kind"] == self.entry.row.device["kind"])
+            {
+                self.entry.row.device["kind"].as_str().unwrap()
+            } else {
+                "mixed"
+            });
+        }
+        value
+    }
+}
+
 #[derive(Default)]
 struct Day {
     context: [f64; 3],
     count: usize,
     filtered: usize,
+    latest: usize,
+    latest_filtered: usize,
 }
 
 impl Store {
@@ -292,42 +373,53 @@ impl Store {
             }
             let mut daily: BTreeMap<String, Day> = window.dates.iter().map(|d| (d.clone(), Day::default())).collect();
             let mut context = [0.; 3];
-            let mut video_ids = BTreeSet::new();
-            let count = groups.len();
             let query = filter.query.trim().to_lowercase();
-            let mut matched = Vec::new();
+            let mut videos: BTreeMap<String, Vec<Entry>> = BTreeMap::new();
             for versions in groups.into_values() {
                 let entry = Entry::new(versions);
-                let r = &entry.row;
-                let day = daily.get_mut(&r.date).expect("fact belongs to window");
-                day.count += 1;
-                for i in 0..3 {
-                    context[i] += r.context[i];
-                    day.context[i] += r.context[i];
+                videos.entry(entry.row.meta.video_id.clone()).or_default().push(entry);
+            }
+            let count = videos.len();
+            let mut matched = Vec::new();
+            for visits in videos.into_values() {
+                let video = Video::new(visits);
+                let matches = video.entry.matches(&query);
+                let mut dates = BTreeSet::new();
+                for visit in &video.visits {
+                    let r = &visit.row;
+                    let day = daily.get_mut(&r.date).expect("fact belongs to window");
+                    if dates.insert(r.date.clone()) {
+                        day.count += 1;
+                        if matches { day.filtered += 1; }
+                    }
+                    for (i, total) in context.iter_mut().enumerate() {
+                        *total += r.context[i];
+                        day.context[i] += r.context[i];
+                    }
                 }
-                video_ids.insert(r.meta.video_id.clone());
-                if entry.matches(&query) {
-                    day.filtered += 1;
-                    matched.push(entry);
+                let latest = daily.get_mut(&video.entry.row.date).unwrap();
+                latest.latest += 1;
+                if matches {
+                    latest.latest_filtered += 1;
+                    matched.push(video);
                 }
             }
-            matched.sort_by(|a,b| b.row.last.total_cmp(&a.row.last)
-                .then(a.row.device["id"].as_str().cmp(&b.row.device["id"].as_str()))
-                .then(a.row.viewing_id.cmp(&b.row.viewing_id)).then(a.row.meta.video_id.cmp(&b.row.meta.video_id))
-                .then(a.row.date.cmp(&b.row.date)));
+            matched.sort_by(|a,b| b.entry.row.last.total_cmp(&a.entry.row.last)
+                .then(a.entry.row.meta.video_id.cmp(&b.entry.row.meta.video_id)));
             let filtered = matched.len();
             let pages = filtered.div_ceil(PAGE_SIZE).max(1);
             let page = filter.page.unwrap_or(1).min(pages);
             let seconds: f64 = context.iter().sum();
             Ok(json!({
                 "seconds":seconds,"foregroundSeconds":context[0],"backgroundSeconds":context[1],
-                "unspecifiedSeconds":context[2],"videoCount":video_ids.len(),"perCalendarDaySeconds":seconds/f64::from(days),
+                "unspecifiedSeconds":context[2],"videoCount":count,"perCalendarDaySeconds":seconds/f64::from(days),
                 "days":days,"timezone":tz.to_string(),"since":window.since,"until":window.until,"generation":generation,
                 "devices":devices,"people":people,"count":count,"filteredCount":filtered,"page":page,"pages":pages,"pageSize":PAGE_SIZE,
                 "daily":daily.into_iter().map(|(date,d)| json!({"date":date,"seconds":d.context.iter().sum::<f64>(),
                     "foregroundSeconds":d.context[0],"backgroundSeconds":d.context[1],"unspecifiedSeconds":d.context[2],
-                    "rowCount":d.count,"filteredCount":d.filtered})).collect::<Vec<_>>(),
-                "rows":matched.iter().skip((page-1)*PAGE_SIZE).take(PAGE_SIZE).map(Entry::value).collect::<Vec<_>>()
+                    "rowCount":d.count,"filteredCount":d.filtered,
+                    "lastWatchedCount":d.latest,"lastWatchedFilteredCount":d.latest_filtered})).collect::<Vec<_>>(),
+                "rows":matched.iter().skip((page-1)*PAGE_SIZE).take(PAGE_SIZE).map(Video::value).collect::<Vec<_>>()
             }))
         }).await
     }

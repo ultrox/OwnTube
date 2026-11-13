@@ -19,11 +19,11 @@ Response:
 {seconds,foregroundSeconds,backgroundSeconds,unspecifiedSeconds,videoCount,
  perCalendarDaySeconds,days,timezone,since,until,generation,devices,people,
  daily:[{date,seconds,foregroundSeconds,backgroundSeconds,unspecifiedSeconds,
-         rowCount,filteredCount}],
+          rowCount,filteredCount,lastWatchedCount,lastWatchedFilteredCount}],
  count,filteredCount,page,pages,pageSize:20,rows:[...]}
 ```
 
-`count` includes all recorded rows in scope, `filteredCount` includes matches
+`count` includes distinct videos in scope, `filteredCount` includes matches
 across all pages. Daily totals/counts likewise cover all pages. Zero-record days
 are included. Calendar boundaries and `date` strings use the server timezone;
 the UI must not regroup records using the browser timezone.
@@ -35,22 +35,27 @@ Row:
  recorded:{lang,source,conf},date,firstWatched,lastWatched,seconds,
  foregroundSeconds,backgroundSeconds,unspecifiedSeconds,
  coveredSeconds,coveragePercent,coverageComplete,rowKind,contextOverride,
- versionCount,versions:[...version rows...]}
+  versionCount,versions:[...version rows...],
+  visitCount,visits:[...visit rows...],deviceCount,devices:[...devices...]}
 ```
 
-Native `rowKind:"viewing"` groups the same recorded viewing, video, device and
-local date across **all metadata versions** and bucket/context slices. A metadata
-update is not another visit. Distinct recorded viewing IDs, devices, videos and
-dates remain separate. Group IDs exclude metadata identity and stay stable as
-more versions arrive. `viewingId` is recorded, never inferred from timing.
-Legacy `rowKind:"legacy-day"` groups video/device/date because legacy samples have
-no reliable visit identity; `viewingId:null`. Label these **Recorded that day**,
-not separate plays.
+Top-level `rowKind:"video"` groups a video across the entire selected period,
+device and person scope. IDs depend only on the video. `viewingId` is null.
+For multiple devices, singular device/person/contextOverride fields are null;
+`devices` names the contributing devices and `deviceKind` combines their kinds.
+
+Nested `visits` preserve viewing/video/device/local-date groups across metadata
+versions and bucket/context slices. Native visits use `rowKind:"viewing"`.
+Legacy visits use `rowKind:"legacy-day"` and `viewingId:null`: samples without a
+reliable visit identity are labelled **Recorded that day**, not separate plays.
+`visitCount` counts these visit/day records, not inferred playback sessions.
 
 Grouping happens before pagination and daily/count summaries. Text matches any
-version's title/channel/video ID and retains the entire entry and its time.
+version's title/channel/video ID and retains the entire video and its time.
 `versions` contains every contributing device/metadata version, newest playback
-first (metadata ID breaks ties), and `versionCount` names its size. Each nested
+first (metadata ID breaks ties), and `versionCount` names its size. Repeated uses
+of a device/metadata pair combine in this list; each visit also retains its own
+versions and their time. Each nested
 version has the former row shape above, without `versions`/`versionCount`; native
 versions use `rowKind:"viewing-version"`. Title/channel/duration/metadataId/evidenceId
 and `recorded` on the entry describe the latest version, not a synthesized
@@ -59,12 +64,19 @@ version; exact saved text and Languages links use that version's identity.
 
 Times describe recorded bounds, not inferred attention or reconstructed session
 start. Entry time/context sums its versions. Coverage is the **union across all
-versions**; overlapping ranges and replays never inflate unique coverage.
+versions and visits**; overlapping ranges and replays never inflate unique coverage.
 `coveredSeconds` and percent are null if no ranges were recorded; percent is also
 null without a usable latest duration. It is capped at 100 for display.
 `coverageComplete:false` means some contributing slices have no ranges: present
 available coverage as partial. Inspectors distinguish whole-entry time/coverage
 from the selected version's evidence and time.
+
+`date` on a video is its latest recording's server date. UI day headings say
+**Last watched**; row totals span the selected period. `daily.seconds` always
+measures playback on that actual day, including videos whose latest visit is on
+another day. Daily `rowCount` counts distinct videos played that day, while
+`lastWatchedCount` counts video rows placed under that date (and the corresponding
+filtered fields follow the text match). Only the latter counts sum to list counts.
 
 ## Evidence
 

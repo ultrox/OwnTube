@@ -16,6 +16,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
+mod inference;
 
 pub fn initialize(db: &Connection) -> rusqlite::Result<()> {
     db.execute_batch(
@@ -231,14 +232,18 @@ fn latest(
         None => {
             // Interpret existing and incoming saved audio without requiring a review
             // click. Explicit assessment revisions above always take precedence.
-            if let Some(text) = evidence_text(db, meta)? {
-                if meta.evidence_id.as_deref() == Some(hash(&text).as_str()) {
-                    if let Ok(evidence) = serde_json::from_str::<Value>(&text) {
-                        let assessment = saved_audio(&evidence);
-                        if assessment.lang != "und" {
-                            return Ok((0, assessment, "automatic".into()));
-                        }
-                    }
+            if let Some(text) = evidence_text(db, meta)?
+                && meta.evidence_id.as_deref() == Some(hash(&text).as_str())
+                && let Ok(evidence) = serde_json::from_str::<Value>(&text)
+            {
+                let assessment = saved_audio(&evidence);
+                if assessment.lang != "und"
+                    || evidence["algorithmVersion"]
+                        .as_str()
+                        .is_some_and(|v| v.starts_with("language-"))
+                    || evidence["collector"] == "owntube-source-v1"
+                {
+                    return Ok((0, assessment, "automatic".into()));
                 }
             }
             Ok((0, baseline(meta), "collector".into()))
@@ -561,15 +566,7 @@ impl Store {
 
 // Providers return interpretations, never mutate recordings or declare observed truth.
 fn saved_audio(evidence: &Value) -> Assessment {
-    let selected = evidence["selectedAudioLanguage"]
-        .as_str()
-        .and_then(language);
-    match selected.filter(|l| l != "und") {
-        Some(lang) => Assessment { lang,status:"estimated".into(),source:"selected-audio-metadata".into(),
-            confidence:"high".into(),reason:"Language label saved for the selected audio track. Metadata evidence, not speech recognition.".into() },
-        None => Assessment { lang:"und".into(),status:"undetermined".into(),source:"saved-evidence".into(),
-            confidence:"unavailable".into(),reason:"No usable selected-audio language was recorded. Default audio, titles and caption lists do not establish which audio was heard.".into() },
-    }
+    inference::assess(evidence)
 }
 
 #[derive(Deserialize)]

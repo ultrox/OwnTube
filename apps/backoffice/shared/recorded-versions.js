@@ -1,5 +1,5 @@
 // Shared recording identities, version controls and exact-evidence verification.
-// History groups by viewing; Languages groups by video. Neither owns these details.
+// History and Languages group by video. Neither owns these details.
 const escape = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 export const versionKey = (version) => `${version.deviceId}:${version.metadataId}`;

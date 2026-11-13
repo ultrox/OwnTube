@@ -72,7 +72,7 @@ fn search(id: &str, query: &str, t: i64) -> Value {
 }
 
 #[tokio::test]
-async fn metadata_versions_combine_within_visits_and_legacy_days_without_merging_visits() {
+async fn videos_combine_visits_and_legacy_days_with_exact_nested_versions() {
     let s = seed().await;
     let raw = r#"{ "title":"Saved", "description":"<img onerror=bad()>", "algorithmVersion":"language-v2", "selectedAudioLanguage":"en" }"#;
     let mut first = viewing("first", "visit1", 30., "foreground");
@@ -102,14 +102,20 @@ async fn metadata_versions_combine_within_visits_and_legacy_days_without_merging
     )
     .await;
     let value = watched(&s, json!({})).await;
-    assert_eq!(value["count"], 3);
+    assert_eq!(value["count"], 1);
     assert_eq!(value["videoCount"], 1);
     assert_eq!(value["seconds"], 130.);
     assert_eq!(value["foregroundSeconds"], 90.);
     assert_eq!(value["backgroundSeconds"], 30.);
     assert_eq!(value["unspecifiedSeconds"], 10.);
     assert_eq!(value["perCalendarDaySeconds"], 130. / 7.);
-    let rows = value["rows"].as_array().unwrap();
+    let video = &value["rows"][0];
+    assert_eq!(video["rowKind"], "video");
+    assert_eq!(video["visitCount"], 3);
+    assert_eq!(video["versionCount"], 4);
+    assert_eq!(video["coveredSeconds"], 30.);
+    assert_eq!(video["coverageComplete"], false);
+    let rows = video["visits"].as_array().unwrap();
     let visit = rows
         .iter()
         .find(|v| v["viewingId"] == "visit1" && v["title"] == "<script>Title</script>")
@@ -163,9 +169,9 @@ async fn metadata_versions_combine_within_visits_and_legacy_days_without_merging
     }
     let filtered = watched(&s, json!({"query":"CHANGED"})).await;
     assert_eq!(filtered["filteredCount"], 1);
-    assert_eq!(filtered["rows"][0]["id"], visit["id"]);
-    assert_eq!(filtered["rows"][0]["seconds"], 90.);
-    assert_eq!(filtered["rows"][0]["versionCount"], 2);
+    assert_eq!(filtered["rows"][0]["id"], video["id"]);
+    assert_eq!(filtered["rows"][0]["seconds"], 130.);
+    assert_eq!(filtered["rows"][0]["versionCount"], 4);
     assert_eq!(filtered["seconds"], value["seconds"]);
     for (a, b) in filtered["daily"]
         .as_array()
@@ -190,6 +196,7 @@ async fn history_groups_before_paging_and_keeps_identity_and_union_coverage_acro
                 2.,
                 "foreground",
             );
+            e["videoId"] = json!(format!("video{visit:06}"));
             e["title"] = json!(if version == 0 {
                 "Original title"
             } else {
@@ -230,10 +237,11 @@ async fn history_groups_before_paging_and_keeps_identity_and_union_coverage_acro
         assert_eq!(row["versions"][0]["title"], "Updated title");
         assert_eq!(row["versions"][1]["title"], "Original title");
     }
-    let prior = rows.iter().find(|r| r["viewingId"] == "visit0").unwrap();
+    let prior = rows.iter().find(|r| r["videoId"] == "video000000").unwrap();
     let mut updates = Vec::new();
     for version in 2..17 {
         let mut e = viewing(&format!("update-{version}"), "visit0", 1., "background");
+        e["videoId"] = json!("video000000");
         e["title"] = json!(format!("Metadata {version}"));
         e["t"] = json!(bucket() + 10_000 + version * 1000);
         e["lastWatched"] = json!(bucket() + 11_000 + version * 1000);
@@ -255,7 +263,7 @@ async fn history_groups_before_paging_and_keeps_identity_and_union_coverage_acro
 }
 
 #[tokio::test]
-async fn history_keeps_devices_and_videos_separate_even_when_viewing_ids_are_reused() {
+async fn history_combines_devices_but_retains_visits_when_ids_are_reused() {
     let s = seed().await;
     ingest(
         &s,
@@ -275,9 +283,23 @@ async fn history_keeps_devices_and_videos_separate_even_when_viewing_ids_are_reu
     other["videoId"] = json!("lmnopqrstuv");
     ingest(&s, "browser", vec![other], Default::default()).await;
     let data = watched(&s, json!({})).await;
-    assert_eq!(data["count"], 3);
+    assert_eq!(data["count"], 2);
     assert_eq!(data["videoCount"], 2);
     assert_eq!(data["seconds"], 9.);
+    let video = data["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|v| v["videoId"] == "abcdefghijk")
+        .unwrap();
+    assert_eq!(video["visitCount"], 2);
+    assert_eq!(video["deviceCount"], 2);
+    assert_eq!(video["seconds"], 5.);
+    assert_eq!(video["coveredSeconds"], 3.);
+    assert!(video["deviceId"].is_null());
+    let scoped = watched(&s, json!({"device":"browser","query":"abcdefghijk"})).await;
+    assert_eq!(scoped["rows"][0]["seconds"], 2.);
+    assert_eq!(scoped["rows"][0]["visitCount"], 1);
 }
 
 #[tokio::test]
@@ -306,7 +328,7 @@ async fn local_dates_split_midnight_and_retain_zero_days() {
     b["lastWatched"] = json!(midnight + 21_000);
     ingest(&s, "browser", vec![a, b], Default::default()).await;
     let v = watched(&s, json!({})).await;
-    assert_eq!(v["count"], 2);
+    assert_eq!(v["count"], 1);
     assert_eq!(v["seconds"], 40.);
     assert_eq!(v["videoCount"], 1);
     assert_eq!(v["daily"].as_array().unwrap().len(), 7);
@@ -319,8 +341,12 @@ async fn local_dates_split_midnight_and_retain_zero_days() {
             .count(),
         5
     );
-    assert_ne!(v["rows"][0]["date"], v["rows"][1]["date"]);
-    assert_eq!(v["rows"][0]["viewingId"], v["rows"][1]["viewingId"]);
+    assert_eq!(v["rows"][0]["visitCount"], 2);
+    assert_eq!(v["rows"][0]["versionCount"], 1);
+    let visits = &v["rows"][0]["visits"];
+    assert_ne!(visits[0]["date"], visits[1]["date"]);
+    assert_eq!(visits[0]["viewingId"], visits[1]["viewingId"]);
+    assert_eq!(v["rows"][0]["versions"][0]["seconds"], 40.);
     assert_eq!(
         v["rows"][0]["date"],
         tz.timestamp_millis_opt(midnight)
@@ -335,12 +361,14 @@ async fn watch_paging_preserves_scope_and_rejects_an_outdated_generation() {
     let s = seed().await;
     let events = (0..25)
         .map(|i| {
-            viewing(
+            let mut e = viewing(
                 &format!("record{i}"),
                 &format!("visit{i}"),
                 2.,
                 "background",
-            )
+            );
+            e["videoId"] = json!(format!("video{i:06}"));
+            e
         })
         .collect();
     ingest(&s, "browser", events, Default::default()).await;
@@ -586,7 +614,7 @@ async fn device_foreground_correction_preserves_evidence_time_and_other_devices(
     assert_eq!(corrected["foregroundSeconds"], 20.);
     assert_eq!(corrected["backgroundSeconds"], 10.);
     assert_eq!(s.export_viewings(0).await.unwrap(), original);
-    let tv = corrected["rows"]
+    let tv = corrected["rows"][0]["visits"]
         .as_array()
         .unwrap()
         .iter()

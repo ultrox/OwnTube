@@ -1,4 +1,5 @@
 import { normalise, SIGNAL } from './protocol.js';
+import { selectedLanguage, selectedMetadata } from './audio-language.js';
 
 // Local, deliberately small character-trigram profiles. No model or network download.
 const corpus = {
@@ -30,10 +31,7 @@ export function classify(text) {
 }
 
 const readText = value => typeof value === 'string' ? value : value?.simpleText ?? value?.runs?.map(run => run.text ?? '').join('') ?? '';
-const audioCode = track => track?.languageCode ?? track?.language ?? track?.id?.split('.')[0];
-// YouTube's default audio often has id="und". It is not language evidence and
-// must not mask an ASR track with a real language (or a known default audio code).
-const usableCode = code => typeof code === 'string' && /^[a-z]{2,3}(?:-[a-z0-9]{1,8})*$/i.test(code) && !['und', 'zxx', 'mul'].includes(code.toLowerCase().split('-')[0]);
+const audioCode = track => selectedLanguage(track);
 
 export function videoSignal(response, audio, expectedId, nativeText = null) {
   if (!response || response.videoDetails?.videoId !== expectedId) return null;
@@ -45,31 +43,23 @@ export function videoSignal(response, audio, expectedId, nativeText = null) {
   const descriptionSource = details.shortDescription ? 'videoDetails.shortDescription' : description ? 'microformat.description' : 'none';
   const tracks = response.captions?.playerCaptionsTracklistRenderer?.captionTracks;
   const captions = Array.isArray(tracks) ? tracks : [];
-  const manual = captions.filter(track => track.kind !== 'asr' && usableCode(track.languageCode));
   const defaultAudio = response.streamingData?.adaptiveFormats?.find(format => format.audioTrack?.audioIsDefault)?.audioTrack;
-  const audioLanguage = [audioCode(audio), audioCode(defaultAudio)].find(usableCode);
-  const asr = captions.find(track => track.kind === 'asr' && usableCode(track.languageCode));
+  const audioLanguage = audioCode(audio);
   const localEstimate = classify(description.trim() || title);
   const top = nativeText?.candidates?.[0];
   const nativeAccepted = nativeText?.status === 'available' && top?.confidence >= 0.8 && top.confidence - (nativeText.candidates[1]?.confidence ?? 0) >= 0.2;
-  const estimate = nativeAccepted ? { lang: normalise(top.language), conf: 'medium' } : localEstimate;
-  const manualLanguages = new Set(manual.map(track => track.languageCode.toLowerCase().split('-')[0]));
-  let result;
-  // Actual audio and original ASR are stronger spoken-language evidence than
-  // translated subtitles. Caption order/defaults follow the viewer's UI locale.
-  if (audioLanguage) result = { lang: normalise(audioLanguage), conf: 'high', source: 'audio-track' };
-  else if (asr) result = { lang: normalise(asr.languageCode), conf: 'medium', source: 'asr-caption' };
-  else if (nativeAccepted) result = { lang: estimate.lang, conf: description.trim() ? 'medium' : 'low', source: 'native-text' };
-  else if (manualLanguages.size > 1 && estimate.lang !== 'other' && manual.some(track => normalise(track.languageCode) === estimate.lang)) result = { lang: estimate.lang, conf: 'low', source: 'caption-heuristic' };
-  else if (description.trim() && estimate.lang !== 'other') result = { lang: estimate.lang, conf: 'low', source: 'description-heuristic' };
-  else if (manualLanguages.size === 1) result = { lang: normalise(manual[0].languageCode), conf: 'medium', source: 'manual-caption' };
-  else result = { ...estimate, conf: 'low', source: title ? 'title-heuristic' : 'unknown' };
+  // Text/captions remain saved context, never substitutes for selected audio.
+  const result = audioLanguage
+    ? { lang: normalise(audioLanguage), conf: 'high', source: 'audio-track' }
+    : { lang: 'other', conf: 'low', source: 'unknown' };
   const isLive = details.isLive === true || !!response.playabilityStatus?.liveStreamability;
   const length = Number(details.lengthSeconds);
   const durationSeconds = !isLive && Number.isFinite(length) && length > 0 ? length : null;
-  const evidence = { schemaVersion: 1, algorithmVersion: 'language-v2', title, description, descriptionSource,
+  const evidence = { schemaVersion: 1, algorithmVersion: 'language-v3', title, description, descriptionSource,
     descriptionTruncated: fullDescription.length > description.length,
     selectedAudioLanguage: String(audioCode(audio) ?? '').slice(0,200), defaultAudioLanguage: String(audioCode(defaultAudio) ?? '').slice(0,200),
+    selectedAudioTrackId: String(audio?.id ?? '').slice(0,2000),
+    selectedAudioTrackMetadata: selectedMetadata(audio),
     captions: captions.slice(0,100).map(track => ({ language: String(track.languageCode ?? '').slice(0,64), kind: track.kind === 'asr' ? 'asr' : 'manual' }))
       .sort((a,b) => a.language.localeCompare(b.language) || a.kind.localeCompare(b.kind)),
     text: { engine: nativeAccepted ? 'chrome-language-detector' : 'local-trigram', status: nativeText?.status ?? 'unsupported',

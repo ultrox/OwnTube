@@ -375,7 +375,7 @@ fn inference_requires_selected_audio_and_never_confuses_titles_or_translation_wi
         &json!({"selectedAudioLanguage":"sr-Latn","defaultAudioLanguage":"en",
         "captions":[{"kind":"manual","language":"fr"}]}),
     );
-    assert_eq!(selected.lang, "sr-latn");
+    assert_eq!(selected.lang, "sr"); // script/region remain in the original evidence
     assert_eq!(selected.status, "estimated");
     assert!(!selected.review());
     for value in [

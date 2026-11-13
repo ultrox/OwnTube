@@ -24,20 +24,21 @@ test('full descriptions and raw language evidence survive even when selected aud
   assert.equal(isEvent({...signal,kind:'watch',eventId:'one',seconds:1,t:Date.now()}),true);
 });
 
-test('description-based classification stays an estimate and native failures use a local fallback',()=>{
+test('text detection stays in evidence and cannot classify unresolved audio',()=>{
   const signal=videoSignal(response,null,id,native);
-  assert.equal(signal.lang,'de');
-  assert.equal(signal.source,'native-text');
-  assert.equal(signal.conf,'medium','Text confidence is not spoken-language confidence');
+  assert.equal(signal.lang,'other');
+  assert.equal(signal.source,'unknown');
+  assert.equal(signal.conf,'low','Text confidence is not spoken-language confidence');
+  assert.equal(signal.evidence.text.language,'de');
   for(const status of ['unsupported','unavailable','downloadable','loading','error']){
     const fallback=videoSignal(response,null,id,{status,candidates:[]});
-    assert.equal(fallback.lang,'de');
-    assert.equal(fallback.source,'description-heuristic');
+    assert.equal(fallback.lang,'other');
+    assert.equal(fallback.source,'unknown');
     assert.equal(fallback.conf,'low');
     assert.equal(fallback.evidence.description,description);
   }
   const uncertain=videoSignal(response,null,id,{status:'available',candidates:[{language:'en',confidence:0.51},{language:'de',confidence:0.49}]});
-  assert.equal(uncertain.source,'description-heuristic');
+  assert.equal(uncertain.source,'unknown');
   assert.equal(uncertain.evidence.text.candidates[0].confidence,0.51,'Rejected native scores are still preserved');
 });
 

@@ -84,15 +84,17 @@ try {
   await ui.waitFor('[data-row]');
   const reported=await ui.eval(async()=> {
     const data=await fetch('/api/history?days=90&query=USBk_L36Rhc').then(r=>r.json());
-    return data.rows.filter(r=>r.viewingId==='dc781504-d8b7-43fe-970d-7367bbd86a92');
+    return data.rows.filter(r=>r.videoId==='USBk_L36Rhc');
   });
-  assert.equal(reported.length,1,'Reported viewing is one entry');
-  assert.equal(reported[0].versionCount,2);
-  assert.ok(Math.abs(reported[0].seconds-370.7307000012399)<0.001);
+  assert.equal(reported.length,1,'Reported video is one entry across every visit');
+  const visit=reported[0].visits.find(v=>v.viewingId==='dc781504-d8b7-43fe-970d-7367bbd86a92');
+  assert.equal(visit.versionCount,2);
+  assert.ok(Math.abs(visit.seconds-370.7307000012399)<0.001);
   await ui.click(`[data-row="${reported[0].id}"] [data-action="evidence"]`);
   await ui.waitFor('[data-ev-estimate]');
-  assert.equal(await ui.count('#f-version option'),2);
-  const earlier=reported[0].versions.find(v=>v.seconds<1);
+  assert.equal(await ui.count('#f-version option'),reported[0].versionCount);
+  assert.equal(await ui.count('[data-visit]'),reported[0].visitCount);
+  const earlier=visit.versions.find(v=>v.seconds<1);
   await ui.eval((value)=>{
     const select=document.querySelector('#f-version'); select.value=value; select.dispatchEvent(new Event('change',{bubbles:true}));
   },`${earlier.deviceId}:${earlier.metadataId}`);
@@ -123,6 +125,12 @@ try {
   });
   assert.equal(new Set(grouped.videos.map(v=>v.videoId)).size,grouped.videos.length);
   assert.ok(grouped.videos.every(v=>v.versions.length===v.versionCount));
+  for (const videoId of ['qHlyWqUJVSw','6bb7wBcw-mM','YvRrNW0ZaUc']) {
+    const video=await ui.eval(async(id)=>(await fetch('/api/modules/languages?days=90&group=video&query='+id).then(r=>r.json())).videos[0],videoId);
+    assert.ok(video,videoId);
+    assert.ok(video.versions.some(v=>v.assessment.lang==='en'&&v.assessment.source==='selected-audio-metadata'),`Saved English selected track decoded: ${videoId}`);
+    assert.ok(!video.versions.some(v=>v.assessment.source==='collector:audio-track'&&v.assessment.lang==='de'),`Wrong German fallback removed: ${videoId}`);
+  }
   await ui.type('#f-query','Lead In Silence');
   await ui.waitFor('[data-count="1"]');
   await ui.waitFor('[data-row]','Lead In Silence');

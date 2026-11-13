@@ -195,7 +195,7 @@ export async function startMock(deskDir, { tz = 'Europe/Zurich' } = {}) {
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(r);
     }
-    const scope = [...groups.values()].map((versions) => {
+    const combine = (versions) => {
       versions.sort((a, b) => b.lastWatched - a.lastWatched);
       const row = { ...versions[0], versions, versionCount: versions.length, rowKind: versions[0].viewingId ? 'viewing' : 'legacy-day' };
       for (const field of ['seconds', 'foregroundSeconds', 'backgroundSeconds', 'unspecifiedSeconds']) row[field] = versions.reduce((n, v) => n + v[field], 0);
@@ -204,6 +204,28 @@ export async function startMock(deskDir, { tz = 'Europe/Zurich' } = {}) {
       row.coveredSeconds = versions.some((v) => v.coveredSeconds != null) ? Math.max(...versions.map((v) => v.coveredSeconds || 0)) : null;
       row.coveragePercent = row.coveredSeconds != null && row.durationSeconds ? Math.min(100, row.coveredSeconds / row.durationSeconds * 100) : null;
       row.coverageComplete = versions.every((v) => v.coverageComplete);
+      return row;
+    };
+    const visits = [...groups.values()].map(combine);
+    const videos = new Map();
+    for (const visit of visits) {
+      if (!videos.has(visit.videoId)) videos.set(visit.videoId, []);
+      videos.get(visit.videoId).push(visit);
+    }
+    const scope = [...videos.values()].map(visits => {
+      const grouped = new Map();
+      for (const v of visits.flatMap(v => v.versions)) {
+        const key = `${v.deviceId}:${v.metadataId}`;
+        if (!grouped.has(key)) grouped.set(key, []);
+        grouped.get(key).push(v);
+      }
+      const row = combine([...grouped.values()].map(combine));
+      row.rowKind = 'video';
+      row.viewingId = null;
+      row.visits = visits.sort((a,b) => b.lastWatched-a.lastWatched);
+      row.visitCount = visits.length;
+      row.devices = fx.devices.filter(d => visits.some(v => v.deviceId === d.id));
+      row.deviceCount = row.devices.length;
       return row;
     });
     const needle = (q.query || '').trim().toLowerCase();
@@ -216,7 +238,7 @@ export async function startMock(deskDir, { tz = 'Europe/Zurich' } = {}) {
       seconds: sum(scope, 'seconds'), foregroundSeconds: sum(scope, 'foregroundSeconds'), backgroundSeconds: sum(scope, 'backgroundSeconds'), unspecifiedSeconds: sum(scope, 'unspecifiedSeconds'),
       videoCount: new Set(scope.map((r) => r.videoId)).size, perCalendarDaySeconds: sum(scope, 'seconds') / days,
       days, timezone: fx.tz, since: z.at(window[0], 0, 0), until, generation: mock.generation, devices: fx.devices, people: fx.people,
-      daily: window.map((date) => { const of = scope.filter((r) => r.date === date); return { date, seconds: sum(of, 'seconds'), foregroundSeconds: sum(of, 'foregroundSeconds'), backgroundSeconds: sum(of, 'backgroundSeconds'), unspecifiedSeconds: sum(of, 'unspecifiedSeconds'), rowCount: of.length, filteredCount: of.filter(hit).length }; }),
+      daily: window.map((date) => { const of = visits.filter((r) => r.date === date), latest = scope.filter(r => r.date === date); return { date, seconds: sum(of, 'seconds'), foregroundSeconds: sum(of, 'foregroundSeconds'), backgroundSeconds: sum(of, 'backgroundSeconds'), unspecifiedSeconds: sum(of, 'unspecifiedSeconds'), rowCount: new Set(of.map(v=>v.videoId)).size, filteredCount: new Set(of.filter(v=>scope.some(r=>r.videoId===v.videoId&&hit(r))).map(v=>v.videoId)).size, lastWatchedCount: latest.length, lastWatchedFilteredCount: latest.filter(hit).length }; }),
       count: scope.length, filteredCount: filtered.length, page, pages, pageSize: 20, rows: filtered.slice((page - 1) * 20, page * 20),
     }];
   }
@@ -260,7 +282,7 @@ export async function startMock(deskDir, { tz = 'Europe/Zurich' } = {}) {
       if (body?.bump) {
         mock.generation += 1;
         mock.shift += 60000;
-        const r = { ...fx.rows[0], id: `w-new-${mock.generation}`, viewingId: `v-new-${mock.generation}`, title: 'Arrived while you were paging', firstWatched: now() - 120000, lastWatched: now() - 30000 };
+        const r = { ...fx.rows[0], id: `w-new-${mock.generation}`, videoId: `newVideo${mock.generation}`, viewingId: `v-new-${mock.generation}`, title: 'Arrived while you were paging', firstWatched: now() - 120000, lastWatched: now() - 30000 };
         fx.rows.push(r);
       }
       const { bump, ...rest } = body || {};

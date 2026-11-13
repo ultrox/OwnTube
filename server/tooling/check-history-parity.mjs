@@ -77,19 +77,26 @@ for (const days of [7,30,90]) for (const scope of scopes) {
   }
   assert.equal(rows.length,history.count);
   assert.equal(new Set(rows.map(r=>r.id)).size,rows.length);
-  assert.equal(new Set(rows.map(r=>JSON.stringify([r.deviceId,r.viewingId,r.videoId,r.date]))).size,rows.length);
+  assert.equal(new Set(rows.map(r=>r.videoId)).size,rows.length);
+  assert.equal(rows.length,history.videoCount);
   for (const row of rows) {
     assert.equal(row.versionCount,row.versions.length);
     assert.equal(row.metadataId,row.versions[0].metadataId);
     for (const version of row.versions) {
-      for (const field of ['deviceId','viewingId','videoId','date']) assert.equal(version[field],row[field]);
+      assert.equal(version.videoId,row.videoId);
     }
+    assert.equal(row.visitCount,row.visits.length);
+    assert.equal(new Set(row.versions.map(v=>`${v.deviceId}/${v.metadataId}`)).size,row.versionCount);
+    assert.equal(new Set(row.visits.map(v=>v.deviceId)).size,row.deviceCount);
+    assert.equal(new Set(row.visits.map(v=>v.id)).size,row.visitCount);
+    for (const field of fields) close(row.visits.reduce((n,v)=>n+v[field],0),row[field],`History visits ${field}`);
     for (const field of fields) close(row.versions.reduce((n,v)=>n+v[field],0),row[field],`History versions ${field}`);
   }
   for (const field of fields) close(rows.reduce((sum,r)=>sum+r[field],0),history[field],`Paged ${field}`);
   for (const day of history.daily) {
-    const dailyRows=rows.filter(r=>r.date===day.date);
-    assert.equal(dailyRows.length,day.rowCount);
+    const dailyRows=rows.flatMap(r=>r.visits).filter(r=>r.date===day.date);
+    assert.equal(new Set(dailyRows.map(r=>r.videoId)).size,day.rowCount);
+    assert.equal(rows.filter(r=>r.date===day.date).length,day.lastWatchedCount);
     for (const field of fields) close(dailyRows.reduce((sum,r)=>sum+r[field],0),day[field],`Daily ${field}`);
   }
   for (const row of rows.flatMap(r=>r.versions)) {

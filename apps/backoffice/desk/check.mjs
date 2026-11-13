@@ -207,9 +207,9 @@ try {
     ok(/÷ 7 calendar days/.test(await text('[data-ledger] .fig__div')), 'per calendar day divides by all 7 calendar days');
     const split = await p.eval(() => ({ ...document.querySelector('[data-split]').dataset, text: document.querySelector('[data-split]').textContent }));
     ok(Number(split.fg) + Number(split.bg) + Number(split.un) === api7.seconds && /on-tab \/ foreground/.test(split.text), 'the context sentence covers the whole total and names a mixed scope “on-tab / foreground”');
-    ok((await p.eval(() => [...document.querySelectorAll('.day')].slice(0, 2).map((d) => [d.dataset.date, d.querySelector('.day__title').textContent]))).join() === [fx.today, 'Today', dayN(1), 'Yesterday'].join(), 'day groups are the server’s dates, Today and Yesterday included, with the browser in another zone');
-    ok((await p.eval(() => document.querySelector('[data-row="w-t7"]')?.closest('.day')?.dataset.date)) === fx.today && (await p.eval(() => [...document.querySelectorAll('[data-row="w-t7"] .hrow__time time')].map((t) => t.textContent).join('–'))) === '00:20–00:35', 'a viewing just after server midnight stays on the server’s day, shown in server time');
-    ok((await p.eval(() => document.querySelector('[data-row="w-y1"]')?.closest('.day')?.dataset.date)) === dayN(1), 'the same viewing before midnight is its own entry on the previous day');
+    ok((await p.eval(() => [...document.querySelectorAll('.day')].slice(0, 2).map((d) => [d.dataset.date, d.querySelector('.day__title').textContent]))).join() === [fx.today, 'Last watched · Today', dayN(1), 'Last watched · Yesterday'].join(), 'last-watched groups use server dates even with the browser in another zone');
+    ok((await p.eval(() => document.querySelector('[data-row="w-t7"]')?.closest('.day')?.dataset.date)) === fx.today && (await text('[data-row="w-t7"] .hrow__time time')) === '00:35', 'a video spanning midnight appears at its latest server time');
+    ok((await p.eval(() => !document.querySelector('[data-row="w-y1"]') && Number(document.querySelector('[data-row="w-t7"]').dataset.s) === 2040)), 'midnight records combine into one video row with all time');
     ok(await p.eval((days) => days.every((d) => { const head = document.querySelector(`.day[data-date="${d.date}"] [data-day-seconds]`); return !head || Number(head.dataset.daySeconds) === d.seconds; }), api7.daily), 'each day header shows that day’s whole total from the server');
 
     console.log('Entries');
@@ -227,14 +227,14 @@ try {
     ok(await p.eval(() => window.__deskXss === undefined && document.querySelector('[data-row="w-t6"] .hrow__title').textContent.includes('<img src=x') && !document.querySelector('img[src="x"]')), 'hostile titles and channels show literally and never run');
 
     console.log('Paging through one snapshot');
-    ok(/42 recorded entries · page 1 of 3/.test(await text('[data-status]')), 'the status counts every entry in scope and the pages');
-    ok(/continues on the next page/.test(await text(`.day[data-date="${dayN(1)}"] .day__head`)), 'a day split by the page says it continues on the next page');
+    ok(/41 videos · page 1 of 3/.test(await text('[data-status]')), 'the status counts unique videos in scope and the pages');
+    ok(!/continues on the next page/.test(await text(`.day[data-date="${dayN(1)}"] .day__head`)), 'a full day ending at the page boundary has no false continuation');
     await requests();
     await p.click('[data-key="page:next"]');
     await settled();
     req = await requests();
     ok(lastOf(req, '/api/history')?.query.page === '2' && lastOf(req, '/api/history')?.query.generation === String(api7.generation) && lastOf(req, '/api/history')?.query.until === String(api7.until), 'page 2 reads the same snapshot (generation + until)');
-    ok(/continued from the previous page/.test(await text('.day .day__head')) && (await p.eval(() => location.hash)).includes('page=2'), 'page 2 says the day is continued, and the page is in the URL');
+    ok(!/continued from the previous page/.test(await text('.day .day__head')) && (await p.eval(() => location.hash)).includes('page=2'), 'page 2 starts a new day and the page is in the URL');
     ok(await p.eval(() => document.activeElement?.dataset.key === 'page:next'), 'focus stays on the pager');
     await typeFilter('derby');
     req = await requests();
@@ -242,17 +242,17 @@ try {
     ok(fq?.query === 'derby' && fq.page === '1' && fq.generation === String(api7.generation) && fq.until === String(api7.until), 'filtering keeps the snapshot pair and starts at page 1');
     const apiDerby = await inPage('/api/history', { days: 7, device: '', person: '', query: 'derby', page: 1, generation: api7.generation, until: api7.until });
     ok(Number(await p.eval(() => document.querySelector('[data-ledger]').dataset.seconds)) === api7.seconds, 'filtering never changes the scope numbers');
-    ok(apiDerby.filteredCount === 2 && (await text('[data-status]')).startsWith('2 of 42 recorded entries match derby') && /1 of 11 entries match/.test(await text('.day__head')), 'the status and day headers count grouped entries');
+    ok(apiDerby.filteredCount === 2 && (await text('[data-status]')).startsWith('2 of 41 videos match derby') && /1 of 10 videos match/.test(await text('.day__head')), 'the status and day headers count grouped videos');
     await p.eval(() => { const i = document.getElementById('f-q'); i.value = 'no such words'; i.dispatchEvent(new Event('input', { bubbles: true })); });
     await sleep(500); await settled();
     ok(/Nothing in this period matches/.test(await text('[data-empty="filter"]')), 'no match says so and offers to clear the filter');
     await p.click('[data-key="clear-q"]');
     await settled();
-    ok((await p.eval(() => document.getElementById('f-q').value)) === '' && /42 recorded entries/.test(await text('[data-status]')), 'clearing the filter restores the list');
+    ok((await p.eval(() => document.getElementById('f-q').value)) === '' && /41 videos/.test(await text('[data-status]')), 'clearing the filter restores the list');
     await control({ slow: [{ path: '/api/history', when: { query: 'lathe' }, ms: 1000 }] });
     await p.eval(() => { const i = document.getElementById('f-q'); i.value = 'lathe'; i.dispatchEvent(new Event('input', { bubbles: true })); });
     await sleep(550);
-    ok(await p.eval(() => { const s = document.querySelector('[data-status]')?.textContent || ''; return /updating/.test(s) && !/lathe/.test(s) && /^42 recorded entries/.test(s); }), 'while a new filter loads, the status keeps describing the rows on screen');
+    ok(await p.eval(() => { const s = document.querySelector('[data-status]')?.textContent || ''; return /updating/.test(s) && !/lathe/.test(s) && /^41 videos/.test(s); }), 'while a new filter loads, the status keeps describing the rows on screen');
     await settled();
     await control({ slow: [] });
     await p.eval(() => { const i = document.getElementById('f-q'); i.value = ''; i.dispatchEvent(new Event('input', { bubbles: true })); });
@@ -324,7 +324,7 @@ try {
     await settled();
     req = (await requests()).filter((r) => r.path === '/api/history');
     ok(req.length >= 2 && req[0].query.page === '3' && req[0].query.generation === String(before410.generation) && req.at(-1).query.page === '1' && !('generation' in req.at(-1).query), 'a 410 drops the pair and reloads page 1 from current records');
-    ok(/no longer available/.test(await text('[data-notice]') || '') && /43 recorded entries · page 1/.test(await text('[data-status]')) && !!(await p.eval(() => document.querySelector('[data-row^="w-new-"]'))), 'the notice says the saved list is gone, and the new upload is now counted');
+    ok(/no longer available/.test(await text('[data-notice]') || '') && /42 videos · page 1/.test(await text('[data-status]')) && !!(await p.eval(() => document.querySelector('[data-row^="w-new-"]'))), 'the notice says the saved list is gone, and the new video is now counted');
     ok(/no longer available/.test(await p.eval(() => document.getElementById('sr').textContent)), 'the restart is announced');
 
     console.log('Searches');
@@ -407,7 +407,7 @@ try {
     ok(JSON.stringify(lastOf(req, '/api/history/evidence')?.query) === JSON.stringify({ device: 'd-laptop', metadata: 'm-mockLaptop1-chrome1' }), 'the inspector asks for exactly this entry’s device and version');
     ok(await p.eval(() => document.activeElement?.dataset.key === 'dlg:close'), 'focus starts on Close');
     ok(await p.eval(() => { const q = (k) => Number(document.querySelector(`#dlg [data-ev-${k}]`)?.dataset[`ev${k[0].toUpperCase()}${k.slice(1)}`]); return q('fg') === 1200 && q('bg') === 300 && q('un') === 0 && q('total') === 1500; }), 'the context facts are this entry’s');
-    ok(/19:40–20:05 first and last recorded playback, not when a session started or ended/.test(await text('#dlg [data-ev-recorded]')) && /one recorded viewing of this video/.test(await text('#dlg [data-ev-scope]')), 'recorded times and the entry’s scope are named precisely');
+    ok(/first to latest recorded playback in this scope/.test(await text('#dlg [data-ev-recorded]')) && /combines 1 visit \/ day record across 1 device/.test(await text('#dlg [data-ev-scope]')), 'recorded bounds and the video scope are named precisely');
     ok(/English \(en\) · high confidence · from the selected audio track/.test(await text('#dlg [data-ev-estimate]')), 'the collector’s estimate is shown as derived, with its signal');
     ok((await p.eval(() => document.querySelector('#dlg a[data-key="dlg:languages"]')?.getAttribute('href'))) === 'modules/languages/#device=d-laptop&query=mockLaptop1&metadata=m-mockLaptop1-chrome1', 'the inspector links to this version in Languages, where corrections live');
     await p.click('#dlg [data-raw-details] > summary');
@@ -455,8 +455,8 @@ try {
     await p.click('[data-key="page:next"]');
     await settled();
     await inspect('w-l1');
-    ok(/older collector recorded for this video/.test(await text('#dlg [data-ev-scope]')) && /not separate plays/.test(await text('#dlg [data-ev-scope]')) && /First sample 09:12, latest 21:47/.test(await text('#dlg [data-ev-recorded]')), 'a legacy day explains itself: one day’s record, first and latest samples, not plays');
-    ok((await text('[data-row="w-l1"] .hrow__time')) === 'Recorded that day' && !(await p.eval(() => document.querySelector('[data-row="w-l1"] time'))), 'legacy rows read “Recorded that day”, with no time of day');
+    ok(/recorded that day/.test(await text('#dlg [data-visit]')) && /Older samples have no visit ID/.test(await text('#dlg')), 'legacy day identity remains nested under its video');
+    ok((await text('[data-row="w-l1"] .hrow__time time')) === '21:47', 'video rows show latest recorded time');
     await p.key('Escape', 27);
     await p.click('[data-key="page:prev"]');
     await settled();
@@ -563,12 +563,12 @@ try {
     ok(days.length && days.every((d, i) => i === 0 || d < days[i - 1]) && days.every((d) => lap.rows.some((r) => r.date === d)), 'day groups follow the server’s dates, newest first');
     const lapAll = [];
     for (let pg = 1; pg <= lap.pages; pg++) lapAll.push(...(await inPage('/api/history', { days: 7, device: laptop.deviceId, person: '', query: '', page: pg, generation: lap.generation, until: lap.until })).rows);
-    const legacy = lapAll.find((r) => r.rowKind === 'legacy-day');
-    const split = lapAll.filter((r) => r.viewingId && r.viewingId === lapAll.find((x) => x.title?.includes('(revised)'))?.viewingId);
-    ok(!!legacy && legacy.viewingId === null, 'the legacy fixture is grouped as a legacy day with no viewing identity');
+    const legacy = lapAll.find((r) => r.visits.some(v => v.rowKind === 'legacy-day'));
+    const split = lapAll.filter((r) => r.title?.includes('(revised)'));
+    ok(!!legacy && legacy.visits.some(v=>v.rowKind==='legacy-day'&&v.viewingId===null), 'the legacy fixture retains its nested day with no viewing identity');
     ok(split.length === 1 && split[0].versionCount === 2 && new Set(split[0].versions.map((r) => r.metadataId)).size === 2, 'the metadata change stays within one viewing with two evidence versions');
     const midnight = lapAll.filter((r) => r.title === 'Night train across midnight');
-    ok(midnight.length === 2 && midnight[0].viewingId === midnight[1].viewingId && midnight[0].date !== midnight[1].date, 'the viewing across midnight gives one entry per server date');
+    ok(midnight.length === 1 && midnight[0].visits.length === 2 && midnight[0].visits[0].date !== midnight[0].visits[1].date, 'the video across midnight retains both dated visits under one row');
     ok(lapAll.some((r) => r.coverageComplete === false), 'a viewing with a slice without ranges is reported as partial coverage');
     await p.click('[data-key="page:next"]');
     await settled();
@@ -576,7 +576,7 @@ try {
     if (legacy) {
       const pageOf = Math.floor(lapAll.indexOf(legacy) / 20) + 1;
       if (pageOf !== 2) { await p.go(`${BASE}/#/history?device=${encodeURIComponent(laptop.deviceId)}&page=${pageOf}`); await settled(); }
-      ok((await text(`[data-row="${legacy.id}"] .hrow__time`)) === 'Recorded that day', 'the legacy entry reads “Recorded that day”');
+      ok(await p.eval(id => !!document.querySelector(`[data-row="${id}"] time`), legacy.id), 'the legacy video shows its latest recorded sample time');
     }
     // A new upload changes the generation; the next page of the old snapshot must be refused.
     await p.go(`${BASE}/#/history?device=${encodeURIComponent(laptop.deviceId)}`);
