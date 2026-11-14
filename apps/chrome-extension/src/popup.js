@@ -16,6 +16,8 @@ function schedule() {
 }
 function render(s) {
   latest=s;
+  $('onboarding').hidden=!!s.config;
+  $('collector-details').hidden=!s.config;
   $('status').textContent=!s.config?'Not paired — connect below':s.active?'Uploading · waiting for the server’s receipt':s.sync.paused?'Authentication paused · pending data is retained':s.sync.error?'Upload failed · events are still safe locally':s.count?'Collecting · events waiting to upload':s.blockedCount?'Upload queue empty · held events need attention':'Queue empty · new activity will appear here';
   $('queue-count').textContent=s.count;
   $('watch-seconds').textContent=duration(s.nextBatch.watchSeconds);
@@ -56,7 +58,7 @@ function render(s) {
     }));
   }
   if(s.config) { $('paired-server').textContent=`${s.config.server} · device ${s.config.deviceId}`; $('dashboard').href=s.config.server; }
-  if(!initialized) { $('connection').open=!s.config;initialized=true; }
+  if(!initialized) { $('connection').open=false;initialized=true; }
   schedule();
 }
 const failure=e=>{$('notice').textContent=e.message;};

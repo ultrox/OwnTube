@@ -2,15 +2,22 @@ import { CHANNEL, isEvent } from './capture/protocol.js';
 import { openOutbox, append, configure, status, writeSetting, heldEvents, retryHeld } from './outbox.js';
 import { createDrainer } from './drain.js';
 import { validNetwork } from './network.js';
+import { createPairer } from './device-pairing.js';
 
 const db=openOutbox();
 const drainer=db.then(value=>createDrainer(value));
+const pairer=db.then(value=>createPairer(value));
 // Waking the worker or opening its popup must not postpone an existing alarm.
 const alarm=async()=>{if(!await chrome.alarms.get('upload')) await chrome.alarms.create('upload',{periodInMinutes:0.5});};
 chrome.runtime.onInstalled.addListener(alarm);
 chrome.runtime.onStartup.addListener(alarm);
 void alarm();
-chrome.alarms.onAlarm.addListener(a=>{if(a.name==='upload') void drainer.then(run=>run());});
+chrome.alarms.onAlarm.addListener(a=>{
+  if(a.name==='upload') {
+    void drainer.then(run=>run());
+    void pairer.then(p=>p.poll()).catch(()=>{}); // offline pairing resumes at the next alarm
+  }
+});
 async function snapshot(store) {
   await alarm();
   const [saved,scheduled,run]=await Promise.all([status(store),chrome.alarms.get('upload'),drainer]);
@@ -31,6 +38,8 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
     }
     if(!trustedUI) throw Error('Unknown sender');
     if(message.tag==='Status') return snapshot(store);
+    if(message.tag==='PairStart') return {ok:true,pairing:await (await pairer).start(message.server)};
+    if(message.tag==='PairStatus') return {ok:true,pairing:await (await pairer).poll()};
     if(message.tag==='ExportHeld') return {ok:true,events:await heldEvents(store)};
     if(message.tag==='RetryHeld') {await retryHeld(store);return snapshot(store);}
     if(message.tag==='Drain') { await (await drainer)(true); return snapshot(store); }
@@ -43,7 +52,8 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
       if(!response.ok) throw Error(`Pairing failed (${response.status})`);
       const identity=await response.json();
       if(typeof identity.deviceId!=='string') throw Error('Invalid device response');
-      await configure(store,{server,deviceId:identity.deviceId,token:message.token});
+      await configure(store,{server,deviceId:identity.deviceId,token:message.token,label:identity.label,person:identity.person});
+      await writeSetting(store,'pairing',null);
       return snapshot(store);
     }
     throw Error('Unknown message');

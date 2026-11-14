@@ -25,17 +25,20 @@ cargo run --locked
 1. Open **http://127.0.0.1:3210**.
 2. Sign in using the contents of `server/data/admin-token` (relative to the repository root). The server creates this file
    on first run with owner-only permissions. `ADMIN_TOKEN` can supply a key instead (24+ characters).
-3. Open **Legacy** (`/legacy/`) to add people, then create labelled devices assigned
-   to each person. Each browser installation gets its own device key; a person can have many devices.
-4. Load `apps/chrome-extension/dist/` unpacked at `chrome://extensions`.
-5. In its popup, open **Server & pairing → Open connection settings**. In that normal tab, enter
-   the server URL (`http://127.0.0.1:3210` for local development) and the newly created **device key**,
-   then click **Save connection**. New installations default to the production HTTPS address.
-   Accept Chrome's server-access permission if prompted. **Saved connection** confirms persistence;
-   the key field is deliberately blank after saving/reopening, rather than displaying your stored key.
+3. Load `apps/chrome-extension/dist/` unpacked at `chrome://extensions`.
+4. Open **Connect** in the extension. For local development, expand **Advanced connection
+   settings** and set `http://127.0.0.1:3210`; production is already the default.
+   Click **Connect**, accept server access if prompted, and copy the displayed short code.
+5. Open **Connect device** (`/connect/`) on the dashboard. Enter the code, choose or add
+   a person, name the browser and approve. The extension connects automatically.
+   A person can have many independently authenticated devices.
 6. Refresh open YouTube tabs. Watch a regular video or Short; uploads run roughly every 30 seconds.
    History uses an explicit **Refresh** to preserve the list while reading. **Upload now** in the
    collector starts a bounded drain immediately.
+
+Existing device keys still work under **Advanced connection settings**.
+See [pairing and recovery](../docs/device-pairing.md) and the
+[extension packaging guide](../apps/chrome-extension/README.md).
 
 ### People and history
 

@@ -1,16 +1,38 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>YouTube Observer · Connection settings</title><link rel="stylesheet" href="popup.css"></head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Connect · YouTube Observer</title><link rel="stylesheet" href="popup.css"></head>
 <body class="settings-page">
-<header><div><h1>Connection settings</h1><p>YouTube Observer</p></div></header>
-<section class="panel"><h2>Saved connection</h2><p id="saved-connection">Loading…</p><a id="dashboard" target="_blank" rel="noreferrer" hidden>Open dashboard ↗</a></section>
-<section class="panel"><h2>Pair this browser</h2>
-<p class="note">Setup opens in a normal tab so Chrome’s permission prompt cannot close it. Use a device key from the dashboard, not the owner login key.</p>
-<p id="notice" role="status" aria-live="polite"></p>
-<form id="pair"><fieldset id="fields" disabled>
-<label>Server URL<input id="server" type="url" value="https://ytdash.gromobran.com" required></label>
-<label>Device key<input id="token" type="password" autocomplete="off" required></label>
-<button id="save">Save connection</button>
-</fieldset></form>
-<p class="note">The saved key is never displayed. An empty key field after saving or reopening this page is normal. Check Saved connection above to confirm your pairing.</p>
-<p class="note">You can replace a key for the same device/server with uploads pending. Changing to a different server or device requires uploading queued events and resolving held events first. Refresh YouTube tabs after changing the pairing.</p>
-</section><script src="pairing.js"></script></body></html>
+<header><div><h1>Connect this browser</h1><p>YouTube Observer · OwnTube</p></div></header>
+<section class="panel pairing-hero">
+  <div id="intro">
+    <h2>Your watch history, in one place.</h2>
+    <p>Get a short code, then ask your dashboard owner to approve it.</p>
+    <button id="connect" disabled>Connect</button>
+  </div>
+  <div id="waiting" hidden>
+    <h2>Give this code to your dashboard owner</h2>
+    <p class="pairing-code" id="code"></p>
+    <button id="copy" class="secondary">Copy code</button>
+    <p>On the dashboard, choose <strong>Connect device</strong>, enter this code and choose whose browser this is.</p>
+    <a id="approve-link" target="_blank" rel="noreferrer">Open approval page ↗</a>
+    <p id="expires" class="note"></p>
+    <p class="note">This browser will connect automatically after approval. You can leave this tab open.</p>
+  </div>
+  <div id="connected" hidden>
+    <h2>You’re connected ✓</h2>
+    <p id="saved-connection"></p>
+    <p>Refresh any YouTube tabs that were already open, then watch as usual. Uploads happen automatically.</p>
+    <a class="primary-link" href="https://www.youtube.com/" target="_blank" rel="noreferrer">Open YouTube ↗</a>
+    <a id="dashboard" target="_blank" rel="noreferrer">Open dashboard ↗</a>
+  </div>
+  <p id="notice" role="status" aria-live="polite"></p>
+</section>
+<details class="panel" id="advanced"><summary>Advanced connection settings</summary>
+  <p class="note">For another OwnTube server or an existing device key.</p>
+  <label>Server URL<input id="server" type="url" value="https://ytdash.gromobran.com" required></label>
+  <form id="pair"><fieldset id="fields" disabled>
+    <label>Existing device key<input id="token" type="password" autocomplete="off" required></label>
+    <button id="save">Save connection</button>
+  </fieldset></form>
+  <p class="note">Leave this alone for code pairing. Existing queued recordings are retained. The saved device key is never displayed.</p>
+</details>
+<script src="pairing.js"></script></body></html>

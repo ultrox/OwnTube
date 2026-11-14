@@ -60,7 +60,7 @@ impl Default for View {
         }
     }
 }
-fn person_id(db: &Connection, value: &str) -> Result<Option<String>> {
+pub(crate) fn person_id(db: &Connection, value: &str) -> Result<Option<String>> {
     let value = value.trim();
     if value.is_empty() {
         return Ok(None);
@@ -223,6 +223,7 @@ impl Store {
         tx.commit()?;
         compact::initialize(&db)?;
         crate::languages::initialize(&db)?;
+        crate::pairing::initialize(&db)?;
         while compact::import_chunk(&mut db)? {}
         let metrics = Arc::new(crate::metrics::Metrics::default());
         metrics.pipeline(compact::progress(&db)?);

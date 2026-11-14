@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow"><meta name="color-scheme" content="light dark">
+  <title>Connect a device · OwnTube</title>
+  <link rel="stylesheet" href="connect.css"><script type="module" src="connect.js"></script>
+</head>
+<body>
+  <header><a href="/">OwnTube</a><nav aria-label="Sections"><a href="/">History</a><a href="/modules/languages/">Languages</a><a href="/connect/" aria-current="page">Connect device</a></nav></header>
+  <main>
+    <p class="eyebrow">A new browser, one short code</p>
+    <h1>Connect a device</h1>
+    <p class="lede">Enter the code from YouTube Observer and choose whose browser it is. The extension takes care of the rest.</p>
+    <p id="loading" role="status">Checking your session…</p>
+    <form id="login" hidden>
+      <h2>Sign in to approve a device</h2>
+      <label for="owner-key">Owner login key</label><input id="owner-key" type="password" autocomplete="current-password" required>
+      <button type="submit">Sign in</button>
+    </form>
+    <form id="approve" hidden>
+      <label for="code">Code shown in the extension</label>
+      <input id="code" class="code" placeholder="ABCD-EFGH" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="24" required aria-describedby="code-help">
+      <p class="hint" id="code-help">Ask the person setting up their browser to click Connect in the extension.</p>
+      <div class="fields">
+        <div><label for="person">Whose browser?</label><select id="person"><option value="">Choose a person</option></select></div>
+        <div><label for="label">Device name</label><input id="label" value="Chrome" maxlength="100" required autocomplete="off"></div>
+      </div>
+      <div id="new-person" hidden><label for="person-name">New person’s name</label><input id="person-name" maxlength="100" autocomplete="off"></div>
+      <p class="hint">This browser’s watch history will be recorded separately under the selected person.</p>
+      <button type="submit" id="approve-button">Approve connection</button>
+    </form>
+    <section id="success" hidden aria-labelledby="success-title">
+      <p class="eyebrow">Approved ✓</p><h2 id="success-title"></h2>
+      <p>The extension connects automatically within a few seconds while its setup tab is open. Ask them to look for <strong>You’re connected</strong>, then open YouTube.</p>
+      <a class="button" href="/">Back to dashboard</a><button type="button" class="quiet" id="another">Connect another device</button>
+    </section>
+    <p id="error" role="alert" hidden></p>
+    <aside><h2>Need the extension first?</h2><p><a href="/youtube-observer-latest.zip">Download YouTube Observer for Chrome</a>. Extract the ZIP, then use <strong>Load unpacked</strong> in <code>chrome://extensions</code> with Developer mode enabled.</p></aside>
+  </main>
+</body>
+</html>

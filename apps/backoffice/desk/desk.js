@@ -290,7 +290,7 @@ function preserve(fn, focusKey) {
 }
 
 function renderMastEnd() {
-  $('#mast-end').innerHTML = `<a class="btn btn--sm btn--quiet" href="legacy/" title="The previous dashboard, with devices and pairing" data-key="mast:legacy">Legacy</a>${state.auth === 'signedIn'
+  $('#mast-end').innerHTML = `<a class="btn btn--sm btn--quiet" href="/connect/" data-key="mast:connect">Connect device</a><a class="btn btn--sm btn--quiet" href="legacy/" title="The previous dashboard, with devices and pairing" data-key="mast:legacy">Legacy</a>${state.auth === 'signedIn'
     ? `<button type="button" class="btn btn--sm btn--quiet" data-action="logout" data-key="mast:logout" ${state.logout.busy ? 'disabled' : ''}>${state.logout.busy ? 'Signing out…' : 'Sign out'}</button>` : ''}`;
 }
 

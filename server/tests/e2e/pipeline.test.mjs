@@ -39,16 +39,17 @@ test('Chrome capture → offline queue → lost acknowledgement → restart → 
     assert.equal(await popup.attr('#connection-settings','target'),'_blank');
     const setup=await browser.newPage(`chrome-extension://${browser.extId}/pairing.html`);
     await waitFor(()=>setup.eval(()=>!document.querySelector('#fields').disabled));
+    await setup.click('#advanced summary');
     await setup.type('#server',endpoint);await setup.type('#token','invalid-device-key');
     await setup.realClick('#save');await setup.waitFor('#notice','Pairing failed (401)');
-    assert.equal(await setup.text('#saved-connection'),'Not paired yet.');
+    assert.equal(await setup.count('#connected[hidden]'),1);
     await setup.type('#token',device.token);await setup.realClick('#save');
     await setup.waitFor('#notice','Connection saved');
-    assert.match(await setup.text('#saved-connection'),new RegExp(device.deviceId));
+    assert.match(await setup.text('#saved-connection'),/Browser test/);
     assert.equal(await setup.eval(()=>document.querySelector('#token').value),'');
     await setup.close();await popup.close();
     const reopened=await browser.newPage(`chrome-extension://${browser.extId}/pairing.html`);
-    await reopened.waitFor('#saved-connection',device.deviceId);
+    await reopened.waitFor('#saved-connection','Browser test');
     assert.equal(await reopened.eval(()=>document.querySelector('#token').value),'');
     // The blank input is deliberate: configuration and key persist outside the UI.
     await reopened.close();

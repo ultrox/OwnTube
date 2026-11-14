@@ -15,10 +15,11 @@ export function openOutbox() {
 }
 export async function readSetting(db,key) { return req(db.transaction('settings').objectStore('settings').get(key)); }
 export async function writeSetting(db,key,value) { const tx=db.transaction('settings','readwrite'), finished=done(tx); tx.objectStore('settings').put(value,key); await finished; }
-export async function configure(db,config) {
+export async function configure(db,config,{onlyIfUnpaired=false}={}) {
   const tx=db.transaction(['settings','events','blocked'],'readwrite'), finished=done(tx);
   const settings=tx.objectStore('settings');
   const [old,count,blocked,sync]=await Promise.all([req(settings.get('config')),req(tx.objectStore('events').count()),req(tx.objectStore('blocked').count()),req(settings.get('sync'))]);
+  if(onlyIfUnpaired && old && (old.server!==config.server || old.deviceId!==config.deviceId || old.token!==config.token)) { await finished; throw Error('This browser was connected elsewhere while waiting for approval. Its connection was kept.'); }
   if((count || blocked) && (old?.server!==config.server || old?.deviceId!==config.deviceId)) { await finished; throw Error('Drain this device’s queue and resolve held events before changing its pairing.'); }
   if(JSON.stringify(old)===JSON.stringify(config)) {await finished;return;}
   settings.put(config,'config');
@@ -95,7 +96,7 @@ export async function acknowledge(db,events,ids,receipt=null) {
 }
 export async function status(db) {
   const {config,batch,meta}=await nextBatch(db);
-  return {config:config ? {server:config.server,deviceId:config.deviceId} : null,...meta,
+  return {config:config ? {server:config.server,deviceId:config.deviceId,label:config.label,person:config.person} : null,...meta,
     nextBatch:{...summarize(batch.events),bytes:new TextEncoder().encode(JSON.stringify(batch)).length,evidenceCount:Object.keys(batch.evidence).length,events:batch.events,evidence:batch.evidence}};
 }
 export function summarize(events) {

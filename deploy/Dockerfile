@@ -11,6 +11,7 @@ COPY apps/backoffice/history history
 COPY apps/backoffice/modules modules
 COPY apps/backoffice/desk desk
 COPY apps/backoffice/shared shared
+COPY apps/backoffice/downloads downloads
 RUN pnpm build
 
 FROM rust:1.94-bookworm AS rust

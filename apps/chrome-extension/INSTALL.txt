@@ -1,0 +1,34 @@
+YouTube Observer — OwnTube Chrome tracker
+
+INSTALL
+1. Extract the ZIP into a permanent folder.
+2. Open chrome://extensions in Chrome and enable Developer mode.
+3. Click Load unpacked and choose the folder containing manifest.json.
+4. Keep that folder; Chrome loads the extension from it.
+
+CONNECT THIS BROWSER
+1. Click YouTube Observer in Chrome's Extensions menu, then Connect.
+2. Click Connect on the setup page. Allow server access if Chrome asks.
+3. Send the displayed eight-character code to your dashboard owner.
+4. Leave the setup tab open. It will say "You're connected" after approval.
+5. Refresh already-open YouTube tabs, or open YouTube and start watching.
+
+ON THE OWNER'S COMPUTER
+1. Open https://ytdash.gromobran.com/connect/
+   Or click Connect device in the dashboard.
+2. Enter the code, choose whose browser it is (or add a person), and name it.
+3. Click Approve connection.
+
+No device key or server URL needs to be copied for normal setup.
+Codes expire after ten minutes. Get a new code in the extension if needed.
+Connection setup resumes if the tab is reopened or Chrome restarts.
+
+UPDATING AN EXISTING UNPACKED INSTALLATION
+Extract the new files over the SAME extension folder, then click Reload for
+YouTube Observer at chrome://extensions. Refresh YouTube tabs.
+Do not remove the extension: keeping it preserves pairing and queued recordings.
+
+The extension records YouTube playback and source evidence in the Chrome profile
+where installed, and uploads to the paired OwnTube server automatically.
+The ZIP contains no owner key, device key, or browsing history.
+Requires Chrome 120 or newer.

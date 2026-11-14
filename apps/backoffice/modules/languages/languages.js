@@ -250,7 +250,7 @@ function renderChrome() {
 }
 function renderMastEnd() {
   if (DEMO) { $('#mast-end').innerHTML = ''; return; }
-  $('#mast-end').innerHTML = `<a class="btn btn--sm btn--quiet" href="../../legacy/" title="The previous dashboard, with devices and pairing" data-key="mast:legacy">Legacy</a>${state.auth === 'signedIn'
+  $('#mast-end').innerHTML = `<a class="btn btn--sm btn--quiet" href="/connect/" data-key="mast:connect">Connect device</a><a class="btn btn--sm btn--quiet" href="../../legacy/" title="The previous dashboard, with devices and pairing" data-key="mast:legacy">Legacy</a>${state.auth === 'signedIn'
     ? '<button type="button" class="btn btn--sm btn--quiet" data-action="logout" data-key="mast:logout">Sign out</button>' : ''}`;
 }
 

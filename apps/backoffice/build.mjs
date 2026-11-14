@@ -45,6 +45,19 @@ async function copyModule(source, destination) {
   }
 }
 await copyModule('modules', 'dist/modules');
+await copyModule('modules/connect', 'dist/connect');
+let connectHtml = await fs.readFile('dist/connect/index.html', 'utf8');
+for (const file of ['connect.js', 'connect.css']) {
+  const contents = await fs.readFile(`dist/connect/${file}`);
+  const versioned = file.replace(/(\.[^.]+)$/, `.${createHash('sha256').update(contents).digest('hex').slice(0, 16)}$1`);
+  await fs.writeFile(`dist/connect/${versioned}`, contents);
+  connectHtml = connectHtml.replaceAll(`"${file}"`, `"${versioned}"`);
+}
+await fs.writeFile('dist/connect/index.html', connectHtml);
+// Versioned collector packages survive image replacement; latest is a convenience download.
+for (const file of await fs.readdir('downloads')) {
+  if (/^youtube-observer-(?:latest|[\d.]+)\.zip$/.test(file)) await fs.copyFile(`downloads/${file}`, `dist/${file}`);
+}
 await copyModule('shared', 'dist/shared');
 const versionsSource = await fs.readFile('shared/recorded-versions.js');
 const versionsName = `recorded-versions.${createHash('sha256').update(versionsSource).digest('hex').slice(0, 16)}.js`;

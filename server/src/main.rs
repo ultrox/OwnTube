@@ -20,6 +20,7 @@ mod languages;
 mod legacy_analytics;
 mod metrics;
 mod playback;
+mod pairing;
 mod snapshots;
 
 #[derive(Clone)]
@@ -395,6 +396,10 @@ fn router(app: App, public: PathBuf) -> Router {
         .route("/api/logout", post(logout))
         .route("/api/session", get(session_status))
         .route("/api/devices", post(create_device))
+        .route("/api/pairing", get(pairing::people))
+        .route("/api/pairing/start", post(pairing::start))
+        .route("/api/pairing/status", post(pairing::status))
+        .route("/api/pairing/approve", post(pairing::approve))
         .route("/api/people", post(create_person))
         .route("/api/devices/{id}", post(update_device))
         .route("/api/devices/{id}/rotate", post(rotate_device))
