@@ -40,6 +40,11 @@ Existing device keys still work under **Advanced connection settings**.
 See [pairing and recovery](../docs/device-pairing.md) and the
 [extension packaging guide](../apps/chrome-extension/README.md).
 
+At `/connect/`, **Connected devices → Delete device** disconnects a browser or TV
+and stops its future uploads. Recorded history, source evidence and reviews remain
+available under their original person/device. The disconnected device is removed
+from the active connection list and remains available in historical filters.
+
 ### People and history
 
 The production web build serves **History** at `/#/history` and **Searches** at
@@ -304,7 +309,37 @@ All 45 Android unit regressions, a disposable-backend HTTP contract test and the
 The ARM64 APK was installed on the Shield on 2026-11-13; versionCode 2466 and the retained app-data
 directory were verified. Post-update playback capture has not yet been checked on-device.
 
-### Current release: `owntube-device-pairing-20261114-1`
+### Current release: `owntube-device-removal-20261114-1`
+
+Deployed from `01ecbe0b3` using
+`kamal app boot -c deploy/deploy.yml --version owntube-device-removal-20261114-1`.
+Container `71cdd9cd5023`, image
+`sha256:f9b8abc2a89242fe458c1134ba7d4d0b76b129a44e000145d0aa9fb6510fb31c`.
+Source archive SHA-256:
+`5f8c5c0ed245573e4a647d9a40c0179e787676c6938c4cf94a5f176e638c20bb`.
+
+Adds **Connected devices → Delete device** at `/connect/`, using the existing
+owner-only revocation API. The owner explicitly chose to retain recorded history.
+The active list omits revoked devices; historical attribution stays available.
+The browser test verifies failed-request retry, persistence after reload, retained
+exports/totals, blocked subsequent uploads and preservation of the local queue.
+All 44 Rust tests passed (one production-copy-only test excluded).
+
+Public verification matched the approval assets, three active devices and all
+retained ZIP downloads; desktop/phone layouts passed in both themes. No production
+devices were created or deleted by verification. Eight frozen scopes matched;
+credentials, source records, 370 assessments and comparison revision 11 were
+preserved. Integrity and foreign keys passed.
+
+Fresh backup `before-owntube-device-removal-20261114-1` is retained remotely and
+locally under the same backup directories documented below; verified SHA-256:
+`85d152a106488e519d4cda08f82cb21173484cd579b746ad5839d0bf0df4b65e`.
+It includes 297,157 events, 587 evidence records, 944 slices, 607 metadata versions,
+5 devices, 2 people, 370 assessments, one context override and one comparison.
+Image-only rollback:
+`kamal rollback owntube-device-pairing-20261114-1 -c deploy/deploy.yml`.
+
+### Previous release: `owntube-device-pairing-20261114-1`
 
 Deployed from `ad255d55a` with
 `kamal app boot -c deploy/deploy.yml --version owntube-device-pairing-20261114-1`.

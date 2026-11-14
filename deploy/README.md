@@ -95,7 +95,17 @@ The Languages follow-up `owntube-languages-20261113-2` uses the same process fro
 commit `4369a6835`, with mobile wrapping and content-hashed module assets. Its
 backend binary is identical to `-1`; the same backup and image-only rollback apply.
 
-## Current short-code pairing release
+## Current device-removal release
+
+`owntube-device-removal-20261114-1`, source `01ecbe0b3`, adds a connected-device
+list and **Delete device** on `/connect/`. Deletion revokes uploads while keeping
+recorded history. Browser checks verified retry, retained exports and blocked
+uploads; public checks matched three active devices and all downloadable ZIPs.
+Eight frozen production scopes, 370 reviews and comparison revision 11 were
+preserved. Backup, release identity and rollback:
+[`server/README.md`](../server/README.md#current-release-owntube-device-removal-20261114-1).
+
+## Previous short-code pairing release
 
 `owntube-device-pairing-20261114-1`, source `ad255d55a`, adds dashboard approval at
 `/connect/` and Chrome 0.3.0 short-code setup. All three public ZIP downloads are
@@ -103,7 +113,7 @@ included in the image. The actual AMD64 candidate and deployed server matched
 seven frozen production scopes, preserving 370 assessments and comparison
 revision 11. Public approval assets, login, desktop/phone layouts and ZIP hashes
 passed. Release identity, backup and image-only rollback:
-[`server/README.md`](../server/README.md#current-release-owntube-device-pairing-20261114-1).
+[`server/README.md`](../server/README.md#previous-release-owntube-device-pairing-20261114-1).
 
 ## Previous comparison redesign release
 
