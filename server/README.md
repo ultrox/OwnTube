@@ -304,7 +304,57 @@ All 45 Android unit regressions, a disposable-backend HTTP contract test and the
 The ARM64 APK was installed on the Shield on 2026-11-13; versionCode 2466 and the retained app-data
 directory were verified. Post-update playback capture has not yet been checked on-device.
 
-### Current release: `owntube-comparison-story-20261113-1`
+### Current release: `owntube-device-pairing-20261114-1`
+
+Deployed from `ad255d55a` with
+`kamal app boot -c deploy/deploy.yml --version owntube-device-pairing-20261114-1`.
+Container `19e01cc8fd62`, image
+`sha256:33fd97428419cc4b7778367497e7446189ca604f56d8e5886b772b4f41aef0dc`.
+Release files: `/home/marko/releases/youtube-observer/owntube-device-pairing-20261114-1/`.
+Source archive SHA-256:
+`5bf962900bd981ded1fde0ae1a384f32d334b84a16b00f030d64ea06daef80c5`.
+
+Chrome 0.3.0 displays a short code; the owner approves it at `/connect/`, chooses
+or creates a person, and the browser connects automatically. History and Languages
+link directly to **Connect device**. The additive pairing table retains hashed
+browser secrets; existing devices, queues and credential formats are preserved.
+See [protocol and recovery](../docs/device-pairing.md).
+
+Download: `https://ytdash.gromobran.com/youtube-observer-0.3.0.zip`.
+The versioned and latest ZIPs are 24,804 bytes, SHA-256
+`5e9b501d237b5dddfc91fa7e2e9e55efb5b3f673a506be81cecdc5472facd4bc`.
+The image also retains the previously shared 0.2.1 download unchanged.
+A local 0.3.0 copy is in `/Users/marko/Downloads/`.
+
+Verification: 32 extension tests; 44 Rust tests (one production-copy-only test
+excluded); all three real-browser integration suites; 110 History and 184 Languages
+mock checks. The pairing suite covers expiry, owner login/new person, worker restart,
+automatic configuration and real content-script playback upload. The original
+pipeline covers advanced setup, offline delivery and lost acknowledgements.
+The actual AMD64 image ran as UID 10001 against a disposable fresh-backup copy:
+seven frozen scopes and all nine data/configuration tables matched exactly.
+
+Public HTTPS checks matched the approval page and both hashed assets, downloaded
+all three ZIPs byte-for-byte, verified owner login and both themes at desktop/phone
+widths, and checked dashboard links. No production devices were created.
+The public History/evidence/Languages smoke also passed. Its historical automatic-
+classification expectation now accepts confirmed owner reviews, which already
+existed in the pre-release backup and correctly override automatic inference.
+Post-deployment verification matched seven frozen scopes and preserved credentials,
+source records, all 370 assessments and saved comparison revision 11; integrity and
+foreign-key checks passed.
+
+Backup `before-owntube-device-pairing-20261114-1` is retained under
+`/home/marko/Backups/youtube-observer/` and locally under
+`~/.local/state/youtube-observer/backups/`; verified SHA-256:
+`54b6973261d1b5c208c0b025ef5ef0d600a4c1aea2fb1d4c8c2570503cd74237`.
+It contains 297,156 events, 585 evidence records, 940 slices, 605 metadata versions,
+4 devices, 2 people, 370 assessments, one context override and one comparison.
+Image-only rollback:
+`kamal rollback owntube-comparison-story-20261113-1 -c deploy/deploy.yml`.
+Keep the live data volume; approved device credentials work with the prior backend.
+
+### Previous release: `owntube-comparison-story-20261113-1`
 
 Deployed using `kamal app boot -c deploy/deploy.yml --version owntube-comparison-story-20261113-1`.
 Container `682b624c9fff`, image

@@ -128,7 +128,11 @@ try {
   for (const videoId of ['qHlyWqUJVSw','6bb7wBcw-mM','YvRrNW0ZaUc']) {
     const video=await ui.eval(async(id)=>(await fetch('/api/modules/languages?days=90&group=video&query='+id).then(r=>r.json())).videos[0],videoId);
     assert.ok(video,videoId);
-    assert.ok(video.versions.some(v=>v.assessment.lang==='en'&&v.assessment.source==='selected-audio-metadata'),`Saved English selected track decoded: ${videoId}`);
+    // Live records may since have been reviewed: explicit owner decisions take precedence.
+    assert.ok(
+      video.versions.some(v=>v.assessment.lang==='en'&&v.assessment.source==='selected-audio-metadata')
+        || video.versions.every(v=>v.assessment.source==='manual'&&v.assessment.status==='confirmed'),
+      `Saved English selected track decoded or owner review retained: ${videoId}`);
     assert.ok(!video.versions.some(v=>v.assessment.source==='collector:audio-track'&&v.assessment.lang==='de'),`Wrong German fallback removed: ${videoId}`);
   }
   await ui.type('#f-query','Lead In Silence');
@@ -136,7 +140,7 @@ try {
   await ui.waitFor('[data-row]','Lead In Silence');
   assert.equal(await ui.count('[data-row]'),1,'Screenshot video appears only once');
   assert.match(await ui.text('[data-row]'),/English/);
-  assert.equal(await ui.count('[data-row] .flag-review'),0,'Saved selected audio is classified automatically');
+  assert.equal(await ui.count('[data-row] .flag-review'),0,'Saved selected audio or owner review resolves classification');
   await ui.click('[data-action="open"]');
   await ui.waitFor('[data-assessment]');
   assert.match(await ui.text('[data-group-assessment]'),/English/);
@@ -151,9 +155,9 @@ try {
     origin,checkedAt:new Date().toISOString(),assets:[...checked],seconds:total,
     checks:['public asset hashes','authentication','real History','real Searches','evidence modal',
       'stable filtered totals','phone layout','session restoration','legacy dashboard',
-      'grouped Languages','automatic English classification','Languages asset hashes and phone layout',
+      'grouped Languages','selected-audio or owner classification','Languages asset hashes and phone layout',
       'reported History viewing grouped','exact older evidence','selected-version Languages deep link'],
     pageErrors:errors,
   },null,2));
-  console.log('Public desk: asset hashes, authentication, real records, evidence, stable totals, phone layouts, legacy, grouped Languages and automatic English classification passed.');
+  console.log('Public desk: asset hashes, authentication, real records, evidence, stable totals, phone layouts, legacy, grouped Languages and selected-audio/owner classification passed.');
 } finally { await browser.close(); }

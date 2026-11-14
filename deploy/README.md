@@ -37,6 +37,20 @@ owns public HTTPS.
 
 ## Existing hserver service
 
+Chrome releases are downloadable from the application image:
+`/youtube-observer-latest.zip` and retained versioned ZIPs. Before releasing collector
+changes, build `apps/chrome-extension`, run `python3 scripts/package-chrome.py`
+from the repository root, and commit the packages under `apps/backoffice/downloads`.
+Keep older versioned downloads so shared URLs continue working after deployments.
+The image's frontend build copies these packages into its public directory.
+
+The short-code approval page is `/connect/`. Its backend schema adds only
+`pairing_requests`; rollback to the previous image may leave that unused table
+in place. Approved devices use the existing device credential format, so their
+uploads remain compatible with the previous backend. For image-only rollback,
+keep the current data volume rather than restoring a pre-release backup over new
+watch history.
+
 `deploy.yml` retains service/image `youtube-observer`, host
 `ytdash.gromobran.com`, and volume `youtube-observer-data:/app/data`.
 The configuration now uses this repository's Dockerfile paths. A future release
@@ -81,7 +95,17 @@ The Languages follow-up `owntube-languages-20261113-2` uses the same process fro
 commit `4369a6835`, with mobile wrapping and content-hashed module assets. Its
 backend binary is identical to `-1`; the same backup and image-only rollback apply.
 
-## Current comparison redesign release
+## Current short-code pairing release
+
+`owntube-device-pairing-20261114-1`, source `ad255d55a`, adds dashboard approval at
+`/connect/` and Chrome 0.3.0 short-code setup. All three public ZIP downloads are
+included in the image. The actual AMD64 candidate and deployed server matched
+seven frozen production scopes, preserving 370 assessments and comparison
+revision 11. Public approval assets, login, desktop/phone layouts and ZIP hashes
+passed. Release identity, backup and image-only rollback:
+[`server/README.md`](../server/README.md#current-release-owntube-device-pairing-20261114-1).
+
+## Previous comparison redesign release
 
 `owntube-comparison-story-20261113-1`, source `cfebb3765`, leads with named
 daily-rate deltas and paired bars, shows exact missing-day counts between unequal
@@ -89,7 +113,7 @@ periods, and separates share-point changes from relative daily-rate changes.
 184 mock and 75 real-local browser checks passed, including both themes' contrast,
 keyboard focus and phone layouts. Backend and saved configuration are unchanged.
 Release details, verified backup and image-only rollback:
-[`server/README.md`](../server/README.md#current-release-owntube-comparison-story-20261113-1).
+[`server/README.md`](../server/README.md#previous-release-owntube-comparison-story-20261113-1).
 
 ## Previous recorded-language picker release
 
