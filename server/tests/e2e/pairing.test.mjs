@@ -101,6 +101,45 @@ test('short-code setup → expiry → worker restart → owner approval → attr
       await owner.goto(origin + route);
       await owner.waitFor('a[href="/connect/"]', 'Connect device');
     }
+    await owner.goto(origin + '/connect/');
+    await owner.waitFor('#devices:not([hidden])');
+    await owner.waitFor(`[data-device-id="${config.deviceId}"]`);
+    const exported = await owner.eval(() => fetch('/api/export').then(r => r.json()));
+    assert.ok(exported.viewings.length > 0);
+    // A failed deletion leaves the device and its action available for retry.
+    const route = `${origin}/api/devices/${config.deviceId}/revoke`;
+    await owner.s.send('Fetch.enable', { patterns: [{ urlPattern: route }] });
+    owner.s.on('Fetch.requestPaused', e => void owner.s.send('Fetch.fulfillRequest', {
+      requestId: e.requestId, responseCode: 503,
+      responseHeaders: [{ name: 'Content-Type', value: 'application/json' }],
+      body: Buffer.from('{"error":"Temporarily unavailable"}').toString('base64'),
+    }));
+    await owner.realClick(`[data-device-id="${config.deviceId}"]`);
+    await owner.waitFor('#error:not([hidden])', 'Temporarily unavailable');
+    assert.equal(await owner.count(`[data-device-id="${config.deviceId}"]:not([disabled])`), 1);
+    await owner.s.send('Fetch.disable');
+    await owner.realClick(`[data-device-id="${config.deviceId}"]`);
+    await owner.waitFor('#device-notice', 'recorded history was kept');
+    assert.equal(await owner.count('[data-device-id]'), 0);
+    assert.equal(await owner.count('#devices-empty:not([hidden])'), 1);
+    assert.deepEqual(await owner.eval(() => fetch('/api/export').then(r => r.json())), exported);
+    const kept = await owner.eval(p => fetch(`/api/dashboard?person=${p}`).then(r => r.json()), person);
+    assert.equal(kept.seconds, data.seconds);
+    assert.equal(kept.devices.find(d => d.id === config.deviceId).revoked, true);
+    await owner.goto(origin + '/connect/');
+    await owner.waitFor('#devices-empty:not([hidden])');
+    // The disconnected browser keeps its local queue but its credential no longer uploads.
+    await video.foreground();
+    const elapsed = await video.eval(() => document.querySelector('video').currentTime);
+    await video.eval(() => document.querySelector('video').play());
+    await waitFor(() => video.eval(t => document.querySelector('video').currentTime > t + 2, elapsed));
+    await video.eval(() => document.querySelector('video').pause());
+    await waitFor(async () => (await popup.eval(() => chrome.runtime.sendMessage({ tag: 'Status' }))).count > 0);
+    await popup.eval(() => chrome.runtime.sendMessage({ tag: 'Drain' }));
+    const disconnected = await popup.eval(() => chrome.runtime.sendMessage({ tag: 'Status' }));
+    assert.equal(disconnected.sync.paused, true);
+    assert.ok(disconnected.count > 0);
+    assert.deepEqual(await owner.eval(() => fetch('/api/export').then(r => r.json())), exported);
   } finally {
     await browser?.close();
     const exit = once(server, 'exit'); server.kill('SIGINT'); await exit;

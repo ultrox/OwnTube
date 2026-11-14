@@ -36,6 +36,13 @@
       <a class="button" href="/">Back to dashboard</a><button type="button" class="quiet" id="another">Connect another device</button>
     </section>
     <p id="error" role="alert" hidden></p>
+    <section id="devices" hidden aria-labelledby="devices-title">
+      <h2 id="devices-title">Connected devices</h2>
+      <p class="hint">Delete a device to disconnect it and stop future uploads. Its recorded history stays available in History and Languages.</p>
+      <ul id="device-list"></ul>
+      <p id="devices-empty" hidden>No connected devices.</p>
+      <p id="device-notice" role="status" aria-live="polite"></p>
+    </section>
     <aside><h2>Need the extension first?</h2><p><a href="/youtube-observer-latest.zip">Download YouTube Observer for Chrome</a>. Extract the ZIP, then use <strong>Load unpacked</strong> in <code>chrome://extensions</code> with Developer mode enabled.</p></aside>
   </main>
 </body>

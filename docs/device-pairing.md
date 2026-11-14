@@ -23,7 +23,7 @@ also resumes pending setup. The browser saves its connection automatically.
   globally to twenty new requests per minute and one hundred retained rows.
 - SQLite's `pairing_requests` stores only the secret's hash, code, timestamps,
   and approved device ID. This is an additive table.
-- `GET /api/pairing` returns people only to an authenticated owner.
+- `GET /api/pairing` returns people and active connected devices only to an authenticated owner.
 - `POST /api/pairing/approve` requires owner authentication and JSON
   `{code,label,person}`. `person` is an existing ID or a new name; both person and
   label are required. Person creation, device creation and approval share one
@@ -37,6 +37,14 @@ also resumes pending setup. The browser saves its connection automatically.
   redirects and use a fifteen-second timeout.
 
 ## Recovery and existing browsers
+
+The approval page lists **Connected devices**, with a **Delete device** action.
+This calls the existing owner-only `POST /api/devices/{id}/revoke` endpoint: the
+credential immediately stops authenticating and the device disappears from this
+active list. Recorded events, viewing records, evidence and language assessments
+stay intact, with their original device/person attribution. Historical filters
+can still include the disconnected device. Failed requests leave the action
+available for retry; deleting an already disconnected device is idempotent.
 
 Offline and lost-response attempts retain the pending secret and retry. Expired
 codes can be replaced from setup. Owner retries cannot create duplicate devices.

@@ -87,4 +87,10 @@ async fn routes_require_owner_to_approve_and_browser_secret_to_poll() {
     let (_,connected)=call(&router,"/api/pairing/status",Some(&key),false,json!({})).await;
     assert_eq!(connected["state"],"approved");
     assert!(connected.get("token").is_none());
+    let revoke = format!("/api/devices/{}/revoke", connected["deviceId"].as_str().unwrap());
+    assert_eq!(call(&router,&revoke,Some(&key),false,json!({})).await.0,StatusCode::UNAUTHORIZED);
+    assert_eq!(call(&router,&revoke,None,true,json!({})).await.0,StatusCode::OK);
+    assert_eq!(call(&router,"/api/pairing/approve",None,true,json!({
+        "code":start["code"],"label":"Laptop","person":"Wife"
+    })).await.0,StatusCode::UNAUTHORIZED,"an old approval cannot resurrect a deleted connection");
 }

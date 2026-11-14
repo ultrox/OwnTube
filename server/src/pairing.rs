@@ -168,7 +168,11 @@ pub async fn people(State(app): State<App>, headers: HeaderMap) -> Result<Respon
         let people = db.prepare("SELECT id,name FROM people ORDER BY name COLLATE NOCASE")?
             .query_map([], |r| Ok(json!({"id":r.get::<_,String>(0)?,"name":r.get::<_,String>(1)?})))?
             .collect::<rusqlite::Result<Vec<_>>>()?;
-        Ok(json!({"people":people}))
+        let devices = db.prepare("SELECT d.id,d.label,COALESCE(p.name,'') FROM devices d
+            LEFT JOIN people p ON p.id=d.person_id WHERE d.revoked=0 ORDER BY d.created DESC,d.id")?
+            .query_map([], |r| Ok(json!({"id":r.get::<_,String>(0)?,"label":r.get::<_,String>(1)?,"person":r.get::<_,String>(2)?})))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(json!({"people":people,"devices":devices}))
     }).await?))
 }
 

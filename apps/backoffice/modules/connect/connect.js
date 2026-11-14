@@ -1,5 +1,6 @@
 const $ = id => document.getElementById(id);
 let busy = false;
+let devices = [], approvedDeviceId = null;
 async function request(path, body) {
   const response = await fetch(`/api/${path}`, {
     method: body === undefined ? 'GET' : 'POST', credentials: 'same-origin', cache: 'no-store',
@@ -14,10 +15,44 @@ async function request(path, body) {
 function error(e) {
   $('error').hidden = !e;
   $('error').textContent = e?.message || '';
-  if (e?.status === 401) { $('login').hidden = false; $('approve').hidden = true; $('owner-key').focus(); }
+  if (e?.status === 401) { $('login').hidden = false; $('approve').hidden = true; $('success').hidden = true; $('devices').hidden = true; $('owner-key').focus(); }
+}
+function renderDevices() {
+  $('device-list').replaceChildren(...devices.map(device => {
+    const item = document.createElement('li'), info = document.createElement('div');
+    const label = document.createElement('strong'), detail = document.createElement('small');
+    const button = document.createElement('button');
+    item.className = 'device'; info.className = 'device-info';
+    label.textContent = device.label;
+    detail.textContent = `${device.person || 'Unassigned'} · ${device.id.slice(0, 8)}`;
+    button.type = 'button'; button.textContent = 'Delete device'; button.dataset.deviceId = device.id;
+    button.setAttribute('aria-label', `Delete device ${device.label}${device.person ? ` for ${device.person}` : ''}`);
+    button.addEventListener('click', () => void deleteDevice(device, button));
+    info.append(label, detail); item.append(info, button);
+    return item;
+  }));
+  $('devices-empty').hidden = devices.length > 0;
+  $('devices').hidden = false;
+}
+async function deleteDevice(device, button) {
+  if (busy) return;
+  busy = true; button.disabled = true; error(null); $('device-notice').textContent = '';
+  try {
+    await request(`devices/${encodeURIComponent(device.id)}/revoke`, {});
+    devices = devices.filter(d => d.id !== device.id);
+    renderDevices();
+    $('device-notice').textContent = `${device.label} disconnected. Its recorded history was kept.`;
+    if (approvedDeviceId === device.id) {
+      approvedDeviceId = null; $('success').hidden = true; $('approve').hidden = false; $('code').value = '';
+    }
+    const next = $('device-list').querySelector('button') || $('devices-title');
+    next.tabIndex = 0; next.focus();
+  } catch (e) { error(e); } finally { busy = false; button.disabled = false; }
 }
 async function ready() {
   const data = await request('pairing');
+  devices = data.devices;
+  renderDevices();
   const select = $('person');
   select.replaceChildren(new Option('Choose a person', ''), ...data.people.map(p => new Option(p.name, p.id)), new Option('+ Add a person', '__new__'));
   if (!data.people.length) { select.value = '__new__'; }
@@ -43,6 +78,9 @@ $('approve').addEventListener('submit', async event => {
   busy = true; $('approve-button').disabled = true; error(null);
   try {
     const data = await request('pairing/approve', { code: $('code').value.trim(), label: $('label').value.trim(), person });
+    approvedDeviceId = data.deviceId;
+    devices = [{ id: data.deviceId, label: data.label, person: data.person }, ...devices.filter(d => d.id !== data.deviceId)];
+    renderDevices(); $('device-notice').textContent = '';
     $('approve').hidden = true; $('success').hidden = false;
     $('success-title').textContent = `${data.label}${data.person ? ` · ${data.person}` : ''}`;
     $('success-title').tabIndex = -1; $('success-title').focus();

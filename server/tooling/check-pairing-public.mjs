@@ -41,6 +41,11 @@ try {
   await page.waitFor('#approve:not([hidden])');
   const people = await page.eval(() => document.querySelector('#person').options.length - 2);
   assert.ok(people > 0);
+  await page.waitFor('#devices:not([hidden])');
+  const devices = await page.eval(() => fetch('/api/pairing').then(r => r.json()).then(d => d.devices));
+  assert.deepEqual(
+    await page.eval(() => [...document.querySelectorAll('[data-device-id]')].map(b => b.dataset.deviceId).sort()),
+    devices.map(d => d.id).sort());
   for (const theme of ['light', 'dark']) {
     await page.s.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: theme }] });
     for (const width of [1280, 390]) {
@@ -48,6 +53,9 @@ try {
       await page.eval(() => window.scrollTo(0, 0));
       assert.equal(await page.eval(() => document.documentElement.scrollWidth <= innerWidth), true);
       await page.screenshot(path.join(output, `approval-${theme}-${width}.png`));
+      await page.eval(() => document.querySelector('#devices').scrollIntoView());
+      assert.equal(await page.eval(() => document.documentElement.scrollWidth <= innerWidth), true);
+      await page.screenshot(path.join(output, `devices-${theme}-${width}.png`));
     }
   }
   for (const route of ['/#/history', '/modules/languages/']) {
@@ -56,7 +64,7 @@ try {
   }
   assert.equal(await page.eval(() => fetch('/api/logout', { method: 'POST' }).then(r => r.ok)), true);
   assert.deepEqual(errors, []);
-  const report = { origin, assets, downloads, people, errors, productionDevicesCreated: 0 };
+  const report = { origin, assets, downloads, people, connectedDevices: devices.length, errors, productionDevicesCreated: 0, productionDevicesDeleted: 0 };
   await fs.writeFile(path.join(output, 'report.json'), JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
 } finally {
