@@ -143,7 +143,7 @@ function writeFilters() {
   const f = state.filters;
   const h = new URLSearchParams();
   const current = new URLSearchParams(location.hash.slice(1));
-  for (const key of ['mode', 'move', 'lead', 'dir']) if (current.has(key)) h.set(key, current.get(key));
+  for (const key of ['mode', 'move', 'lead', 'dir', 'bars']) if (current.has(key)) h.set(key, current.get(key));
   if (f.days !== 7) h.set('days', f.days);
   for (const k of ['device', 'person', 'query']) if (f[k]) h.set(k, f[k]);
   if (f.language !== 'all') h.set('language', f.language);
@@ -1129,7 +1129,7 @@ function say(text) {
 
 document.addEventListener('click', (e) => {
   const compare = e.target.closest('[data-compare]');
-  if (compare && !compare.disabled) { comparison.click(compare); return; }
+  if (compare && !compare.disabled) { comparison.click(compare, e); return; }
   const el = e.target.closest('[data-action]');
   if (!el || el.disabled) return;
   const a = el.dataset.action;
@@ -1170,6 +1170,7 @@ document.addEventListener('click', (e) => {
 
 document.addEventListener('change', (e) => {
   const t = e.target;
+  if (t.dataset.compareField) { comparison.input(t, true); return; }
   const f = state.filters;
   if (t.dataset.action === 'device') { f.device = t.value; f.page = 1; load(); }
   else if (t.dataset.action === 'person') { f.person = t.value; if (!f.person) f.device = ''; f.page = 1; load(); }

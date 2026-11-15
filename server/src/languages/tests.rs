@@ -551,6 +551,9 @@ async fn routes_require_owner_and_run_real_saved_evidence_analysis() {
     );
     let cookie = Some("observer_session=owner-session");
     let comparison = "/api/modules/languages/comparison";
+    let daily = format!("{comparison}/days?from=2026-01-01&to=2026-01-07&person={person}");
+    assert_eq!(request(&app,"GET",&daily,None,Value::Null).await.0,StatusCode::UNAUTHORIZED);
+    assert_eq!(request(&app,"GET",&daily,cookie,Value::Null).await.0,StatusCode::OK);
     let config = json!({"baseRevision":0,"periods":[],"selectedLanguages":[],"concludedAt":null});
     for method in ["GET", "POST"] {
         assert_eq!(request(&app, method, comparison, None, config.clone()).await.0, StatusCode::UNAUTHORIZED);

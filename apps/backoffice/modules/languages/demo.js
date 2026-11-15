@@ -2,7 +2,7 @@
 // fallback when the live API fails. Implements contracts/languages.md in memory with fictional
 // data (no real people, devices or videos) and makes no network requests. Reload to reset.
 
-import { normalizeConfig, periodDays, periodFacts, addDays } from './comparison-model.js';
+import { normalizeConfig, periodDays, periodFacts, addDays, length } from './comparison-model.js';
 
 const MIN = 60 * 1000;
 const HOUR = 60 * MIN;
@@ -263,6 +263,32 @@ export async function createDemoApi({ external = false } = {}) {
     session: () => later({ ok: true }, 20),
     login: () => later({ ok: true }, 20),
     logout: () => later({ ok: true }, 20),
+    comparisonDays({ from, to, device = '', person = '' }) {
+      checkScope(person, device);
+      const count = length({ start: from, end: to });
+      if (!count || count > 120) throw fail(422, 'Choose an inclusive range of 1 to 120 days');
+      const today = localDate(now), daily = new Map();
+      for (const r of records) {
+        const dev = DEVICES.find(d => d.id === r.deviceId);
+        if ((device && dev.id !== device) || (person && dev.personId !== person)) continue;
+        for (const p of r.plays) {
+          const date = localDate(p.at), seconds = p.fg + p.bg + p.un;
+          if (date > today || seconds <= 0) continue;
+          const row = daily.get(date) || { date, allSeconds: 0, reviewSeconds: 0, languages: new Map() };
+          row.allSeconds += seconds;
+          if (needsReview(r.assessment)) row.reviewSeconds += seconds;
+          row.languages.set(r.assessment.lang, (row.languages.get(r.assessment.lang) || 0) + seconds);
+          daily.set(date, row);
+        }
+      }
+      const firstRecordedDate = [...daily.keys()].sort()[0] || null;
+      const days = periodDays({ start: from, end: to }, today).filter(d => firstRecordedDate && d >= firstRecordedDate).map(date => {
+        const row = daily.get(date);
+        return row ? { ...row, languages: [...row.languages].sort(([a], [b]) => a.localeCompare(b)).map(([lang, seconds]) => ({ lang, seconds })) }
+          : { date, allSeconds: 0, reviewSeconds: 0, languages: [] };
+      });
+      return later({ days, firstRecordedDate, today, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, asOf: now });
+    },
     saveComparison(config, { person = '', device = '' } = {}) {
       if (!person || device) throw fail(422, 'Choose a person before saving. Devices only filter experiment results.');
       checkScope(person);

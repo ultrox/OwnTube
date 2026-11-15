@@ -15,9 +15,16 @@ results, not experiment ownership. Incompatible selections are cleared, includin
 The previous shared comparison remains read-only under Everyone, without assigning it to anyone.
 The API reads its old two-group configuration without rewriting it.
 
-**Plan and edit.** The empty state opens the experiment planner: tomorrow, ten days per period,
-Off/On/Off by default. Filling an existing draft requires confirmation. Every generated name
-and date remains editable. A calendar preview shows the boundaries and adjacent moves.
+**Plan and edit.** The empty state opens the compact calendar picker with today in
+the third of six week rows. Daily bars show measured languages, including past
+recordings. Zero days, future days and untracked days are distinct. Use a 7, 10 or
+14-day preset, or Free for two-click endpoints. Placement clips at another period
+or a date boundary. Keyboard arrows, Home/End and Page Up/Down navigate the calendar;
+Escape cancels. Touch previews before a second tap confirms.
+Four templates default to Off, on, off and ten days; arm prefill and click a first
+day. Replacing placed draft periods requires confirmation. Every generated name
+and date remains editable. The period rail previews measured rates and adjacent
+moves; the collapsed "Type dates instead" fallback edits the same draft.
 **Add period** and **Add language** stay beside each other. Future dates are allowed, but
 future days never dilute measured daily averages. Drafts are kept separately per person and survive
 device changes and switching back to that person in the same page session. Save folds the

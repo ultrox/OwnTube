@@ -91,6 +91,11 @@ async function startMock() {
       if (!authed) return send(res, 401, { error: 'Unauthorized' });
       if (url.pathname === '/api/session') return send(res, 200, { ok: true });
       try {
+        if (url.pathname === '/api/modules/languages/comparison/days') {
+          if (mock.daysDelay) await sleep(mock.daysDelay);
+          if (mock.fail === 'days500') return send(res, 500, { error: 'Daily viewing is unavailable.' });
+          return send(res, 200, mock.comparisonDays || await api.comparisonDays(Object.fromEntries(url.searchParams)));
+        }
         if (url.pathname === '/api/modules/languages/comparison') {
           if (req.method !== 'POST' && mock.comparison) return send(res, 200, mock.comparison);
           if (req.method === 'POST' && mock.saveDelay) await sleep(mock.saveDelay);
@@ -253,7 +258,7 @@ const signIn = async () => {
 
 try {
   await p.size(1440, 900);
-  if (argv.includes('--comparison-only')) {
+  if (argv.includes('--comparison-only') || argv.includes('--calendar-only')) {
     await p.go(MODULE);
     await signIn();
   } else {

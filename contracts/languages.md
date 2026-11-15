@@ -9,6 +9,35 @@ versions; assessments remain audited per device/version.
 
 ### Saved period comparison v2
 
+The editor uses a six-week custom calendar with daily measured language bars,
+clipped placement, keyboard navigation, touch preview confirmation and four template
+patterns. Typed dates remain in a collapsed fallback. Draft previews do not change
+the saved-result panels.
+
+### Daily viewing for the comparison picker
+
+`GET /api/modules/languages/comparison/days?from=YYYY-MM-DD&to=YYYY-MM-DD&person=&device=`
+requires the owner session and uses the same person/device validation as comparison.
+The inclusive range must contain 1 to 120 days; malformed dates, reversed ranges
+and invalid scope combinations return 422.
+
+Returns `{days, firstRecordedDate, today, timezone, asOf}`. Each daily row is
+`{date, allSeconds, reviewSeconds, languages: [{lang, seconds}]}`. Language rows
+include every assessed code with positive measured time, independent of the saved
+language selection. Review seconds cover all languages. Rows run from the later
+of `from` and the scoped first recording to the earlier of `to` and today.
+Zero-playback days have zero totals and empty language lists; earlier and future
+days are omitted. A scope without playback returns `firstRecordedDate: null`.
+One read transaction uses existing compact measurements, assessment precedence,
+exact local midnights and DST clipping. Cumulative measurements are never interpolated.
+
+The picker caches dates per scope, fetches six visible weeks plus three weeks on
+each side, and loads missing elapsed draft dates in requests of at most 120 days.
+Refresh, discard and scope changes invalidate the cache. Missing data is shown as
+loading or an explicit retryable error, never a measured zero.
+
+### Saved configuration and measurements
+
 `GET /api/modules/languages/comparison?person=<person-id>&device=` reads that
 person's saved experiment and calculates current assessed language watch time
 across their devices. An optional device narrows results without changing the

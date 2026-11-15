@@ -114,7 +114,11 @@ export async function browserChecks({ p, ok, LIVE, MODULE, OUT, control }) {
   console.log('Comparison v2');
   pureChecks(); ok(true, 'directional arithmetic, trace, waffles, axes, lead, observations and calendar normalization');
   const catalog = await p.eval(() => fetch('/api/modules/languages').then(r => r.json()));
-  const person = catalog.people.find(p => catalog.devices.filter(d => d.personId === p.id).length > 1)?.id || catalog.people[0].id;
+  const recordingStarts = await p.eval(async people => Promise.all(people.map(async person => {
+    const data = await fetch('/api/modules/languages/comparison/days?' + new URLSearchParams({ person: person.id, from: '2026-11-01', to: '2026-11-15' })).then(r => r.json());
+    return { id: person.id, first: data.firstRecordedDate || '9999' };
+  })), catalog.people);
+  const person = recordingStarts.sort((a, b) => a.first.localeCompare(b.first))[0].id;
   const other = catalog.people.find(p => p.id !== person)?.id;
   assert.ok(other, 'Person isolation checks require two fixture people');
   const page = `${MODULE}#view=compare&person=${encodeURIComponent(person)}`;
@@ -122,6 +126,10 @@ export async function browserChecks({ p, ok, LIVE, MODULE, OUT, control }) {
     const r = await fetch('/api/modules/languages/comparison?' + new URLSearchParams(scope), body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
     return { status: r.status, data: await r.json() };
   }, body, scope);
+  if (process.argv.includes('--calendar-only')) {
+    const { calendarChecks } = await import('./calendar-check.mjs');
+    return calendarChecks({ p, ok, LIVE, page, api, control, OUT });
+  }
   const settled = () => p.waitFor(() => document.querySelector('[data-compare-results]')?.getAttribute('aria-busy') === 'false' && !document.querySelector('[data-compare="reload"]').disabled);
   const field = (key, value) => p.eval((key, value) => {
     const input = document.querySelector(`[data-key="${key}"]`); input.focus(); input.value = value; input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -139,11 +147,14 @@ export async function browserChecks({ p, ok, LIVE, MODULE, OUT, control }) {
   await api({ ...current.config, periods: [], selectedLanguages: [] });
   await p.go(page);
   await settled();
+  await p.waitFor(() => !document.querySelector('.cp-data-note')?.textContent.includes('Loading'));
   ok(await p.eval((person, devices) => [...document.querySelectorAll('#f-device option')].every(o => !o.value || devices.some(d => d.id === o.value && d.personId === person)), person, catalog.devices), 'person picker limits devices to that person');
   ok(await p.eval(() => !document.querySelector('#cx-editor').hidden && document.querySelector('[data-compare="save"]').closest('[hidden]') && document.querySelector('#f-days').parentElement.hidden), 'empty state opens planner, no spurious save, independent dates');
-  await p.click('[data-compare="fill"]');
+  await p.click('[data-compare="cal-fill"]');
+  await p.click(`[data-date="${addDays(initial.today, 1)}"]`);
   ok(await p.eval(() => document.querySelectorAll('.cx-period-row').length === 3 && !document.querySelector('[data-compare-draft-note]').hidden && document.querySelector('[data-compare="add"]').nextElementSibling.dataset.compare === 'add-language'), 'planner makes three editable periods, marks draft and keeps add controls adjacent');
-  await p.click('[data-compare="fill"]');
+  await p.click('[data-compare="cal-fill"]');
+  await p.click(`[data-date="${addDays(initial.today, 1)}"]`);
   ok(await p.eval(() => !!document.querySelector('dialog[open]')), 'replacing draft periods asks in a native dialog');
   await p.key('Escape', 27);
   await p.click('[data-compare="save"]'); await settled();
@@ -286,8 +297,10 @@ export async function browserChecks({ p, ok, LIVE, MODULE, OUT, control }) {
     }
     await p.send('Emulation.setEmulatedMedia', { features: [{ name: 'forced-colors', value: 'active' }] });
     ok(await p.eval(() => getComputedStyle(document.querySelector('.cx-waffle i')).borderTopWidth === '1px'), 'forced colors retain chart cell boundaries');
-    await p.send('Emulation.setEmulatedMedia', { features: [] });
+  await p.send('Emulation.setEmulatedMedia', { features: [] });
   }
+  const { calendarChecks } = await import('./calendar-check.mjs');
+  await calendarChecks({ p, ok, LIVE, page, api, control, OUT });
 }
 
 if (process.argv.includes('--pure')) { pureChecks(); console.log('Comparison pure checks passed.'); }

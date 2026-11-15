@@ -1,9 +1,11 @@
-import { addDays, length, dayText, rangeText, periodDays, planPeriods, normalizeConfig } from './comparison-model.js';
+import { addDays, length, dayText, rangeText, normalizeConfig } from './comparison-model.js';
 import { comparisonView, mark, swatch } from './comparison-view.js';
+import { createCalendar } from './calendar.js';
+import { clipRange, placed } from './calendar-model.js';
 export * from './comparison-model.js';
 
 export function createComparison({ api, scope, personName, render, expired, esc, spent, langName, pickLanguage, announce = () => {}, demo = false }) {
-  const fresh = () => ({ data: null, draft: null, dirty: false, busy: false, loading: false, failed: false, error: '', request: 0, editing: null, planner: null, conflict: false });
+  const fresh = () => ({ data: null, draft: null, dirty: false, busy: false, loading: false, failed: false, error: '', request: 0, editing: null, conflict: false });
   const people = new Map();
   let person = '', s = fresh();
   people.set(person, s);
@@ -13,7 +15,14 @@ export function createComparison({ api, scope, personName, render, expired, esc,
   const focus = key => document.querySelector(`[data-key="${CSS.escape(key)}"]`)?.focus({ preventScroll: true });
   const button = (action, text, attrs = '') => `<button type="button" class="btn" data-compare="${action}" data-key="compare:${action}${attrs.match(/data-value="([^"]*)"/)?.[1] ? `:${attrs.match(/data-value="([^"]*)"/)[1]}` : ''}" ${attrs}>${text}</button>`;
   const dirty = () => { s.dirty = JSON.stringify(s.draft) !== JSON.stringify(s.data.config); s.error = ''; render(); };
+  const picker = createCalendar({ state: () => s, scope, api, render, dirty, confirm, announce, expired, esc, langName, context: () => view.context(s.data) });
   function validation() {
+    if (s.picker?.loaded) {
+      const first = s.picker.first || s.data.today;
+      if (s.draft.periods.some(p => p.start && p.start < first && !s.data.config.periods.some(old => old.start === p.start && old.end === p.end))) {
+        return `Choose new periods on or after ${rangeText({ start: first, end: first })}, the first selectable day in this scope.`;
+      }
+    }
     try { normalizeConfig(s.draft, s.data.today, s.data.config); return ''; } catch (error) { return error.message; }
   }
   async function load({ replace = false } = {}) {
@@ -25,6 +34,10 @@ export function createComparison({ api, scope, personName, render, expired, esc,
       s = people.get(person);
     }
     if (s.busy) { render(); return; }
+    if (s.picker && s.picker.scope !== JSON.stringify(selected)) {
+      ++s.picker.request; s.picker.daily.clear(); s.picker.loaded = false; s.picker.pending = false;
+      s.picker.anchor = null; s.picker.hover = null; s.picker.touch = null;
+    }
     const target = s, request = ++s.request;
     s.loading = true; s.error = ''; render();
     try {
@@ -33,13 +46,12 @@ export function createComparison({ api, scope, personName, render, expired, esc,
       s.data = data; s.failed = false;
       if (!s.draft || replace || !s.dirty) { s.draft = structuredClone(data.config); s.dirty = false; s.conflict = false; }
       if (s.editing == null) s.editing = !s.draft.periods.length;
-      s.planner ||= { start: addDays(data.today, 1), days: 10, count: 3 };
     } catch (error) {
       if (target !== s || request !== s.request) return;
       if (error.status === 401) { expired(); return; }
       s.error = error.message; s.failed = true;
     } finally {
-      if (target === s && request === s.request) { s.loading = false; render(); }
+      if (target === s && request === s.request) { s.loading = false; render(); if (!s.failed) picker.fetchDays({ reset: true }); }
     }
   }
   async function save(message = 'Comparison saved.') {
@@ -97,15 +109,6 @@ export function createComparison({ api, scope, personName, render, expired, esc,
   function draftBanner() {
     return `<div class="cx-draft cmp-draft" data-compare-draft-note ${s.dirty ? '' : 'hidden'}><div><b class="cx-stamp">Unsaved changes</b><p>${DRAFT}</p></div><div class="cx-actions">${button('discard', 'Discard', s.busy ? 'disabled' : '')}${button('save', s.busy ? 'Saving…' : s.editing ? 'Save periods' : 'Save and compare', s.busy || s.loading || !!validation() || s.conflict ? 'disabled' : '')}</div></div>`;
   }
-  function calendar() {
-    let periods;
-    try { periods = normalizeConfig({ ...s.draft, concludedAt: null }, s.data.today).periods; } catch { return ''; }
-    if (!periods.length) return '';
-    const counts = periods.map(length), total = counts.reduce((n, v) => n + v, 0);
-    return `<section class="cx-calendar"><h3>The plan on a calendar</h3><div class="cx-calendar-blocks">${periods.map((p, i) => `<div><b>${mark(i)}${i + 1} · ${e(p.label)}</b><p class="cx-note">${e(rangeText(p))}</p>
-      <div role="img" aria-label="${e(`${p.label}: ${rangeText(p)}, ${dayText(counts[i])}`)}" class="cx-plan-days cx-plan-days--${i % 3}">${counts[i] <= 31 ? periodDays(p).map(d => `<i>${Number(d.slice(-2))}</i>`).join('') : `<b class="cx-plan-bar" style="width:${counts[i] / Math.max(...counts) * 100}%">${dayText(counts[i])}</b>`}</div></div>`).join('<span aria-hidden="true">→</span>')}</div>
-      <p>${periods.slice(1).map((p, i) => `<b>${e(rangeText({ start: p.start, end: p.start }))}</b> · move ${i + 1}: ${e(p.label)} starts`).join('<br>')}</p><p class="cx-note">${dayText(total)} in total${counts.every(n => n === counts[0]) ? `, ${periods.length} equal periods` : ''}</p></section>`;
-  }
   function conclude() {
     const periods = s.data.periods, last = periods.at(-1), first = periods[0], concluded = s.data.config.concludedAt;
     if (!first) return '';
@@ -116,18 +119,14 @@ export function createComparison({ api, scope, personName, render, expired, esc,
   function editor() {
     const locked = !!s.data.config.concludedAt, disabled = locked || s.busy ? 'disabled' : '';
     const max = addDays(s.data.today, 366);
-    return `<div id="cx-editor" class="cx-editor" ${s.editing ? '' : 'hidden'}>
-      <fieldset class="cx-planner" ${disabled}><legend>Plan an experiment</legend><div class="cx-planner-fields">
-      <label>First day<input class="input" type="date" min="2000-01-01" max="${max}" value="${e(s.planner.start)}" data-plan-field="start" data-key="compare:plan:start"></label>
-      <label>Days per period<input class="input" type="number" min="1" max="1830" value="${s.planner.days}" data-plan-field="days" data-key="compare:plan:days"></label>
-      <div><span class="label">Pattern</span><div class="cx-segmented" role="group" aria-label="Experiment pattern">${[2, 3].map(n => button('pattern', n === 2 ? 'Off, on' : 'Off, on, off', `data-value="${n}" aria-pressed="${s.planner.count === n}"`)).join('')}</div></div>
-      ${button('fill', 'Fill periods')}</div><p class="cx-note">Fills the periods below back to back. Each one stays editable.</p></fieldset>
-      <div data-plan-calendar>${calendar()}</div><div class="cx-period-list"><div class="cx-period-head"><span>No.</span><span>Group</span><span>From</span><span>To (inclusive)</span><span>Length</span><span></span></div>
+    return `<div id="cx-editor" class="cx-editor cp" ${s.editing ? '' : 'hidden'}>
+      ${picker.html(!!validation())}
+      <details data-picker-dates ${picker.init().details ? 'open' : ''}><summary>Type dates instead</summary>
+      <div class="cx-period-list"><div class="cx-period-head"><span>No.</span><span>Group</span><span>From</span><span>To (inclusive)</span><span>Length</span><span></span></div>
       ${s.draft.periods.map((p, i) => `<fieldset class="cx-period-row" ${s.busy ? 'disabled' : ''}><legend class="vh">Period ${i + 1}</legend><span class="cx-period-index">${i + 1}</span>
         <label>${mark(i)}<span class="cx-mobile-label">Group</span><input class="input" maxlength="80" value="${e(p.label)}" data-compare-field="label" data-period="${i}" data-key="compare:${i}:label" aria-label="Group name of period ${i + 1}" ${locked ? 'readonly' : ''}></label>
         ${['start', 'end'].map(field => `<label><span class="cx-mobile-label">${field === 'start' ? 'From' : 'To (inclusive)'}</span><input class="input" type="date" min="2000-01-01" max="${max}" value="${e(p[field])}" data-compare-field="${field}" data-period="${i}" data-key="compare:${i}:${field}" aria-label="${field === 'start' ? 'First' : 'Last'} day of period ${i + 1}" ${locked ? 'readonly' : ''}></label>`).join('')}
-        <span data-period-length="${i}">${safeLength(p)}</span><button class="btn" type="button" data-compare="remove" data-period="${i}" data-key="compare:remove:${i}" aria-label="Remove period ${i + 1}" ${disabled}>×</button></fieldset>`).join('')}</div>
-      <div class="cx-actions">${button('add', '+ Add period', locked || s.draft.periods.length >= 128 || s.busy ? 'disabled' : '')}${button('add-language', '+ Add language', s.busy ? 'disabled' : '')}<div class="cx-pills">${pills()}</div><span>Languages apply to every period.</span></div>
+        <span data-period-length="${i}">${safeLength(p)}</span><button class="btn" type="button" data-compare="remove" data-period="${i}" data-key="compare:typed-remove:${i}" aria-label="Remove period ${i + 1}" ${disabled}>×</button></fieldset>`).join('')}</div></details>
       <p class="cx-note">Periods that share a group name are pooled in the grouped view. A date can belong to one period only. Both dates are included · ${e(s.data.timezone)}.</p>
       ${conclude()}</div>`;
   }
@@ -150,28 +149,17 @@ export function createComparison({ api, scope, personName, render, expired, esc,
     history.pushState(null, '', `${location.pathname}${location.search}#${h}`);
     render();
   }
-  async function click(el) {
+  async function click(el, event) {
     if (s.busy || s.loading) return;
     const action = el.dataset.compare, key = el.dataset.key || `compare:${action}`;
     if (['mode', 'move', 'lead'].includes(action)) return hash(action, el.dataset.value);
     if (action === 'reverse') return hash('dir', new URLSearchParams(location.hash.slice(1)).get('dir') === 'rev' ? null : 'rev');
     if (action === 'reload') return load();
     if (!person) return;
+    if (action.startsWith('cal-')) return picker.click(el, event);
     if (action === 'discard') { await load({ replace: true }); announce('Draft discarded. Saved comparison loaded.'); focus('compare:edit'); return; }
     if (action === 'save') return save();
     if (action === 'edit') { s.editing = !s.editing; render(); return; }
-    if (action === 'pattern') { s.planner.count = Number(el.dataset.value); render(); return; }
-    if (action === 'fill') {
-      try {
-        const periods = planPeriods(s.planner.start, Number(s.planner.days), s.planner.count);
-        normalizeConfig({ ...s.draft, periods }, s.data.today);
-        const target = s;
-        if (s.draft.periods.length && !await confirm(`Replace the ${s.draft.periods.length} periods in this draft?`, 'Replace periods', key)) return;
-        if (target !== s) return;
-        s.draft.periods = periods; dirty(); focus('compare:0:label');
-      } catch (error) { s.error = error.message; render(); announce(error.message); }
-      return;
-    }
     if (action === 'conclude' || action === 'reopen') {
       if (s.dirty) return;
       const target = s;
@@ -195,26 +183,43 @@ export function createComparison({ api, scope, personName, render, expired, esc,
     }
     if (action === 'remove-language') { s.draft.selectedLanguages = s.draft.selectedLanguages.filter(l => l !== el.dataset.lang); dirty(); focus('compare:add-language'); return; }
     if (s.data.config.concludedAt) return;
-    if (action === 'add') { s.draft.periods.push({ label: '', start: '', end: '' }); s.editing = true; dirty(); focus(`compare:${s.draft.periods.length - 1}:label`); }
-    if (action === 'remove') { s.draft.periods.splice(Number(el.dataset.period), 1); dirty(); focus('compare:add'); }
+    if (action === 'add') { picker.cancel(); picker.init().active = s.draft.periods.length; s.draft.periods.push({ label: `Period ${s.draft.periods.length + 1}`, start: '', end: '' }); s.editing = true; dirty(); focus(`compare:rail:${s.draft.periods.length - 1}:label`); }
+    if (action === 'remove') {
+      const index = Number(el.dataset.period), p = picker.init();
+      s.draft.periods.splice(index, 1); picker.cancel();
+      p.active = p.active > index ? p.active - 1 : Math.min(p.active, s.draft.periods.length - 1);
+      dirty(); focus('compare:add');
+    }
   }
-  function input(el) {
+  function input(el, commit = false) {
     if (s.busy || s.loading || !s.draft || !person) return;
-    if (el.dataset.planField) { s.planner[el.dataset.planField] = el.value; return; }
     if (s.data.config.concludedAt) return;
     const p = s.draft.periods[Number(el.dataset.period)];
     if (!p) return;
     p[el.dataset.compareField] = el.value;
-    // Preserve the native date editor and text selection while updating derived UI.
+    if (commit && el.dataset.compareField !== 'label' && placed(p)) {
+      const calendar = picker.init();
+      const min = calendar.loaded ? calendar.first || s.data.today : '2000-01-01';
+      const range = clipRange(p.start, p.end, s.draft.periods, Number(el.dataset.period), min, addDays(s.data.today, 366));
+      if (range) {
+        Object.assign(p, { start: range.start, end: range.end });
+        if (range.clipped) announce('Typed period clipped at another period or the date limit.');
+      }
+    }
+    if (commit) { dirty(); picker.fetchDays(); return; }
+    // Keep the active native editor intact until its change event commits.
     s.dirty = JSON.stringify(s.draft) !== JSON.stringify(s.data.config); s.error = '';
-    document.querySelector('[data-compare-draft-note]').hidden = !s.dirty;
     const error = validation(), node = document.querySelector('[data-compare-error]');
     node.textContent = error; node.hidden = !error;
-    document.querySelectorAll('[data-compare="save"]').forEach(b => { b.disabled = !!error || s.conflict; });
+    document.querySelector('[data-compare-draft-note]').hidden = !s.dirty;
+    document.querySelectorAll('[data-compare="save"]').forEach(b => { b.disabled = !s.dirty || !!error || s.conflict; });
     document.querySelectorAll('[data-compare="conclude"],[data-compare="reopen"]').forEach(b => { b.disabled = true; });
     el.setAttribute('aria-invalid', String(!!error));
     document.querySelector(`[data-period-length="${el.dataset.period}"]`).textContent = safeLength(p);
-    document.querySelector('[data-plan-calendar]').innerHTML = calendar();
+    document.querySelectorAll(`[data-compare-field="${el.dataset.compareField}"][data-period="${el.dataset.period}"]`).forEach(other => {
+      if (other !== el) other.value = el.value;
+    });
+    picker.updatePreview();
   }
   return { html, load, click, input, reset() { ++s.request; people.clear(); person = ''; s = fresh(); people.set(person, s); } };
 }

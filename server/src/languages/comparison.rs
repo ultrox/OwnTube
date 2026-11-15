@@ -43,6 +43,17 @@ pub struct Scope {
     person: String,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DailyScope {
+    from: String,
+    to: String,
+    #[serde(default)]
+    device: String,
+    #[serde(default)]
+    person: String,
+}
+
 fn empty() -> Config {
     Config {
         base_revision: 0,
@@ -192,6 +203,58 @@ fn windows(selected: &BTreeSet<NaiveDate>, tz: chrono_tz::Tz, at: i64) -> Result
 }
 
 impl Store {
+    pub async fn language_comparison_days(&self, query: DailyScope, tz: chrono_tz::Tz) -> Result<Value> {
+        let (from, to) = (date(&query.from)?, date(&query.to)?);
+        if to < from || (to - from).num_days() >= 120 {
+            return Err(invalid("Choose an inclusive range of 1 to 120 days"));
+        }
+        self.sync_legacy().await?;
+        self.read(move |db| {
+            let scope = Scope { device: query.device, person: query.person };
+            validate_scope(db, &scope)?;
+            let at = now();
+            let today = tz.timestamp_millis_opt(at).unwrap().date_naive();
+            let selected: BTreeSet<String> = db.prepare(
+                "SELECT id FROM devices WHERE (?='' OR id=?) AND (?='' OR person_id=?)")?
+                .query_map(params![scope.device, scope.device, scope.person, scope.person], |r| r.get(0))?
+                .collect::<rusqlite::Result<_>>()?;
+            let first: Option<f64> = db.query_row(
+                "SELECT min(s.first) FROM viewing_slices s JOIN devices d ON d.id=s.device
+                 WHERE s.seconds>0 AND s.first<? AND (?='' OR d.id=?) AND (?='' OR d.person_id=?)",
+                params![at, scope.device, scope.device, scope.person, scope.person], |r| r.get(0))?;
+            let first = first.map(|t| tz.timestamp_millis_opt(t as i64).unwrap().date_naive());
+            let mut result = vec![];
+            let mut assessments = BTreeMap::new();
+            if let Some(first) = first {
+                let mut day = from.max(first);
+                while day <= to.min(today) {
+                    let mut langs: BTreeMap<String, f64> = BTreeMap::new();
+                    let mut all_seconds = 0.;
+                    let mut review_seconds = 0.;
+                    // Use the same exact midnight clipping and assessment precedence as periods.
+                    for window in windows(&BTreeSet::from([day]), tz, at)? {
+                        for fact in Analytics::load_totals(db, &window)?.facts() {
+                            if !selected.contains(&fact.device) || fact.seconds <= 0. { continue; }
+                            let key = (fact.device.clone(), hash(&serde_json::to_string(&fact.metadata).unwrap()));
+                            if !assessments.contains_key(&key) {
+                                assessments.insert(key.clone(), latest(db, &key.0, &key.1, &fact.metadata)?.1);
+                            }
+                            let assessment = &assessments[&key];
+                            all_seconds += fact.seconds;
+                            if assessment.review() { review_seconds += fact.seconds; }
+                            *langs.entry(assessment.lang.clone()).or_default() += fact.seconds;
+                        }
+                    }
+                    result.push(json!({"date":day.to_string(), "allSeconds":all_seconds, "reviewSeconds":review_seconds,
+                        "languages":langs.into_iter().map(|(lang, seconds)| json!({"lang":lang,"seconds":seconds})).collect::<Vec<_>>()}));
+                    day = day.succ_opt().unwrap();
+                }
+            }
+            Ok(json!({"days":result,"firstRecordedDate":first.map(|d| d.to_string()),
+                "today":today.to_string(),"timezone":tz.to_string(),"asOf":at}))
+        }).await
+    }
+
     pub async fn save_language_comparison(&self, mut config: Config, person: String, tz: chrono_tz::Tz) -> Result<Value> {
         self.run(move |db| {
             let today = tz.timestamp_millis_opt(now()).unwrap().date_naive();
@@ -330,6 +393,9 @@ fn period_status(planned: &BTreeSet<NaiveDate>, today: NaiveDate) -> &'static st
 }
 
 fn validate_scope(db: &Connection, scope: &Scope) -> Result<()> {
+    if scope.device.len() > 200 || scope.person.len() > 200 {
+        return Err(invalid("Invalid comparison scope"));
+    }
     if !scope.person.is_empty() && !db.query_row(
         "SELECT EXISTS(SELECT 1 FROM people WHERE id=?)", [&scope.person], |r| r.get::<_, bool>(0))? {
         return Err(invalid("Choose an existing person for this experiment"));
@@ -345,6 +411,11 @@ fn validate_scope(db: &Connection, scope: &Scope) -> Result<()> {
 pub async fn get(State(app): State<App>, headers: HeaderMap, Query(scope): Query<Scope>) -> Result<Json<Value>> {
     owner(&app, &headers).await?;
     Ok(Json(app.store.language_comparison(scope, app.timezone).await?))
+}
+
+pub async fn get_days(State(app): State<App>, headers: HeaderMap, Query(scope): Query<DailyScope>) -> Result<Json<Value>> {
+    owner(&app, &headers).await?;
+    Ok(Json(app.store.language_comparison_days(scope, app.timezone).await?))
 }
 
 pub async fn save(State(app): State<App>, headers: HeaderMap, Query(scope): Query<Scope>, Json(value): Json<Value>) -> Result<Json<Value>> {
@@ -394,6 +465,36 @@ mod tests {
             config(&[("2027-11-15", "2027-11-15")], &[]),
             config(&[("2000-01-01", "2026-11-13")], &[]),
         ] { assert!(normalize(&mut c, today).is_err()); }
+    }
+
+    #[tokio::test]
+    async fn daily_ranges_scope_empty_and_partial_today() {
+        let s = Store::open(":memory:".into()).unwrap();
+        let tz = chrono_tz::Europe::Zurich;
+        let today = tz.timestamp_millis_opt(now()).unwrap().date_naive();
+        s.create_device("tv".into(), "TV".into(), "Owner".into(), hash("key")).await.unwrap();
+        s.create_device("empty".into(), "Empty".into(), "Guest".into(), hash("empty")).await.unwrap();
+        let query = |from: String, to: String, device: &str| DailyScope { from, to, device:device.into(), person:String::new() };
+        let blank = s.language_comparison_days(query(today.to_string(), today.to_string(), "empty"), tz).await.unwrap();
+        assert_eq!(blank["firstRecordedDate"],Value::Null);
+        assert_eq!(blank["days"],json!([]));
+        s.ingest(hash("key"), crate::store::Batch { device_id:"tv".into(), evidence:Default::default(), events:vec![
+            json!({"eventId":"today","kind":"watch","t":now()-30_000,"seconds":10.,
+                "title":"Today audio","videoId":"abcdefghijk","lang":"de","source":"audio-track","conf":"high"})
+        ]}).await.unwrap();
+        let d = s.language_comparison_days(query(today.pred_opt().unwrap().to_string(), today.succ_opt().unwrap().to_string(), "tv"),tz).await.unwrap();
+        assert_eq!(d["days"].as_array().unwrap().len(),1);
+        assert_eq!(d["days"][0]["date"],today.to_string());
+        assert_eq!(d["days"][0]["allSeconds"],10.);
+        for (from,to) in [("2026-11-02","2026-11-01"),("2026-02-30","2026-03-01"),("2026-01-01","2026-05-01")] {
+            assert_eq!(s.language_comparison_days(query(from.into(),to.into(),"tv"),tz).await.unwrap_err().0,StatusCode::UNPROCESSABLE_ENTITY);
+        }
+        assert!(s.language_comparison_days(query("2026-01-01".into(),"2026-04-30".into(),"tv"),tz).await.is_ok());
+        assert!(s.language_comparison_days(query(today.to_string(),today.to_string(),"missing"),tz).await.is_err());
+        let guest: String = s.read(|db| Ok(db.query_row("SELECT person_id FROM devices WHERE id='empty'",[],|r|r.get(0))?)).await.unwrap();
+        let mut cross = query(today.to_string(),today.to_string(),"tv");
+        cross.person = guest;
+        assert!(s.language_comparison_days(cross,tz).await.is_err());
     }
 
     #[tokio::test]
@@ -467,6 +568,26 @@ mod tests {
         assert_eq!(excluded["availableLanguages"], json!(["ja","ru"]));
         let count = s.read(|db| Ok(db.query_row("SELECT count(*) FROM events", [], |r| r.get::<_, i64>(0))?)).await.unwrap();
         assert_eq!(count, 5);
+        let daily = s.language_comparison_days(DailyScope {
+            from:"2026-03-27".into(),to:"2026-04-01".into(),device:String::new(),person:String::new()
+        },tz).await.unwrap();
+        assert_eq!(daily["firstRecordedDate"],"2026-03-28");
+        assert_eq!(daily["days"][0]["allSeconds"],5.);
+        for period in chosen["periods"].as_array().unwrap() {
+            let rows: Vec<_> = daily["days"].as_array().unwrap().iter()
+                .filter(|d| d["date"].as_str() >= period["start"].as_str() && d["date"].as_str() <= period["end"].as_str()).collect();
+            assert_eq!(rows.iter().map(|d| d["allSeconds"].as_f64().unwrap()).sum::<f64>(), period["allSeconds"].as_f64().unwrap());
+            for lang in period["languages"].as_array().unwrap() {
+                let total: f64 = rows.iter().flat_map(|d| d["languages"].as_array().unwrap())
+                    .filter(|l| l["lang"] == lang["lang"]).map(|l| l["seconds"].as_f64().unwrap()).sum();
+                assert_eq!(total, lang["seconds"].as_f64().unwrap());
+            }
+        }
+        assert_eq!(daily["days"][1]["languages"],json!([{"lang":"ja","seconds":5.},{"lang":"und","seconds":15.}]),
+            "Daily languages include unselected classifications");
+        assert_eq!(daily["days"][1]["reviewSeconds"],15.);
+        assert_eq!(daily["days"][4]["allSeconds"],0.);
+        assert_eq!(daily["days"][4]["languages"],json!([]));
     }
 
     #[tokio::test]
@@ -495,6 +616,12 @@ mod tests {
         assert_eq!(value["groups"][1]["backgroundSeconds"],0.);
         // A cumulative record lasts ten wall-clock minutes but contains only 30 measured seconds.
         assert_eq!(value["groups"][1]["minutesPerDay"],0.5);
+        let daily = s.language_comparison_days(DailyScope {
+            from:"2026-10-23".into(),to:"2026-10-26".into(),device:"tv".into(),person:String::new()
+        },tz).await.unwrap();
+        assert_eq!(daily["days"][0]["allSeconds"],20.);
+        assert_eq!(daily["days"][1]["allSeconds"],30., "Autumn DST day retains measured cumulative time");
+        assert_eq!(daily["days"][2]["allSeconds"],0.);
         let person: String = s.read(|db| Ok(db.query_row("SELECT person_id FROM devices WHERE id='tv'",[],|r| r.get(0))?)).await.unwrap();
         s.save_language_comparison(config(&[("2026-10-24","2026-10-24")], &[("2026-10-25","2026-10-25")]),person.clone(),tz).await.unwrap();
         assert_eq!(s.language_comparison(Scope {device:String::new(),person},tz).await.unwrap()["groups"],value["groups"]);
