@@ -73,15 +73,27 @@ async function versionLanguageAsset(file, contents) {
   await fs.writeFile(`${languageRoot}/${versioned}`, contents);
   return versioned;
 }
-let languageScript = sharedImports(await fs.readFile(`${languageRoot}/languages.js`, 'utf8'));
-for (const file of ['api.js', 'demo.js', 'comparison.js', 'language-picker.js']) {
-  const name = await versionLanguageAsset(file, await fs.readFile(`${languageRoot}/${file}`));
-  languageScript = languageScript.replaceAll(`./${file}`, `./${name}`);
+const languageAssets = new Map();
+async function versionLanguageModule(file, ancestors = new Set()) {
+  if (ancestors.has(file)) throw new Error(`Circular language module import: ${file}`);
+  if (languageAssets.has(file)) return languageAssets.get(file);
+  let source = sharedImports(await fs.readFile(`${languageRoot}/${file}`, 'utf8'));
+  const imports = [...source.matchAll(/(?:from\s*|import\s*\(\s*)['"](\.\/[^'"]+\.js)['"]/g)].map(m => m[1]);
+  for (const specifier of new Set(imports)) {
+    const dependency = path.posix.join(path.posix.dirname(file), specifier);
+    const name = await versionLanguageModule(dependency, new Set([...ancestors, file]));
+    const relative = path.posix.relative(path.posix.dirname(file), name);
+    source = source.replaceAll(specifier, `./${relative}`);
+  }
+  const name = await versionLanguageAsset(file, source);
+  languageAssets.set(file, name);
+  return name;
 }
 let languageHtml = await fs.readFile(`${languageRoot}/index.html`, 'utf8');
+languageHtml = languageHtml.replaceAll('"languages.js"', `"${await versionLanguageModule('languages.js')}"`);
 for (const [file, contents] of [
-  ['languages.js', languageScript],
   ['languages.css', await fs.readFile(`${languageRoot}/languages.css`)],
+  ['comparison.css', await fs.readFile(`${languageRoot}/comparison.css`)],
 ]) {
   const name = await versionLanguageAsset(file, contents);
   languageHtml = languageHtml.replaceAll(`"${file}"`, `"${name}"`);

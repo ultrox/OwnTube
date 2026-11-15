@@ -8,69 +8,63 @@ Design notes: [`docs/backoffice-design.md`](../../../../docs/backoffice-design.m
 
 ## Compare periods
 
-The view answers three questions in order, for two saved period groups: which group averaged
-more, whether the two groups are comparable, and what each language did.
+The saved experiment is an ordered list of inclusive periods. Matching labels pool into groups;
+overlapping or touching periods with the same label merge. Different labels cannot share a date.
+The API reads old two-group configurations without rewriting them until the next successful save.
 
-**Setup band ("What's compared").** Each group shows its name, a summary of its saved periods,
-and **+ Add period** beside **+ Add language**. **Edit names & dates** opens the name and
-inclusive From/Through inputs; it opens by itself while a group has no periods, and
-**+ Add period** opens it on the new range. **Save & compare** appears only when there are unsaved
-changes and folds the editor away again; **Refresh** reloads the saved version (**Discard edits**
-while a draft exists). Group names and all ranges are saved on the server. Multiple ranges combine
-into one result per group. Repeated days count once; groups cannot share dates. Changing
-device/person keeps unsaved edits. Conflicting saves retain the draft and offer an explicit reload.
-While a draft is unsaved, the results below say they still show the last saved comparison.
+**Plan and edit.** The empty state opens the experiment planner: tomorrow, ten days per period,
+Off/On/Off by default. Filling an existing draft requires confirmation. Every generated name
+and date remains editable. A calendar preview shows the boundaries and adjacent moves.
+**Add period** and **Add language** stay beside each other. Future dates are allowed, but
+future days never dilute measured daily averages. Drafts survive scope changes. Save folds the
+editor, discard explicitly reloads, and conflicts retain the draft. Results always describe the
+saved configuration and say so while changes are unsaved.
 
-**The lead.** One sentence names the group with the higher average ("SLN averaged 91.9 more
-minutes of German a day than FREE"), followed by both rates as bars on one scale. The difference
-is the hatched end of the longer bar. Neither group is treated as the baseline or as "the one
-using it": the two colours identify groups and never mean better or worse.
+**Sequence and pooled groups.** Repeated labels default to pooled groups; otherwise the view uses
+chronological periods. With three or more items an overview shows period bars and adjacent moves.
+Upcoming columns contain no predicted numbers. Choose a move to feature its detail, or reverse it.
+View choices use the hash: `mode`, `move`, `lead`, `dir`, beside `view=compare`.
 
-- Every rate is minutes per selected **calendar** day, rounded to one decimal; differences are
-  computed from those printed figures so they always reconcile.
-- The percentage is relative to the lower daily rate and is omitted when that rate prints as 0.0.
-  Only a true zero is called "none"; positive playback that rounds to 0.0 reads "<0.1" and "under
-  0.1 min a day". A true zero draws no bar; a trace keeps a thin marker.
-- With selected languages, a separate line gives each group's share of all watch time and names
-  the group whose share is higher, in **percentage points**. That group need not be the one with
-  the higher daily average. A group with no watch time at all has no share and no difference.
-- Equal rates, no playback in either group and a group without periods each get their own plain
-  sentence; an empty group has no average.
+**One language leads.** The largest absolute share shift chooses the lead, with rate shift and
+alphabetical code as tie breakers. The lead switch overrides it in the URL, including the combined
+selection. Increases of at least two times get a giant multiplier. Smaller increases and decreases
+use percentages. Scale bars communicate the same ratio. All arithmetic uses printed one-decimal
+rates; tiny positive values are never called none.
 
-**Are the periods comparable?** Each group is drawn as one cell per unique selected calendar day
-(a proportional bar beyond 31 days). The shorter group gets dashed cells for the days it lacks and
-the heading says exactly how many more days it needs. Today is hatched because it is not over.
-Days with recorded playback are given as a count beside calendar days; days without playback
-still count in the daily denominator. The response has totals per group, not per day, so the
-cells count days and do not show which dates had playback.
+**Observation beside the claim.** Full days, partial today and dashed future or equalizing slots
+have distinct geometry. Above 31 days, proportional bars replace tokens. Equal completed windows
+say "Even windows", with a short-record note under 28 days in total. Slots are not missing
+recordings or forecasts.
 
-**By language.** One row per language with a bar for each group on a single shared scale, the
-total time and share beside each bar, and the higher group with its difference at the end. Under
-it, "share +N pts · group" names the group with the larger share for that language. Unknown,
-mixed and no-speech rows come last. With exactly one selected language this section is omitted:
-the lead already is that language.
+**Two lenses.** Time shows minutes per calendar day and relative change. Share shows how many
+of every 100 minutes belong to the lead, with points only in supporting text. Largest-remainder
+waffles total 100 cells. No recorded watch time means an undefined share. Individual languages,
+the combined selection and all watch time have shared-scale dumbbells and numeric rows. A
+contribution bar appears only when selected languages all move with the combined change.
+Underlying totals and calculation notes remain available in disclosure sections.
 
-**Behind the averages.** A ruled table of selected days, days with playback, watch time, context
-totals and review time per group.
+**Conclude and reopen.** Every period must be complete before concluding. Periods then lock;
+language selection stays editable and numbers stay live as classifications are audited.
+Confirmed reopening is a separate save before periods can be edited.
 
-**Languages** is a shared saved selection for both period groups. Use **+ Add language** in either
-group to search, remove a chip to exclude a language, then **Save & compare**. Results then lead
-with the chosen languages combined and list each one. **Use all languages** restores the full view.
-Shares stay relative to all recorded watch time; selecting two languages does not rebase their sum
-to 100%. Period lengths are unchanged, and zero-watch selected languages stay visible. Suggestions
-contain only assessed languages with recorded playback in either saved period group for the current
-device/person scope. Saving changed periods refreshes the suggestions. The row-classification
-**Other…** picker still supports the full catalog so genuinely new audio languages can be classified.
+**Languages** are one shared selection. Removing all pills restores all languages. Suggestions
+contain scoped recorded languages plus saved selections; future-only or empty plans fall back
+to the last 30 days. Selecting languages never rebases share to 100%. The classification picker
+still supports the full catalogue.
 
-On phones the groups stay side by side in the setup band, every bar sits under its label, and
-nothing scrolls sideways.
+Light and dark modes use system fonts and semantic language tokens. The observation panel
+inverts with the existing strip tokens. Phone layouts stack the hero and lenses and turn language
+rows and period inputs into cards; only designated chart/table regions scroll.
 
 | File | Role |
 | --- | --- |
 | `index.html`, `languages.css` | Page shell and styles. Self-contained; no fonts or files from elsewhere. |
 | `languages.js` | The UI (ES module): sign-in, scope, language table, one row per video, the video inspector. |
 | `api.js` | Live adapter: same-origin `fetch` with the owner cookie; `{error}` and unreadable answers → `ApiError`. |
-| `comparison.js` | Compare periods view: setup band and editor, the lead, period lengths, per-language bars, conflict handling and independent drafts. Exports its arithmetic (`rateStory`, `shareStory`, `dayGap`, `percentText`, `rangeText`) for the check. |
+| `comparison.js` | Draft controller, planner/editor, dialogs, revision conflicts and hash controls. |
+| `comparison-view.js`, `comparison.css` | Saved-result charts and responsive light/dark presentation. |
+| `comparison-model.js` | Pure calendar, normalization, directional arithmetic, waffle and observation helpers, shared with demo. |
+| `comparison-check.mjs` | Pure checks and comparison browser scenarios, called by `check.mjs`. |
 | `language-picker.js` | Searchable occasional-language dialog, names/codes/native names and audited row saving. |
 | `demo.js` | Demo adapter: the same contract (video groups and bulk decisions included) in memory with fictional data. Loaded **only** for `?demo=1`; the check's mock serves it too. |
 | `check.mjs` | Behaviour check (mock contract or live local server). Not shipped. |
@@ -167,6 +161,8 @@ The build copies `*.html|css|js|svg|woff2` to `dist/modules/languages/` and skip
 
 ```sh
 node apps/backoffice/modules/languages/check.mjs
+node apps/backoffice/modules/languages/check.mjs --comparison-only
+node apps/backoffice/modules/languages/comparison-check.mjs --pure
 node apps/backoffice/modules/languages/check.mjs --live http://127.0.0.1:3211 --token-file <admin-token>
 ```
 
@@ -191,13 +187,14 @@ node apps/backoffice/modules/languages/check.mjs --live http://127.0.0.1:3211 --
   - quick language choices, audit/evidence preservation, stale revisions, duplicate clicks,
     save failures, filtered-row removal, and inspector Save & close for both targets;
   - a server without grouping;
-  - Compare periods: the difference arithmetic as plain functions (including a trace baseline versus
-    a true zero, and share leader versus daily-rate leader); focus after add, save, discard and
-    remove; group colour contrast in both themes; saved multi-range periods, the
-    folded editor, shared languages, overlap and conflict refusals, drafts across scopes; and fixed
-    responses (`comparison` on `/__mock`) for unequal lengths with a partial today, the first group
-    leading, a zero lower rate, equal rates, no playback, an empty group, and many languages with
-    long hostile labels at 390 px;
+   - Compare periods: directional arithmetic, trace, null shares, largest-remainder waffles,
+     scale blocks, time axes, automatic lead, observation states and date normalization;
+     planner confirmation, pooled/sequence modes, future denominators, scoped suggestions,
+     draft preservation, conflicts, overlap, conclude and reopen;
+   - fixed comparison responses for equal/unequal windows, partial today, upcoming/running periods,
+     conclusion, one/three languages, no share, decrease, equality, zero, trace, long windows
+     and hostile labels at 1320, 859 and 390 pixels in both schemes; full-page desktop/phone
+     screenshots, forced-colors borders, chart text equivalents and the original share-unit misread;
   - long names at 390 px, the phone layout, and demo labelling with zero API calls.
 - **Live.** Requires a loopback URL. It runs the same UI against a real local server seeded
   with `tests/seed-dev.mjs` and the History desk's fictional fixtures:

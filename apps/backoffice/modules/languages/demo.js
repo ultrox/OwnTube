@@ -2,6 +2,8 @@
 // fallback when the live API fails. Implements contracts/languages.md in memory with fictional
 // data (no real people, devices or videos) and makes no network requests. Reload to reset.
 
+import { normalizeConfig, periodDays, periodFacts, addDays } from './comparison-model.js';
+
 const MIN = 60 * 1000;
 const HOUR = 60 * MIN;
 const DAY = 24 * HOUR;
@@ -174,25 +176,11 @@ async function sha256(text) {
 
 export async function createDemoApi({ external = false } = {}) {
   const now = Date.now();
-  let comparisonConfig = { baseRevision: 0, selectedLanguages: [], groups: [{ label: 'Using it', ranges: [] }, { label: 'Not using it', ranges: [] }] };
+  let comparisonConfig = { baseRevision: 0, selectedLanguages: [], periods: [], concludedAt: null };
   const localDate = (at) => {
     const d = new Date(at);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   };
-  function comparisonDays(config) {
-    const sets = config.groups.map((g) => {
-      if (!g.label.trim() || g.label.length > 80 || g.ranges.length > 64) throw fail(422, 'Use a group name and at most 64 periods.');
-      const days = new Set();
-      for (const range of g.ranges) {
-        const start = Date.parse(`${range.start}T00:00:00Z`), end = Date.parse(`${range.end}T00:00:00Z`);
-        if (!Number.isFinite(start) || !Number.isFinite(end) || end < start || range.end > localDate(now) || (end - start) / DAY > 3660) throw fail(422, 'Choose valid start and end dates, no later than today.');
-        for (let t = start; t <= end; t += DAY) days.add(new Date(t).toISOString().slice(0, 10));
-      }
-      return days;
-    });
-    if ([...sets[0]].some((d) => sets[1].has(d))) throw fail(422, 'A date belongs to both groups. Choose non-overlapping groups.');
-    return sets;
-  }
   const midnight = (() => { const d = new Date(now); d.setHours(0, 0, 0, 0); return d.getTime(); })();
   const providers = [{ id: 'saved-evidence', label: 'Saved audio metadata' }, ...(external ? [{ id: 'external', label: 'Configured analysis API (demo)' }] : [])];
   const records = [];
@@ -271,16 +259,16 @@ export async function createDemoApi({ external = false } = {}) {
     login: () => later({ ok: true }, 20),
     logout: () => later({ ok: true }, 20),
     saveComparison(config) {
-      comparisonDays(config);
-      const selection = config.selectedLanguages || [];
-      if (selection.length > 128 || selection.some((l) => !language(l))) throw fail(422, 'Choose up to 128 valid language codes');
-      if (config.baseRevision !== comparisonConfig.baseRevision) throw fail(409, 'Comparison changed in another browser. Reload saved periods before saving.');
-      comparisonConfig = structuredClone({ ...config, selectedLanguages: [...new Set(selection.map(language))].sort(), baseRevision: config.baseRevision + 1 });
+      comparisonConfig = normalizeConfig(config, localDate(now), comparisonConfig);
+      comparisonConfig.baseRevision++;
       return later(comparisonConfig);
     },
     comparison({ device = '', person = '' } = {}) {
-      const availableLanguages = new Set();
-      const groups = comparisonDays(comparisonConfig).map((dates) => {
+      const today = localDate(now);
+      const availableLanguages = new Set(comparisonConfig.selectedLanguages);
+      const measure = (planned) => {
+        const facts = periodFacts(planned, today);
+        const dates = new Set(planned.filter(d => d <= today));
         const selected = comparisonConfig.selectedLanguages || [];
         const active = new Set(), langs = new Map(selected.map((l) => [l, 0]));
         let seconds = 0, allSeconds = 0, foregroundSeconds = 0, backgroundSeconds = 0, unspecifiedSeconds = 0, reviewSeconds = 0;
@@ -302,11 +290,18 @@ export async function createDemoApi({ external = false } = {}) {
           }
         }
         return { seconds, allSeconds, share: allSeconds ? seconds / allSeconds : null, foregroundSeconds, backgroundSeconds, unspecifiedSeconds, reviewSeconds,
-          calendarDays: dates.size, activeDays: active.size, includesToday: dates.has(localDate(now)),
+          ...facts, activeDays: active.size,
           minutesPerDay: dates.size ? seconds / 60 / dates.size : null,
           languages: [...langs].map(([lang, time]) => ({ lang, seconds: time, minutesPerDay: dates.size ? time / 60 / dates.size : null, share: allSeconds ? time / allSeconds : null })) };
+      };
+      const periods = comparisonConfig.periods.map(p => ({ ...p, ...measure(periodDays(p)) }));
+      const labels = [...new Set(periods.map(p => p.label))];
+      const groups = labels.map(label => {
+        const indexes = periods.flatMap((p, i) => p.label === label ? [i] : []);
+        return { label, periods: indexes, ...measure([...new Set(indexes.flatMap(i => periodDays(periods[i])))]) };
       });
-      return later({ config: comparisonConfig, groups, availableLanguages: [...availableLanguages].sort(), today: localDate(now), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, asOf: now });
+      if (periods.every(p => !p.calendarDays)) measure(Array.from({ length: 30 }, (_, n) => addDays(today, -n)));
+      return later({ config: comparisonConfig, periods, groups, availableLanguages: [...availableLanguages].sort(), today, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, asOf: now });
     },
     languages(q) {
       const { n, start, rows } = scopeOf(q);

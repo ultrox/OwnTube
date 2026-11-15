@@ -95,7 +95,16 @@ The Languages follow-up `owntube-languages-20261113-2` uses the same process fro
 commit `4369a6835`, with mobile wrapping and content-hashed module assets. Its
 backend binary is identical to `-1`; the same backup and image-only rollback apply.
 
-## Current device-removal release
+## Comparison v2 release
+
+`owntube-comparison-v2-20261115-1` introduces the ordered-period experiment model
+and the responsive comparison redesign. Build from committed source using the
+server-local Docker/Kamal path above. Verify on a restored backup before boot.
+The saved configuration migrates only on its first v2 save. Rollback after that
+requires targeted configuration conversion, as described in
+[`docs/releases/comparison-v2.md`](../docs/releases/comparison-v2.md).
+
+## Previous device-removal release
 
 `owntube-device-removal-20261114-1`, source `01ecbe0b3`, adds a connected-device
 list and **Delete device** on `/connect/`. Deletion revokes uploads while keeping

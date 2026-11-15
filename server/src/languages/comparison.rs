@@ -2,27 +2,36 @@
 use super::*;
 use chrono::{Days, NaiveDate, TimeZone};
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize, PartialEq, Eq, Debug)]
 #[serde(deny_unknown_fields)]
-pub struct Range {
+pub struct Period {
+    label: String,
     start: String,
     end: String,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct Group {
+struct LegacyGroup {
     label: String,
-    ranges: Vec<Range>,
+    ranges: Vec<LegacyRange>,
+}
+#[derive(Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct LegacyRange {
+    start: String,
+    end: String,
 }
 
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Config {
     base_revision: i64,
-    groups: [Group; 2],
+    periods: Vec<Period>,
     #[serde(default)]
     selected_languages: Vec<String>,
+    #[serde(default)]
+    concluded_at: Option<String>,
 }
 
 #[derive(Default, Deserialize)]
@@ -38,10 +47,8 @@ fn empty() -> Config {
     Config {
         base_revision: 0,
         selected_languages: vec![],
-        groups: ["Using it", "Not using it"].map(|label| Group {
-            label: label.into(),
-            ranges: vec![],
-        }),
+        periods: vec![],
+        concluded_at: None,
     }
 }
 
@@ -54,50 +61,96 @@ fn date(value: &str) -> Result<NaiveDate> {
     Ok(d)
 }
 
-// Canonical day sets remove duplicate/overlapping dates without weighting them twice.
-fn days(config: &Config, today: NaiveDate) -> Result<[BTreeSet<NaiveDate>; 2]> {
+// Normalize once before saving or interpreting an old row. Reads never rewrite storage.
+fn normalize(config: &mut Config, today: NaiveDate) -> Result<()> {
     if config.base_revision < 0 {
         return Err(invalid("Invalid comparison revision"));
     }
     if config.selected_languages.len() > 128 || config.selected_languages.iter().any(|s| language(s).is_none()) {
         return Err(invalid("Choose up to 128 valid language codes"));
     }
-    let mut result = [BTreeSet::new(), BTreeSet::new()];
-    for (group, selected) in config.groups.iter().zip(result.iter_mut()) {
-        if group.label.trim().is_empty() || group.label.chars().count() > 80 || group.ranges.len() > 64 {
-            return Err(invalid("Use a group name up to 80 characters and at most 64 ranges"));
+    if config.periods.len() > 128 {
+        return Err(invalid("Choose up to 128 periods"));
+    }
+    let mut occupied = BTreeMap::new();
+    for period in &mut config.periods {
+        period.label = period.label.trim().into();
+        if period.label.is_empty() || period.label.chars().count() > 80 {
+            return Err(invalid("Use a group name up to 80 characters"));
         }
-        for range in &group.ranges {
-            let (start, end) = (date(&range.start)?, date(&range.end)?);
-            if end < start || end > today {
-                return Err(invalid("Ranges must end on or after their start, and no later than today"));
+        let (start, end) = (date(&period.start)?, date(&period.end)?);
+        if end < start || end > today.checked_add_days(Days::new(366)).unwrap() {
+            return Err(invalid("Periods must end on or after their start, at most 366 days after today"));
+        }
+        if (end - start).num_days() >= 3660 {
+            return Err(invalid("Choose at most 3,660 unique calendar days"));
+        }
+        for n in 0..=(end - start).num_days() {
+            let d = start.checked_add_days(Days::new(n as u64)).unwrap();
+            if let Some(label) = occupied.insert(d, period.label.clone())
+                && label != period.label
+            {
+                return Err(invalid("A date can belong to one period only"));
             }
-            let length = (end - start).num_days();
-            if length > 3660 {
-                return Err(invalid("Choose at most 3,660 calendar days per group"));
-            }
-            for n in 0..=length {
-                selected.insert(start.checked_add_days(Days::new(n as u64)).unwrap());
-            }
-            if selected.len() > 3660 {
-                return Err(invalid("Choose at most 3,660 calendar days per group"));
-            }
+        }
+        if occupied.len() > 3660 {
+            return Err(invalid("Choose at most 3,660 unique calendar days"));
         }
     }
-    if let Some(shared) = result[0].intersection(&result[1]).next() {
-        return Err(invalid(&format!("{shared} belongs to both groups. Choose non-overlapping groups.")));
+    config.periods.sort_by(|a, b| a.start.cmp(&b.start).then(a.end.cmp(&b.end)));
+    let mut merged: Vec<Period> = vec![];
+    for period in &config.periods {
+        if let Some(last) = merged.last_mut()
+            && last.label == period.label
+            && date(&period.start)? <= date(&last.end)?.succ_opt().unwrap()
+        {
+            if period.end > last.end { last.end = period.end.clone(); }
+        } else {
+            merged.push(period.clone());
+        }
     }
-    Ok(result)
+    config.periods = merged;
+    config.selected_languages = config.selected_languages.iter().map(|s| language(s).unwrap())
+        .collect::<BTreeSet<_>>().into_iter().collect();
+    if let Some(concluded) = &config.concluded_at {
+        let concluded = date(concluded)?;
+        if config.periods.is_empty() || config.periods.iter().any(|p| date(&p.end).unwrap() >= today) {
+            return Err(invalid("Every period must be complete before concluding"));
+        }
+        if concluded > today || config.periods.iter().any(|p| date(&p.end).unwrap() >= concluded) {
+            return Err(invalid("Choose a conclusion date after the periods and no later than today"));
+        }
+    }
+    Ok(())
 }
 
-fn saved(db: &Connection) -> Result<Config> {
+fn days(period: &Period, through: NaiveDate) -> Result<BTreeSet<NaiveDate>> {
+    let (start, end) = (date(&period.start)?, date(&period.end)?.min(through));
+    Ok((0..=(end - start).num_days()).map(|n| start.checked_add_days(Days::new(n as u64)).unwrap()).collect())
+}
+
+fn saved(db: &Connection, today: NaiveDate) -> Result<Config> {
     let row: Option<(i64, String)> = db
         .query_row("SELECT revision,config FROM language_comparison WHERE id=1", [], |r| Ok((r.get(0)?, r.get(1)?)))
         .optional()?;
     match row {
         Some((revision, text)) => {
-            let mut config: Config = decode(&text)?;
+            let value: Value = decode(&text)?;
+            let mut config: Config = if value.get("groups").is_some() {
+                let groups: Vec<LegacyGroup> = serde_json::from_value(value["groups"].clone())
+                    .map_err(|_| invalid("Could not read saved comparison groups"))?;
+                Config {
+                    base_revision: revision,
+                    selected_languages: serde_json::from_value(value.get("selectedLanguages").cloned().unwrap_or(json!([])))
+                        .map_err(|_| invalid("Could not read saved comparison languages"))?,
+                    periods: groups.into_iter().flat_map(|g| g.ranges.into_iter().map(move |r| Period {
+                        label: g.label.clone(), start: r.start, end: r.end
+                    })).collect(),
+                    concluded_at: None,
+                }
+            } else { decode(&text)? };
             config.base_revision = revision;
+            normalize(&mut config, today)?;
             Ok(config)
         }
         None => Ok(empty()),
@@ -135,14 +188,19 @@ fn windows(selected: &BTreeSet<NaiveDate>, tz: chrono_tz::Tz, at: i64) -> Result
 
 impl Store {
     pub async fn save_language_comparison(&self, mut config: Config, tz: chrono_tz::Tz) -> Result<Value> {
-        days(&config, tz.timestamp_millis_opt(now()).unwrap().date_naive())?;
-        config.selected_languages = config.selected_languages.iter().map(|s| language(s).unwrap())
-            .collect::<BTreeSet<_>>().into_iter().collect();
         self.run(move |db| {
+            let today = tz.timestamp_millis_opt(now()).unwrap().date_naive();
+            normalize(&mut config, today)?;
             let tx = db.transaction()?;
-            let old = saved(&tx)?;
+            let old = saved(&tx, today)?;
             if config.base_revision != old.base_revision {
                 return Err(conflict("Comparison changed in another browser. Reload saved periods before saving."));
+            }
+            if old.concluded_at.is_some() && config.periods != old.periods {
+                return Err(invalid("Reopen the experiment to edit periods"));
+            }
+            if old.concluded_at.is_some() && config.concluded_at.is_some() && old.concluded_at != config.concluded_at {
+                return Err(invalid("Reopen the experiment before changing its conclusion date"));
             }
             let mut next = config;
             next.base_revision += 1;
@@ -162,17 +220,15 @@ impl Store {
         self.read(move |db| {
             let at = now();
             let today = tz.timestamp_millis_opt(at).unwrap().date_naive();
-            let config = saved(db)?;
-            let selected_days = days(&config, today)?;
+            let config = saved(db, today)?;
             let selected: BTreeSet<String> = db.prepare(
                 "SELECT id FROM devices WHERE (?='' OR id=?) AND
                 (?='' OR person_id=? OR (?='unassigned' AND person_id IS NULL))")?
                 .query_map(params![scope.device, scope.device, scope.person, scope.person, scope.person], |r| r.get(0))?
                 .collect::<rusqlite::Result<_>>()?;
             let mut assessments = BTreeMap::new();
-            let mut groups = vec![];
-            let mut available_languages = BTreeSet::new();
-            for selected_days in &selected_days {
+            let mut available_languages: BTreeSet<String> = config.selected_languages.iter().cloned().collect();
+            let mut measure = |selected_days: &BTreeSet<NaiveDate>| -> Result<Value> {
                 let mut context = [0.; 3];
                 let mut langs: BTreeMap<String, f64> = config.selected_languages.iter().map(|l| (l.clone(), 0.)).collect();
                 let mut all_seconds = 0.;
@@ -200,7 +256,7 @@ impl Store {
                 }
                 let seconds: f64 = context.iter().sum();
                 let count = selected_days.len();
-                groups.push(json!({
+                Ok(json!({
                     "calendarDays": count, "activeDays": active.len(),
                     "includesToday": selected_days.contains(&today),
                     "seconds": seconds, "allSeconds": all_seconds, "reviewSeconds": review,
@@ -212,12 +268,52 @@ impl Store {
                         "minutesPerDay": (count > 0).then(|| seconds / 60. / count as f64),
                         "share": (all_seconds > 0.).then(|| seconds / all_seconds)
                     })).collect::<Vec<_>>()
-                }));
+                }))
+            };
+            let mut periods = vec![];
+            let mut pooled: Vec<(String, Vec<usize>, BTreeSet<NaiveDate>, BTreeSet<NaiveDate>)> = vec![];
+            for (index, period) in config.periods.iter().enumerate() {
+                let planned = days(period, date(&period.end)?)?;
+                let elapsed = days(period, today)?;
+                let mut result = measure(&elapsed)?;
+                result["label"] = json!(period.label);
+                result["start"] = json!(period.start);
+                result["end"] = json!(period.end);
+                result["plannedDays"] = json!(planned.len());
+                result["status"] = json!(period_status(&planned, today));
+                periods.push(result);
+                let pos = pooled.iter().position(|g| g.0 == period.label).unwrap_or_else(|| {
+                    pooled.push((period.label.clone(), vec![], BTreeSet::new(), BTreeSet::new()));
+                    pooled.len() - 1
+                });
+                pooled[pos].1.push(index);
+                pooled[pos].2.extend(elapsed);
+                pooled[pos].3.extend(planned);
             }
-            Ok(json!({"config":config, "groups":groups, "availableLanguages":available_languages,
+            let mut groups = vec![];
+            for (label, indexes, elapsed, planned) in pooled {
+                let mut result = measure(&elapsed)?;
+                result["label"] = json!(label);
+                result["periods"] = json!(indexes);
+                result["plannedDays"] = json!(planned.len());
+                result["status"] = json!(period_status(&planned, today));
+                groups.push(result);
+            }
+            // Future-only plans still offer languages actually recorded in this scope.
+            if periods.iter().all(|p| p["calendarDays"] == 0) {
+                let recent = (0..30).map(|n| today.checked_sub_days(Days::new(n)).unwrap()).collect();
+                measure(&recent)?;
+            }
+            Ok(json!({"config":config, "periods":periods, "groups":groups, "availableLanguages":available_languages,
                 "timezone":tz.to_string(), "today":today.to_string(), "asOf":at}))
         }).await
     }
+}
+
+fn period_status(planned: &BTreeSet<NaiveDate>, today: NaiveDate) -> &'static str {
+    if planned.first().is_none_or(|d| *d > today) { "upcoming" }
+    else if planned.last().is_some_and(|d| *d < today) { "complete" }
+    else { "running" }
 }
 
 pub async fn get(State(app): State<App>, headers: HeaderMap, Query(scope): Query<Scope>) -> Result<Json<Value>> {
@@ -225,8 +321,12 @@ pub async fn get(State(app): State<App>, headers: HeaderMap, Query(scope): Query
     Ok(Json(app.store.language_comparison(scope, app.timezone).await?))
 }
 
-pub async fn save(State(app): State<App>, headers: HeaderMap, Json(config): Json<Config>) -> Result<Json<Value>> {
+pub async fn save(State(app): State<App>, headers: HeaderMap, Json(value): Json<Value>) -> Result<Json<Value>> {
     owner(&app, &headers).await?;
+    if value.get("groups").is_some() {
+        return Err(invalid("Use comparison v2 periods instead of groups. Reload this page before saving."));
+    }
+    let config = serde_json::from_value(value).map_err(|e| invalid(&format!("Invalid comparison: {e}")))?;
     Ok(Json(app.store.save_language_comparison(config, app.timezone).await?))
 }
 
@@ -238,31 +338,33 @@ mod tests {
         Config {
             base_revision: 0,
             selected_languages: vec![],
-            groups: [a, b].map(|ranges| Group {
-                label: "A group".into(),
-                ranges: ranges.iter().map(|(a, b)| Range { start: (*a).into(), end: (*b).into() }).collect(),
-            }),
+            concluded_at: None,
+            periods: [a, b].into_iter().enumerate().flat_map(|(i, ranges)| ranges.iter().map(move |(a,b)| Period {
+                label: format!("Group {i}"), start: (*a).into(), end: (*b).into()
+            })).collect(),
         }
     }
 
     #[test]
     fn ranges_are_inclusive_deduplicated_disjoint_and_dst_aware() {
         let today = date("2026-11-13").unwrap();
-        let c = config(&[("2026-03-28", "2026-03-29"), ("2026-03-29", "2026-03-30")], &[("2026-10-25", "2026-10-25")]);
-        let sets = days(&c, today).unwrap();
+        let mut c = config(&[("2026-03-28", "2026-03-29"), ("2026-03-29", "2026-03-30")], &[("2026-10-25", "2026-10-25")]);
+        normalize(&mut c, today).unwrap();
+        assert_eq!(c.periods.len(), 2);
+        let sets: Vec<_> = c.periods.iter().map(|p| days(p, today).unwrap()).collect();
         assert_eq!(sets[0].len(), 3);
         let spring = windows(&sets[0], chrono_tz::Europe::Zurich, i64::MAX).unwrap();
         assert_eq!(spring.len(), 1);
         assert_eq!(spring[0].until - spring[0].since, 71 * 3_600_000);
         let autumn = windows(&sets[1], chrono_tz::Europe::Zurich, i64::MAX).unwrap();
         assert_eq!(autumn[0].until - autumn[0].since, 25 * 3_600_000);
-        for c in [
+        for mut c in [
             config(&[("2026-03-29", "2026-03-30")], &[("2026-03-30", "2026-03-31")]),
             config(&[("2026-03-30", "2026-03-29")], &[]),
             config(&[("2026-02-30", "2026-03-01")], &[]),
-            config(&[("2026-11-14", "2026-11-14")], &[]),
+            config(&[("2027-11-15", "2027-11-15")], &[]),
             config(&[("2000-01-01", "2026-11-13")], &[]),
-        ] { assert!(days(&c, today).is_err()); }
+        ] { assert!(normalize(&mut c, today).is_err()); }
     }
 
     #[tokio::test]
@@ -323,8 +425,8 @@ mod tests {
         assert_eq!(chosen["groups"][0]["languages"][0]["share"], 0.25);
         assert_eq!(chosen["groups"][0]["languages"][1]["seconds"], 0.);
         assert_eq!(chosen["groups"][1]["seconds"], 40.);
-        assert_eq!(chosen["availableLanguages"], json!(["ja","und"]),
-            "Suggestions use recorded assessed languages before selection, never zero-only chosen languages");
+        assert_eq!(chosen["availableLanguages"], json!(["ja","ru","und"]),
+            "Suggestions retain the saved selection alongside recorded assessed languages");
         let mut invalid_choice: Config = serde_json::from_value(chosen["config"].clone()).unwrap();
         invalid_choice.selected_languages = vec!["Japanese".into()];
         assert!(s.save_language_comparison(invalid_choice,tz).await.is_err());
@@ -332,7 +434,7 @@ mod tests {
         assert_eq!(excluded["groups"][0]["seconds"], 0.);
         assert_eq!(excluded["groups"][0]["calendarDays"], 1);
         assert_eq!(excluded["groups"][0]["minutesPerDay"], 0.);
-        assert_eq!(excluded["availableLanguages"], json!([]));
+        assert_eq!(excluded["availableLanguages"], json!(["ja","ru"]));
         let count = s.read(|db| Ok(db.query_row("SELECT count(*) FROM events", [], |r| r.get::<_, i64>(0))?)).await.unwrap();
         assert_eq!(count, 5);
     }
@@ -369,14 +471,134 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn v1_migration_is_read_only_and_normalizes_populated_groups() {
+        let s = Store::open(":memory:".into()).unwrap();
+        s.run(|db| {
+            let old = json!({"baseRevision":7,"selectedLanguages":["DE","en"],"groups":[
+                {"label":" On ","ranges":[{"start":"2026-01-05","end":"2026-01-06"}]},
+                {"label":"Off","ranges":[{"start":"2026-01-02","end":"2026-01-04"},{"start":"2026-01-01","end":"2026-01-02"},{"start":"2026-01-07","end":"2026-01-08"}]}
+            ]}).to_string();
+            db.execute("INSERT INTO language_comparison VALUES(1,7,?,123)", [&old])?;
+            let c = saved(db, date("2026-11-13")?)?;
+            assert_eq!(c.base_revision, 7);
+            assert_eq!(c.selected_languages, vec!["de", "en"]);
+            assert_eq!(c.periods.iter().map(|p| p.label.as_str()).collect::<Vec<_>>(), vec!["Off","On","Off"]);
+            assert_eq!(c.periods[0].start, "2026-01-01");
+            assert_eq!(c.periods[0].end, "2026-01-04");
+            assert_eq!(db.query_row("SELECT config FROM language_comparison", [], |r| r.get::<_,String>(0))?, old);
+            assert_eq!(db.query_row("SELECT updated FROM language_comparison", [], |r| r.get::<_,i64>(0))?, 123);
+            Ok(())
+        }).await.unwrap();
+        let d = s.language_comparison(Scope::default(), chrono_tz::UTC).await.unwrap();
+        assert_eq!(d["groups"][0]["periods"], json!([0,2]));
+        assert_eq!(d["groups"][0]["calendarDays"], 6);
+        let c: Config = serde_json::from_value(d["config"].clone()).unwrap();
+        assert_eq!(s.save_language_comparison(c, chrono_tz::UTC).await.unwrap()["baseRevision"], 8);
+        s.read(|db| {
+            let text: String = db.query_row("SELECT config FROM language_comparison", [], |r| r.get(0))?;
+            assert!(!text.contains("\"groups\""));
+            Ok(())
+        }).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn planned_days_status_fallback_scope_and_conclusion_lock() {
+        let s = Store::open(":memory:".into()).unwrap();
+        let tz = chrono_tz::UTC;
+        let today = tz.timestamp_millis_opt(now()).unwrap().date_naive();
+        let day = |n: i64| (today + chrono::Duration::days(n)).to_string();
+        s.create_device("browser".into(), "Browser".into(), "Owner".into(), hash("key")).await.unwrap();
+        s.ingest(hash("key"), crate::store::Batch { device_id:"browser".into(), evidence:Default::default(), events:vec![
+            json!({"eventId":"recent","kind":"watch","t":midnight(today.pred_opt().unwrap(),tz).unwrap()+1000,
+                "seconds":12.,"title":"Recent audio","videoId":"abcdefghijk","lang":"de","source":"audio-track","conf":"high","playbackContext":"foreground"})
+        ]}).await.unwrap();
+        let mut c = config(&[(&day(1), &day(10))], &[]);
+        c.selected_languages = vec!["ja".into()];
+        s.save_language_comparison(c,tz).await.unwrap();
+        let future = s.language_comparison(Scope::default(),tz).await.unwrap();
+        assert_eq!(future["availableLanguages"], json!(["de","ja"]));
+        assert_eq!(future["periods"][0]["status"], "upcoming");
+        assert_eq!(future["periods"][0]["plannedDays"], 10);
+        assert_eq!(future["periods"][0]["calendarDays"], 0);
+        assert_eq!(future["periods"][0]["minutesPerDay"], Value::Null);
+        assert_eq!(future["periods"][0]["share"], Value::Null);
+        let scoped = s.language_comparison(Scope{device:"absent".into(),person:String::new()},tz).await.unwrap();
+        assert_eq!(scoped["availableLanguages"], json!(["ja"]));
+        let mut c: Config = serde_json::from_value(future["config"].clone()).unwrap();
+        c.selected_languages.clear();
+        c.periods = vec![
+            Period{label:"Off".into(),start:day(-4),end:day(-2)},
+            Period{label:"On".into(),start:day(-1),end:day(2)},
+            Period{label:"Off".into(),start:day(3),end:day(5)},
+        ];
+        s.save_language_comparison(c,tz).await.unwrap();
+        let d = s.language_comparison(Scope::default(),tz).await.unwrap();
+        assert_eq!(d["periods"][0]["status"], "complete");
+        assert_eq!(d["periods"][1]["status"], "running");
+        assert_eq!(d["periods"][1]["includesToday"], true);
+        assert_eq!(d["periods"][1]["calendarDays"], 2);
+        assert_eq!(d["periods"][1]["plannedDays"], 4);
+        assert_eq!(d["periods"][1]["minutesPerDay"], 0.1);
+        assert_eq!(d["groups"][0]["status"], "running");
+        assert_eq!(d["groups"][0]["calendarDays"], 3);
+        assert_eq!(d["groups"][0]["plannedDays"], 6);
+        assert_eq!(d["groups"][0]["periods"], json!([0,2]));
+        let mut c: Config = serde_json::from_value(d["config"].clone()).unwrap();
+        c.concluded_at = Some(day(0));
+        assert_eq!(s.save_language_comparison(c.clone(),tz).await.unwrap_err().0,StatusCode::UNPROCESSABLE_ENTITY);
+        c.periods = vec![Period{label:"Done".into(),start:day(-3),end:day(-1)}];
+        let concluded = s.save_language_comparison(c,tz).await.unwrap();
+        let mut c: Config = serde_json::from_value(concluded).unwrap();
+        c.selected_languages = vec!["de".into()];
+        let selected = s.save_language_comparison(c,tz).await.unwrap();
+        let mut c: Config = serde_json::from_value(selected).unwrap();
+        c.periods[0].label = "Changed".into();
+        assert!(s.save_language_comparison(c.clone(),tz).await.is_err());
+        c.concluded_at = None;
+        assert!(s.save_language_comparison(c.clone(),tz).await.is_err(), "Reopen before editing");
+        c.periods[0].label = "Done".into();
+        let reopened = s.save_language_comparison(c,tz).await.unwrap();
+        let mut c: Config = serde_json::from_value(reopened).unwrap();
+        c.periods[0].label = "Changed".into();
+        assert!(s.save_language_comparison(c,tz).await.is_ok());
+    }
+
+    #[test]
+    fn future_limit_unique_day_limit_and_touching_merge() {
+        let today = date("2026-11-13").unwrap();
+        let limit = today.checked_add_days(Days::new(366)).unwrap().to_string();
+        let mut c = config(&[(&limit,&limit)], &[]);
+        normalize(&mut c,today).unwrap();
+        let mut c = config(&[("2010-01-01","2020-01-08")], &[]);
+        normalize(&mut c,today).unwrap();
+        assert_eq!(days(&c.periods[0],today).unwrap().len(),3660);
+        c.periods[0].end = "2020-01-09".into();
+        assert!(normalize(&mut c,today).is_err());
+        let mut c = config(&[("2026-01-03","2026-01-04"),("2026-01-01","2026-01-02")], &[]);
+        normalize(&mut c,today).unwrap();
+        assert_eq!(c.periods.len(),1);
+        assert_eq!(c.periods[0].start,"2026-01-01");
+        assert_eq!(c.periods[0].end,"2026-01-04");
+        c.periods = vec![c.periods[0].clone();129];
+        assert!(normalize(&mut c,today).is_err());
+    }
+
+    #[tokio::test]
     async fn comparison_survives_store_reopen_and_empty_groups_have_no_average() {
         let path = std::env::temp_dir().join(format!("comparison-{}.sqlite", crate::token()));
         let s = Store::open(path.clone()).unwrap();
-        // Previously saved payloads without selectedLanguages still read as all languages.
-        let old: Config = serde_json::from_value(json!({"baseRevision":0,"groups":[
+        // Stored v1 is interpreted in memory and never rewritten by GET.
+        let old = json!({"baseRevision":0,"groups":[
             {"label":"Using it","ranges":[]},{"label":"Not using it","ranges":[]}
-        ]})).unwrap();
-        assert!(old.selected_languages.is_empty());
+        ]}).to_string();
+        s.run(move |db| {
+            db.execute("INSERT INTO language_comparison VALUES(1,0,?,123)", [&old])?;
+            let read = saved(db, date("2026-11-13")?)?;
+            assert!(read.selected_languages.is_empty());
+            assert!(read.periods.is_empty());
+            assert_eq!(db.query_row("SELECT config FROM language_comparison", [], |r| r.get::<_,String>(0))?, old);
+            Ok(())
+        }).await.unwrap();
         let mut c = config(&[("2026-03-01", "2026-03-02")], &[]);
         c.selected_languages = vec!["de".into(), "ja".into()];
         s.save_language_comparison(c, chrono_tz::UTC).await.unwrap();
@@ -386,7 +608,7 @@ mod tests {
         assert_eq!(read["config"]["baseRevision"], 1);
         assert_eq!(read["config"]["selectedLanguages"], json!(["de","ja"]));
         assert_eq!(read["groups"][0]["calendarDays"], 2);
-        assert_eq!(read["groups"][1]["minutesPerDay"], Value::Null);
+        assert_eq!(read["groups"].as_array().unwrap().len(), 1);
         drop(s);
         std::fs::remove_file(path).unwrap();
     }

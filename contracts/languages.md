@@ -7,10 +7,10 @@ versions; assessments remain audited per device/version.
 
 ## Read
 
-### Saved period comparison
+### Saved period comparison v2
 
 `GET /api/modules/languages/comparison?device=&person=` reads the owner's single
-saved two-group comparison and calculates current assessed language watch time.
+saved experiment and calculates current assessed language watch time.
 It is independent of Overview's days, language, status and search filters.
 
 `POST /api/modules/languages/comparison` saves the complete configuration:
@@ -19,33 +19,47 @@ It is independent of Overview's days, language, status and search filters.
 {
   "baseRevision": 0,
   "selectedLanguages": ["de", "ja"],
-  "groups": [
-    {"label": "Using it", "ranges": [{"start": "2026-10-01", "end": "2026-10-14"}]},
-    {"label": "Not using it", "ranges": [{"start": "2026-09-01", "end": "2026-09-14"}]}
-  ]
+  "periods": [
+    {"label": "Off", "start": "2026-11-14", "end": "2026-11-23"},
+    {"label": "On", "start": "2026-11-24", "end": "2026-12-03"},
+    {"label": "Off", "start": "2026-12-04", "end": "2026-12-13"}
+  ],
+  "concludedAt": null
 }
 ```
 
 Both endpoints require the owner session. Save returns the configuration with
 the next `baseRevision`; stale revisions fail atomically with 409. Configurations
 are stored in the singleton `language_comparison` table and survive restart.
-There are exactly two groups, each with a nonempty label up to 80 characters,
-up to 64 ranges and at most 3,660 unique calendar days. Empty groups are allowed
-while setting up. Dates are strict YYYY-MM-DD, from 2000 onward, no later than
-today in the server time zone; both endpoints of a range are included.
-Within-group repeated/overlapping days count once. Across-group overlap is 422.
+There are 0 to 128 periods, each with a trimmed nonempty label up to 80 characters.
+Dates are strict YYYY-MM-DD, from 2000 onward, at most 366 days after today in the
+server time zone. Both endpoints are included; at most 3,660 unique days are allowed
+across the whole experiment. Saves sort periods by start and merge overlapping or
+touching periods with the same exact label. Different labels cannot overlap (422).
+Groups are derived from exact labels, in first chronological appearance order.
 
-Read returns `{config, groups, availableLanguages, timezone, today, asOf}`.
-`availableLanguages` lists current assessed language codes with positive playback
-in either group's saved periods and selected device/person scope, before the
-language selection is applied. The comparison picker only offers these codes;
-it never falls back to the global catalog or arbitrary typed codes.
-Each result group has
+Stored v1 `groups` configurations are converted and normalized in memory on read.
+GET never rewrites the saved row; the next successful v2 save migrates it.
+POST accepts v2 only and rejects `groups` with a clear 422 reload message.
+
+Read returns `{config, periods, groups, availableLanguages, timezone, today, asOf}`.
+`availableLanguages` is the union of saved selected codes and assessed languages
+with positive playback in elapsed saved days and the current device/person scope.
+If no period has elapsed days, suggestions use the last 30 days in that scope.
+The picker never offers the global catalog or arbitrary typed codes.
+Each period and derived group has
 `calendarDays`, `activeDays`, `includesToday`, `seconds`, `minutesPerDay`,
 `foregroundSeconds`, `backgroundSeconds`, `unspecifiedSeconds`, `reviewSeconds`
 and `languages: [{lang, seconds, minutesPerDay, share}]`. Share is a fraction
-of **all** watch time, including unknown/mixed/no-speech. Empty groups have a
-null daily average. Selected days with no recording count in the denominator;
+of **all** watch time, including unknown/mixed/no-speech. Results also carry
+`label`, `plannedDays` and `status`. Periods have `start` and `end`; groups have
+`periods`, zero-based indexes into the chronological period results.
+
+`calendarDays` counts elapsed days only, including partial today. `plannedDays`
+includes future days. Status is `upcoming` with no elapsed day, `complete` when
+every day is before today, otherwise `running` (including pooled gaps before a
+future period). Upcoming results have zero seconds and null average/share.
+Elapsed days with no recording count in the denominator;
 recorded active days are separate. A group with selected days but no playback
 has zero time and no language rows unless languages were explicitly selected;
 shares are undefined when there is no scoped watch time, not zero.
@@ -56,7 +70,7 @@ corrections, in a consistent read transaction. Cumulative measurements are never
 interpolated. Today counts as one partial calendar day and is flagged explicitly.
 No recording or language audit rows are changed by comparison saves.
 
-`selectedLanguages` is shared by both groups and saved with the same revision
+`selectedLanguages` is shared by every period and group, saved with the same revision
 check. It defaults to `[]` (all languages), including for older saved configurations.
 Up to 128 valid language codes are accepted; saving normalizes and deduplicates
 them. With a selection, group seconds, context, review time, active days and
@@ -66,6 +80,19 @@ and per-language shares use that denominator so a selection does not misleadingl
 become 100%. Chosen languages with no playback return a zero row. The UI shows
 the combined selection and its per-language rows. Choosing all restores the full
 comparison.
+
+`concludedAt` is null or a date after every period ends and no later than today.
+Concluding requires at least one period and every period complete, otherwise 422.
+While concluded, periods cannot change, but language selection remains editable.
+Reopening is a separate revision-checked save with `concludedAt: null`; edit the
+periods only after that succeeds. Concluding locks periods, not measured results:
+new classifications remain visible. No snapshot or reminder is created.
+
+Client view state is hash-only: `mode=sequence|pooled`, one-based `move`,
+`lead=<language>|all`, and optional `dir=rev`. Default mode is pooled when labels
+repeat, otherwise sequence. Moves are adjacent pairs; the first is featured by
+default. Automatic lead uses greatest absolute share shift, then rate shift, then
+alphabetical code. Rate and share differences use displayed one-decimal values.
 
 ### Overview
 

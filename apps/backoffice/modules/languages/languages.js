@@ -118,7 +118,7 @@ const state = {
 const comparison = createComparison({
   api: () => api,
   scope: () => ({ device: state.filters.device, person: state.filters.person }),
-  render, expired: () => signedOut('Your session ended. Sign in again.'), esc, spent, langName, demo: DEMO,
+  render, expired: () => signedOut('Your session ended. Sign in again.'), esc, spent, langName, demo: DEMO, announce: say,
   pickLanguage: (options) => openLanguagePicker({ ...options, esc, langName }),
 });
 let generation = 0;
@@ -141,6 +141,8 @@ function readFilters() {
 function writeFilters() {
   const f = state.filters;
   const h = new URLSearchParams();
+  const current = new URLSearchParams(location.hash.slice(1));
+  for (const key of ['mode', 'move', 'lead', 'dir']) if (current.has(key)) h.set(key, current.get(key));
   if (f.days !== 7) h.set('days', f.days);
   for (const k of ['device', 'person', 'query']) if (f[k]) h.set(k, f[k]);
   if (f.language !== 'all') h.set('language', f.language);
@@ -1179,7 +1181,7 @@ document.addEventListener('change', (e) => {
 let queryTimer = null;
 document.addEventListener('input', (e) => {
   const t = e.target;
-  if (t.dataset.compareField) { comparison.input(t); return; }
+  if (t.dataset.compareField || t.dataset.planField) { comparison.input(t); return; }
   if (t.dataset.action === 'query') {
     clearTimeout(queryTimer);
     queryTimer = setTimeout(() => { state.filters.query = t.value.slice(0, 200); state.filters.page = 1; load(); }, 300);
@@ -1236,7 +1238,7 @@ window.addEventListener('hashchange', () => {
   if (view !== state.view || JSON.stringify(next) !== JSON.stringify(state.filters)) {
     state.view = view; state.filters = next;
     if (state.auth === 'signedIn') load({ keepPage: true });
-  }
+  } else if (state.view === 'compare') render();
 });
 
 boot();
