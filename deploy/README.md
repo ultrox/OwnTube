@@ -95,7 +95,18 @@ The Languages follow-up `owntube-languages-20261113-2` uses the same process fro
 commit `4369a6835`, with mobile wrapping and content-hashed module assets. Its
 backend binary is identical to `-1`; the same backup and image-only rollback apply.
 
-## Comparison v2 release
+## Person-oriented experiments release
+
+`owntube-person-experiments-20261115-1`, source `9781616e0`, gives every person an
+independent experiment and restricts the device picker to their devices.
+The previous shared comparison stays read-only. The actual AMD64 image passed
+34 restored-copy checks; public verification matched ten assets and both people's
+device options in light/dark desktop and phone layouts. Six frozen scopes,
+384 reviews, credentials and shared comparison revision 11 were preserved.
+See [release details](../docs/releases/person-experiments.md) and
+[deployment identity](../server/README.md#current-release-owntube-person-experiments-20261115-1).
+
+## Previous comparison v2 release
 
 `owntube-comparison-v2-20261115-1` introduces the ordered-period experiment model
 and the responsive comparison redesign. Deployed from `f19dbf112` through the
@@ -103,7 +114,7 @@ server-local Docker/Kamal path after restored-backup verification. Public checks
 matched ten assets and desktop/phone layouts in both themes. Six frozen scopes,
 376 reviews, credentials and comparison revision 11 were preserved.
 Release identity and backup:
-[`server/README.md`](../server/README.md#current-release-owntube-comparison-v2-20261115-1).
+[`server/README.md`](../server/README.md#previous-release-owntube-comparison-v2-20261115-1).
 The saved configuration migrates only on its first v2 save. Rollback after that
 requires targeted configuration conversion, as described in
 [`docs/releases/comparison-v2.md`](../docs/releases/comparison-v2.md).

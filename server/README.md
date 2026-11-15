@@ -309,7 +309,58 @@ All 45 Android unit regressions, a disposable-backend HTTP contract test and the
 The ARM64 APK was installed on the Shield on 2026-11-13; versionCode 2466 and the retained app-data
 directory were verified. Post-update playback capture has not yet been checked on-device.
 
-### Current release: `owntube-comparison-v2-20261115-1`
+### Current release: `owntube-person-experiments-20261115-1`
+
+Deployed on 2026-11-15 from `9781616e0` using
+`kamal app boot -c deploy/deploy.yml --version owntube-person-experiments-20261115-1`.
+Container `c26a8e966ae5`, image
+`localhost:5555/youtube-observer:owntube-person-experiments-20261115-1`,
+identity `sha256:08c88bdbd8e4b4bb4f6d8f01246c8236af057fbe1df8480305cb4ca615b27f1e`.
+Source archive SHA-256:
+`9000b0ff70fb2dd68b6e7948da9a78cd0d482d51d8b16b2101a7e80b533b8365`.
+Healthy handover completed and the deploy lock was released.
+
+Experiments now belong to a person. The Person picker comes first; Device only
+offers that person's devices and filters results without changing the plan.
+Plans, revisions, language selections, conclusion state and drafts stay separate
+across people, including during in-flight saves. The previous shared comparison
+remains read-only under Everyone. See
+[behavior, storage and rollback](../docs/releases/person-experiments.md).
+
+Checks: 48 Rust tests passed (one production-copy-only test ignored), 244 full
+browser checks passed, and 34 real-local comparison checks passed. The actual
+AMD64 image ran as UID 10001 and passed all 34 comparison checks on a disposable
+production-backup copy, including independent saves and conclude/reopen.
+Candidate and public browsers matched ten assets and both people's device
+options, repaired incompatible bookmarks and preserved all saved configurations.
+Public desktop 1320px and phone 390px screenshots were inspected in both themes.
+No production comparison, classification or device decisions were written.
+
+Six frozen history scopes, all 384 assessments, source records, credentials and
+the original shared comparison revision 11 were preserved. Integrity and foreign
+keys passed. All nine unrelated proxy registrations retained their hosts, paths
+and running state. Searchtranslate independently deployed container `7d26fb01ef1c`
+at 01:03 UTC during verification, so its target changed between proxy snapshots.
+Release reports are in
+`/home/marko/releases/youtube-observer/owntube-person-experiments-20261115-1/`.
+
+Fresh backup `before-owntube-person-experiments-20261115-1` is retained under
+`/home/marko/Backups/youtube-observer/` and mirrored under
+`~/.local/state/youtube-observer/backups/` on the Mac. Verified SHA-256:
+`6fd3e4d9e8996583324a06b96f4427339285f5263441101356e7b6bfbc3af027`.
+It contains 297,160 events, 597 evidence records, 971 slices, 617 metadata versions,
+3 devices, 2 people, 384 assessments, one context override and shared revision 11.
+Production retains `youtube-observer-data:/app/data`.
+
+Previous image `owntube-comparison-v2-20261115-1` and stopped container
+`3c3d922543dc` are retained. Rollback:
+`kamal rollback owntube-comparison-v2-20261115-1 -c deploy/deploy.yml`.
+The older image ignores the additive person-plan table and displays the retained
+shared comparison; person plans remain stored for a forward fix. Keep the current
+volume, never restore the whole old database over newer history or reviews.
+The disposable candidate was removed and the local fixture server and tunnel stopped.
+
+### Previous release: `owntube-comparison-v2-20261115-1`
 
 Deployed on 2026-11-15 from `f19dbf112` using
 `kamal app boot -c deploy/deploy.yml --version owntube-comparison-v2-20261115-1`.

@@ -32,6 +32,21 @@ History, evidence, classifications and device credentials are unaffected.
   isolation, device totals, invalid combinations, per-person drafts and switching
   people while saving.
 - Desktop and phone screenshots inspected in light and dark themes.
+- Actual AMD64 candidate: all 34 comparison checks passed on a restored production
+  backup, with independent saves and conclude/reopen.
+- Public browser: ten assets matched; both people's device options matched;
+  incompatible bookmarks repaired; saved configurations unchanged; no production
+  decisions written.
+- Candidate and production: six frozen scopes, 384 assessments, source records,
+  credentials and shared revision 11 preserved. Integrity and foreign keys passed.
+
+## Deployment
+
+Deployed from `9781616e0` with healthy Kamal handover and lock release. Container
+`c26a8e966ae5`, image
+`sha256:08c88bdbd8e4b4bb4f6d8f01246c8236af057fbe1df8480305cb4ca615b27f1e`.
+Full identity and verification records:
+[`server/README.md`](../../server/README.md#current-release-owntube-person-experiments-20261115-1).
 
 ## Backup and rollback
 

@@ -80,4 +80,4 @@ comparison remained at revision 11 in v1 storage, and verification wrote no
 production decisions.
 
 Deployment identity and public verification are recorded in
-[`server/README.md`](../../server/README.md#current-release-owntube-comparison-v2-20261115-1).
+[`server/README.md`](../../server/README.md#previous-release-owntube-comparison-v2-20261115-1).
