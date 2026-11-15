@@ -13,8 +13,9 @@ export async function experimentChecks({ p, ok, LIVE, MODULE, OUT, control, pers
       { method, headers:{'Content-Type':'application/json'}, ...(body ? {body:JSON.stringify(body)} : {}) });
     return { status:r.status, data:await r.json() };
   }, method, id, body, owner);
-  const submitName = async name => {
+  const submitName = async (name, lead = 'de') => {
     await p.eval(name => { const input = document.querySelector('[data-experiment-dialog] input'); input.value = name; input.dispatchEvent(new Event('input',{bubbles:true})); }, name);
+    if (await p.eval(() => !!document.querySelector('[data-experiment-dialog] select'))) await p.select('[data-experiment-dialog] select', lead);
     await p.click('[data-experiment-dialog] [type="submit"]');
     assert.ok(await p.waitFor(() => !document.querySelector('[data-experiment-dialog]')), 'name dialog completes successfully');
   };
@@ -24,17 +25,35 @@ export async function experimentChecks({ p, ok, LIVE, MODULE, OUT, control, pers
     && document.querySelector('#f-device').disabled), 'person opens an experiment list, with device filtering reserved for results');
   const beforeOther = (await request('GET','',null,other)).data;
   await p.click('[data-experiments="create"]');
+  ok(await p.eval(() => document.querySelector('[name="leadLanguage"]').required
+    && !document.querySelector('[name="leadLanguage"]').validity.valid), 'creation requires an explicit lead language');
+  for (const theme of ['light', 'dark']) {
+    await p.send('Emulation.setEmulatedMedia', { features: [{ name:'prefers-color-scheme', value:theme }] });
+    for (const width of [1320, 390]) {
+      await p.size(width,1000);
+      ok(await p.eval(() => {
+        const r = document.querySelector('[data-experiment-dialog]').getBoundingClientRect();
+        return r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight;
+      }), `creation settings fit ${theme} ${width}px`);
+      const {data} = await p.send('Page.captureScreenshot', { format:'png' });
+      fs.writeFileSync(path.join(OUT, `create-experiment-${theme}-${width}.png`), Buffer.from(data,'base64'));
+    }
+  }
+  await p.send('Emulation.setEmulatedMedia', { features:[] }); await p.size(1320,1000);
   await submitName('German with SLN'); await detailReady();
   const first = await currentId(); assert.ok(first);
   ok(await p.eval(() => document.querySelector('[data-experiment-person]').textContent === 'German with SLN' && !document.querySelector('#cx-editor').hidden), 'creating a named experiment opens its calendar');
+  ok((await request('GET', first)).data.config.leadLanguage === 'de'
+    && await p.eval(() => document.querySelector('#cx-lead-language').value === 'de'
+      && !document.querySelector('[data-compare="save-lead"]')), 'creation saves the lead as a core setting before any periods exist');
   await p.click('[data-compare="add"]');
   await p.eval(() => { const input = document.querySelector('.cp-card input'); input.value = 'Unsaved first'; input.dispatchEvent(new Event('input',{bubbles:true})); });
   await p.click('[data-experiments="back"]'); await listReady();
   ok(await p.eval(() => document.querySelector('.ex-list').textContent.includes('Unsaved changes on this page')), 'experiment list identifies a retained local draft');
   await p.click('[data-experiments="create"]');
-  await submitName('Second experiment'); await detailReady();
+  await submitName('Second experiment', 'ja'); await detailReady();
   const second = await currentId();
-  ok(first !== second && await p.eval(() => !document.querySelector('.cp-card')), 'a second experiment has its own empty plan');
+  ok(first !== second && await p.eval(() => !document.querySelector('.cp-card') && document.querySelector('#cx-lead-language').value === 'ja'), 'a second experiment has its own empty plan and lead');
   await p.click('[data-experiments="back"]'); await listReady();
   await p.click(`[data-experiments="open"][data-id="${first}"]`); await detailReady();
   ok(await p.eval(() => document.querySelector('.cp-card input')?.value === 'Unsaved first'), 'reopening the first experiment restores only its draft');
@@ -52,7 +71,7 @@ export async function experimentChecks({ p, ok, LIVE, MODULE, OUT, control, pers
   await submitName('German trial copy'); await detailReady();
   const copy = await currentId(), copyData = (await request('GET',copy)).data;
   ok(copyData.config.periods.length === 1 && copyData.config.selectedLanguages.join() === 'de'
-    && copyData.config.baseRevision === 0 && copyData.config.concludedAt === null, 'duplicate creates an independent unconcluded saved plan');
+    && copyData.config.baseRevision === 0 && copyData.config.concludedAt === null && copyData.config.leadLanguage === 'de', 'duplicate creates an independent unconcluded saved plan with its lead');
   const changed = await request('POST',copy,{...copyData.config,periods:copyData.config.periods.map(x=>({...x,label:'Copy only'}))});
   ok(changed.status === 200 && (await request('GET',first)).data.config.periods[0].label === 'Off', 'editing a copy preserves the original experiment');
   ok((await request('GET',first,null,other)).status === 404, 'a bookmarked experiment cannot be opened under another person');

@@ -99,6 +99,7 @@ async function startMock() {
         if (url.pathname.startsWith('/api/modules/languages/experiments/')) {
           const id = decodeURIComponent(url.pathname.split('/').at(-1)), scope = Object.fromEntries(url.searchParams);
           if (req.method === 'POST' && mock.saveDelay) await sleep(mock.saveDelay);
+          if (req.method === 'POST' && mock.fail === 'lead500') return send(res, 500, { error:'Lead could not be saved.' });
           if (req.method === 'GET' && mock.comparison) return send(res, 200, mock.comparison);
           const data = req.method === 'PATCH' ? await api.renameExperiment(id, body, scope)
             : req.method === 'DELETE' ? await api.deleteExperiment(id, body, scope)

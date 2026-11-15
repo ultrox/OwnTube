@@ -18,9 +18,11 @@ All routes require an owner session and `?person=<person-id>`:
 
 - `GET /api/modules/languages/experiments` returns `{experiments, today}`.
   Entries include `id`, `personId`, `name`, `revision`, `createdAt`, `updatedAt`,
-  `start`, `end`, `periodCount`, `selectedLanguages` and `status`.
+  `start`, `end`, `periodCount`, `selectedLanguages`, `leadLanguage` and `status`.
   Status is `planned`, `running`, `ready` (all periods ended), or `concluded`.
 - `POST /api/modules/languages/experiments` with `{name}` creates an empty plan.
+  The creation form requires a `leadLanguage` choice, stored atomically with the
+  new plan. The API accepts omitted `leadLanguage` for older callers.
   Names are trimmed, nonempty and at most 120 characters. Duplicate names are valid.
   Optional `{sourceId, baseRevision}` copies that person's saved plan and languages
   into a new revision-zero experiment, with its conclusion cleared.
@@ -38,8 +40,12 @@ Deletion cannot be undone by a stale plan save.
 The plan's optional `leadLanguage` saves the default "Lead with" choice for that
 experiment: a language code or `all` for the combined selection. Without it the
 view chooses automatically. A `lead` bookmark can preview another choice.
-**Save lead** persists the current choice with revision checking, including on
-concluded experiments, while retaining any separate unsaved period draft.
+The **Lead language** field in the experiment settings automatically saves a
+change with revision checking, including on concluded experiments, while
+retaining any separate unsaved period draft. Failed saves show an error and retry.
+Choosing Automatic clears the preference. Selecting a new default clears any
+`lead` bookmark override. The creation form offers spoken languages, including
+ones not yet recorded; an unrecorded lead remains selected with zero measurements.
 Duplicating an experiment copies its saved lead. Removing that language from a
 nonempty language selection clears its saved lead.
 

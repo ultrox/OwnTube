@@ -284,18 +284,18 @@ export async function createDemoApi({ external = false } = {}) {
       const today = localDate(now);
       return later({ today, experiments: [...experiments.values()].filter(x => x.personId === person).reverse().map(({ config, ...item }) => {
         const start = config.periods[0]?.start || null, end = config.periods.at(-1)?.end || null;
-        return { ...item, start, end, selectedLanguages: config.selectedLanguages, periodCount: config.periods.length,
+        return { ...item, start, end, selectedLanguages: config.selectedLanguages, leadLanguage: config.leadLanguage ?? null, periodCount: config.periods.length,
           status: config.concludedAt ? 'concluded' : !start || start > today ? 'planned' : end < today ? 'ready' : 'running' };
       }) });
     },
-    createExperiment({ name, sourceId, baseRevision }, { person, device = '' }) {
+    createExperiment({ name, sourceId, baseRevision, leadLanguage }, { person, device = '' }) {
       checkScope(person);
       if (!person || device) throw fail(422, 'Choose a person. Devices only filter experiment results.');
       name = experimentName(name);
       const source = sourceId ? experiment(sourceId, person) : null;
       if (source) experimentRevision(source, baseRevision);
       const item = { id: crypto.randomUUID(), personId: person, name, revision: 0, createdAt: Date.now(), updatedAt: Date.now(),
-        config: { ...(source ? structuredClone(source.config) : emptyComparison()), baseRevision: 0, concludedAt: null } };
+        config: { ...(source ? structuredClone(source.config) : normalizeConfig({ ...emptyComparison(), leadLanguage }, localDate(now))), baseRevision: 0, concludedAt: null } };
       experiments.set(item.id, item);
       const { config, ...metadata } = item;
       return later(metadata);

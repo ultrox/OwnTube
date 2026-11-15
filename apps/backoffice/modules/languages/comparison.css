@@ -34,6 +34,7 @@
 .ex-empty { padding: 32px 0; }
 [data-experiment-dialog] form > label { display: grid; gap: 8px; margin: 20px 0; }
 [data-experiment-dialog] input { width: 100%; box-sizing: border-box; }
+[data-experiment-dialog] .cx-actions { margin-top: 20px; }
 .cp { max-width: 890px; font-size: 13px; }
 .cx .cp .btn, .cx .cp .input { min-height: 32px; font-size: 12px; padding: 5px 8px; }
 .cp-header { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-bottom: 14px; }
@@ -149,6 +150,15 @@
 .cx-color-4 { background: var(--lang-other); color: var(--ink); box-shadow: inset 0 0 0 1px var(--rule-strong); }
 .cx-setup, .cx-actions, .cx-pills, .cx-section-title { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .cx-setup { padding: 14px 0; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--rule); }
+.cx-settings { margin: 24px 0; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--rule); padding-top: 18px; }
+.cx-settings > h3 { margin: 0 0 18px; }
+.cx-settings-fields { display: grid; grid-template-columns: minmax(180px, 280px) minmax(0, 1fr); gap: 24px; padding-bottom: 18px; }
+.cx-lead-setting, .cx-language-setting { min-width: 0; }
+.cx-settings .label { display: block; margin-bottom: 8px; }
+.cx-lead-setting .select { width: 100%; }
+.cx-lead-setting small { display: block; margin-top: 6px; }
+.cx-settings .cx-pills { border: 0; padding: 0; min-height: 44px; }
+.cx-settings .cx-setup { border-top: 1px solid var(--rule); border-bottom: 0; }
 .cx-setup-period { font-size: 13px; max-width: 310px; overflow-wrap: anywhere; }
 .cx-setup-period small { display: block; font: 12px/1.5 var(--font-data); color: var(--ink-3); }
 .cx-setup > [data-compare="edit"] { margin-left: auto; }
@@ -209,8 +219,6 @@
 .cx-scale-track.is-zero { border-bottom: 1px solid var(--rule-strong); }
 .cx-hero header > .cx-note { margin-top: -12px; }
 .cx-subline { font-size: 17px; color: var(--ink-2); max-width: 36em; }
-.cx-lead { margin-top: auto; }
-.cx-lead > span { display: block; margin-bottom: 8px; }
 .cx-observation { flex: 1 1 380px; min-width: 0; padding: 28px; border-radius: var(--radius); background: var(--strip-bg); color: var(--strip-fg); }
 .cx-observation .cx-eyebrow { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; color: var(--strip-dim); }
 .cx-observation .cx-stamp { color: var(--strip-fg); }
@@ -311,6 +319,7 @@
 @media (max-width: 859px) {
   .cx { font-size: 15px; }
   .cx-setup-period { flex: 1 1 100%; max-width: 100%; }
+  .cx-settings-fields { grid-template-columns: 1fr; gap: 18px; }
   .cx-setup > .cx-pills { flex: 1 1 100%; border: 0; padding: 0; }
   .cx-setup > [data-compare="edit"] { margin-left: 0; }
   .cx-headline { flex-direction: column; align-items: start; gap: 20px; }

@@ -230,20 +230,19 @@ export async function browserChecks({ p, ok, LIVE, MODULE, OUT, control }) {
   saved = (await api()).data;
   ok(!!saved.config.concludedAt && saved.periods.every(p => p.status === 'complete'), 'complete experiment can be concluded');
   await p.click('[data-compare="edit"]');
-  ok(await p.eval(() => [...document.querySelectorAll('[data-compare-field]')].every(e => e.readOnly)), 'concluded period fields are read-only');
+  ok(await p.eval(() => [...document.querySelectorAll('input[data-compare-field]')].every(e => e.readOnly)), 'concluded period fields are read-only');
   ok((await api({ ...saved.config, periods: saved.config.periods.map((p, i) => ({ ...p, label: i ? p.label : 'Changed' })) })).status === 422, 'server enforces concluded period lock');
   ok((await api({ ...saved.config, selectedLanguages: ['de', 'en'] })).status === 200, 'language selection remains editable after conclusion');
    await p.click('[data-compare="reload"]'); await settled();
-   await p.click('[data-compare="lead"][data-value="de"]');
-   await p.click('[data-compare="save-lead"]'); await settled();
+   await p.select('#cx-lead-language', 'de'); await settled();
    const leadSaved = (await api()).data.config;
    ok(leadSaved.leadLanguage === 'de' && leadSaved.concludedAt === saved.config.concludedAt
      && JSON.stringify(leadSaved.periods) === JSON.stringify(saved.config.periods), 'lead saves on a concluded experiment without changing its plan or conclusion');
    await p.go(page); await settled();
    ok(await p.eval(() => !location.hash.includes('lead=') && document.querySelector('[data-lead]').dataset.lead === 'de'
-     && document.querySelector('[data-compare="save-lead"]').disabled), 'saved lead survives a fresh page without a lead bookmark');
-   await p.click('[data-compare="lead"][data-value="all"]');
-   await p.click('[data-compare="save-lead"]'); await settled();
+     && document.querySelector('#cx-lead-language').value === 'de'
+     && !document.querySelector('.cx-hero select, .cx-hero [data-compare="save-lead"]')), 'saved lead survives a fresh page and belongs to settings above the results');
+   await p.select('#cx-lead-language', 'all'); await settled();
    await p.go(page); await settled();
    ok((await api()).data.config.leadLanguage === 'all'
      && await p.eval(() => document.querySelector('[data-lead]').dataset.lead === 'all'), 'combined lead is saved and restored');
@@ -254,8 +253,7 @@ export async function browserChecks({ p, ok, LIVE, MODULE, OUT, control }) {
    await p.click('[data-compare="edit"]');
    await field('compare:0:label', 'Unsaved while saving lead');
    const beforeLead = (await api()).data.config;
-   await p.click('[data-compare="lead"][data-value="de"]');
-   await p.click('[data-compare="save-lead"]'); await settled();
+   await p.select('#cx-lead-language', 'de'); await settled();
    ok((await api()).data.config.periods[0].label === beforeLead.periods[0].label
      && await p.eval(() => document.querySelector('[data-key="compare:0:label"]').value === 'Unsaved while saving lead'
        && !document.querySelector('[data-compare-draft-note]').hidden), 'saving the lead preserves a separate unsaved period draft');
@@ -264,11 +262,20 @@ export async function browserChecks({ p, ok, LIVE, MODULE, OUT, control }) {
      && (await api()).data.config.leadLanguage === 'de', 'period draft saves with the updated revision and keeps the saved lead');
    const beforeConflict = (await api()).data.config;
    await api({ ...beforeConflict, leadLanguage:'en' });
-   await p.click('[data-compare="lead"][data-value="all"]');
-   await p.click('[data-compare="save-lead"]');
+   await p.select('#cx-lead-language', 'all');
    ok(await p.waitFor(() => document.querySelector('[data-compare-error]').textContent.includes('another browser'))
      && (await api()).data.config.leadLanguage === 'en', 'stale lead save cannot overwrite another browser’s choice');
    await p.go(page); await settled();
+  if (!LIVE) {
+    await control({ fail:'lead500' });
+    await p.select('#cx-lead-language', 'de');
+    ok(await p.waitFor(() => document.querySelector('#cx-lead-status').textContent === 'Not saved')
+      && (await api()).data.config.leadLanguage === 'en', 'failed automatic lead save is explicit and keeps the saved preference');
+    await control({ fail:null });
+    await p.click('[data-compare="retry-lead"]'); await settled();
+    ok((await api()).data.config.leadLanguage === 'de'
+      && await p.eval(() => document.activeElement?.id === 'cx-lead-language'), 'lead retry saves and restores focus to the setting');
+  }
   const savedPerson = (await api()).data.config;
   let otherConfig = (await api(null, { person: other })).data.config;
   if (otherConfig.concludedAt) otherConfig = (await api({ ...otherConfig, concludedAt: null }, { person: other })).data;
@@ -295,12 +302,11 @@ export async function browserChecks({ p, ok, LIVE, MODULE, OUT, control }) {
   }
   if (!LIVE) {
     await control({ comparison: fixture('equal') });
-    await p.go(`${page}&lead=de`); await settled();
-    await p.click('[data-compare="lead"][data-value="en"]');
+    await p.go(`${page}&lead=en`); await settled();
     ok(await p.eval(() => document.querySelector('[data-lead]').dataset.lead === 'en'
-      && location.hash.includes('lead=en') && document.activeElement?.dataset.key === 'compare:lead:en'
-      && document.querySelector('.cx-language-row[data-lang="en"] .cx-swatch').classList.contains('cx-color-0')), 'lead switch updates the subject, accent, hash and focus together');
-    await p.click('[data-compare="lead"][data-value="all"]');
+      && location.hash.includes('lead=en')
+      && document.querySelector('.cx-language-row[data-lang="en"] .cx-swatch').classList.contains('cx-color-0')), 'lead bookmarks retain the subject and accent');
+    await p.go(`${page}&lead=all`); await settled();
     ok(await p.eval(() => document.querySelector('[data-lead]').dataset.lead === 'all'
       && [...document.querySelectorAll('.cx-contribution-bar > span')].map(el => el.className).join() === 'cx-color-1,cx-color-2'
       && document.querySelector('.cx-stack i').classList.contains('cx-color-0')), 'combined lead uses an accent combined stack and valid individual contribution colors');

@@ -1,5 +1,6 @@
 import { createComparison } from './comparison.js';
 import { rangeText } from './comparison-model.js';
+import { spokenLanguageCodes } from './language-picker.js';
 
 const statusText = { planned: 'Planned', running: 'Running', ready: 'Ready to conclude', concluded: 'Concluded' };
 
@@ -64,6 +65,7 @@ export function createExperiments(options) {
         <div class="ex-card-heading"><h3>${e(item.name)}</h3><span class="cx-stamp">${statusText[item.status]}</span></div>
         <p>${item.start ? e(rangeText(item)) : 'No periods yet'} · ${item.periodCount} period${item.periodCount === 1 ? '' : 's'}</p>
         <p class="cx-note">${item.selectedLanguages.length ? item.selectedLanguages.map(code => e(options.langName(code))).join(', ') : 'All languages'}${detail.hasDraft(person, item.id) ? ' · Unsaved changes on this page' : ''}</p>
+        ${item.leadLanguage ? `<p class="cx-note">Lead language: ${item.leadLanguage === 'all' ? 'Combined languages' : e(options.langName(item.leadLanguage))}</p>` : ''}
         <div class="cx-actions">${button('open', 'View experiment', item.id)}${button('rename', 'Rename', item.id)}${button('duplicate', 'Duplicate', item.id)}${button('delete', 'Delete', item.id)}</div>
       </article>`).join('')}</div></section>`;
   }
@@ -78,6 +80,9 @@ export function createExperiments(options) {
     dialog.innerHTML = `<h2 id="experiment-dialog-title">${label}</h2>
       <form><p>${action === 'delete' ? `Delete “${e(item.name)}”? Its plan and any local draft will be removed. Viewing history and language reviews are kept.` : action === 'duplicate' ? 'Copies the saved periods and languages into a new, unconcluded experiment.' : `For ${e(personName())}.`}</p>
       ${action === 'delete' ? '' : `<label>Experiment name<input class="input" name="name" maxlength="120" required value="${e(action === 'rename' ? item.name : action === 'duplicate' ? `${item.name.slice(0, 115)} copy` : '')}" placeholder="For example: German with SLN" autocomplete="off"></label>`}
+      ${action === 'create' ? `<label>Lead language<select class="select" name="leadLanguage" required aria-describedby="experiment-lead-note">
+        <option value="">Choose a language</option>${[...spokenLanguageCodes].sort((a,b) => options.langName(a).localeCompare(options.langName(b))).map(code => `<option value="${e(code)}">${e(options.langName(code))}</option>`).join('')}
+      </select></label><p class="cx-note" id="experiment-lead-note">The language this experiment focuses on. It leads the results and can be changed in settings.</p>` : ''}
       <p class="problem" role="alert" hidden></p><div class="cx-actions"><button type="button" class="btn" data-cancel>Cancel</button><button type="submit" class="btn btn--primary">${label}</button></div></form>`;
     dialog.querySelector('[data-cancel]').onclick = () => dialog.close();
     dialog.addEventListener('close', () => { dialog.remove(); document.querySelector(`[data-key="${CSS.escape(opener)}"]`)?.focus(); }, { once: true });
@@ -93,7 +98,7 @@ export function createExperiments(options) {
       try {
         let result;
         if (action === 'create' || action === 'duplicate') result = await api().createExperiment({
-          name, ...(item ? { sourceId: id, baseRevision: item.revision } : {}),
+          name, ...(item ? { sourceId: id, baseRevision: item.revision } : { leadLanguage: dialog.querySelector('[name="leadLanguage"]').value }),
         }, { person: owner });
         if (action === 'rename') await api().renameExperiment(id, { name, baseRevision: item.revision }, { person: owner });
         if (action === 'delete') {

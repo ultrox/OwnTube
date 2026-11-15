@@ -8,6 +8,7 @@ pub struct Create {
     name: String,
     source_id: Option<String>,
     base_revision: Option<i64>,
+    lead_language: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -71,6 +72,7 @@ impl Store {
                 item["start"] = json!(start); item["end"] = json!(end);
                 item["status"] = json!(status);
                 item["selectedLanguages"] = json!(config.selected_languages);
+                item["leadLanguage"] = json!(config.lead_language);
                 item["periodCount"] = json!(config.periods.len());
                 items.push(item);
             }
@@ -80,6 +82,7 @@ impl Store {
 
     pub async fn create_experiment(&self, scope: Scope, body: Create) -> Result<Value> {
         let name = name(&body.name)?;
+        let lead = body.lead_language.map(|value| language(&value).ok_or_else(|| invalid("Choose a valid lead language"))).transpose()?;
         self.run(move |db| {
             let tx = db.transaction()?;
             owner_scope(&tx, &scope, true)?;
@@ -87,7 +90,11 @@ impl Store {
                 let (_, config) = stored(&tx, &scope.person, &source)?;
                 revision(&config, body.base_revision.ok_or_else(|| invalid("Include the source revision"))?)?;
                 config
-            } else { empty() };
+            } else {
+                let mut config = empty();
+                config.lead_language = lead;
+                config
+            };
             config.base_revision = 0;
             config.concluded_at = None;
             let id = uuid::Uuid::new_v4().to_string();
@@ -157,7 +164,7 @@ pub async fn save(State(app): State<App>, headers: HeaderMap, Path(id): Path<Str
 mod tests {
     use super::*;
     fn scope(person: &str) -> Scope { Scope { person:person.into(), device:String::new() } }
-    fn create(name: &str) -> Create { Create { name:name.into(),source_id:None,base_revision:None } }
+    fn create(name: &str) -> Create { Create { name:name.into(),source_id:None,base_revision:None,lead_language:None } }
     fn change(revision: i64, name: Option<&str>) -> Change { Change { base_revision:revision,name:name.map(Into::into) } }
     async fn owners(s: &Store) -> Vec<String> {
         s.create_device("a".into(),"A".into(),"Marko".into(),hash("a")).await.unwrap();
@@ -200,8 +207,17 @@ mod tests {
         let s = Store::open(path.clone()).unwrap();
         let people = owners(&s).await;
         let person = &people[0];
-        let item = s.create_experiment(scope(person),create("Lead")).await.unwrap();
+        let mut creation = create("Lead");
+        creation.lead_language = Some("JA".into());
+        let item = s.create_experiment(scope(person),creation).await.unwrap();
         let id = item["id"].as_str().unwrap().to_string();
+        let initial = s.comparison_for(scope(person),chrono_tz::UTC,Some(id.clone())).await.unwrap();
+        assert_eq!(initial["config"]["leadLanguage"],"ja");
+        assert_eq!(initial["config"]["selectedLanguages"],json!([]));
+        assert_eq!(s.experiments(scope(person),chrono_tz::UTC).await.unwrap()["experiments"][0]["leadLanguage"],"ja");
+        let mut invalid_creation = create("Invalid");
+        invalid_creation.lead_language = Some("<script>".into());
+        assert!(s.create_experiment(scope(person),invalid_creation).await.is_err());
         let mut config = empty();
         config.selected_languages = vec!["de".into(),"en".into()];
         config.lead_language = Some("DE".into());
@@ -211,7 +227,7 @@ mod tests {
         let s = Store::open(path.clone()).unwrap();
         let read = s.comparison_for(scope(person),chrono_tz::UTC,Some(id.clone())).await.unwrap();
         assert_eq!(read["config"],saved);
-        let copy = s.create_experiment(scope(person),Create {name:"Copy".into(),source_id:Some(id.clone()),base_revision:Some(1)}).await.unwrap();
+        let copy = s.create_experiment(scope(person),Create {name:"Copy".into(),source_id:Some(id.clone()),base_revision:Some(1),lead_language:None}).await.unwrap();
         assert_eq!(s.comparison_for(scope(person),chrono_tz::UTC,Some(copy["id"].as_str().unwrap().into())).await.unwrap()["config"]["leadLanguage"],"de");
         let mut combined: Config = serde_json::from_value(saved.clone()).unwrap();
         combined.lead_language = Some("all".into());
@@ -245,7 +261,7 @@ mod tests {
         assert_eq!(s.experiments(scope(b),tz).await.unwrap()["experiments"],json!([]));
         assert_eq!(s.comparison_for(scope(b),tz,Some(id.clone())).await.unwrap_err().0,StatusCode::NOT_FOUND);
         assert!(s.change_experiment(scope(b),id.clone(),change(0,None),true).await.is_err());
-        assert!(s.create_experiment(scope(b),Create {name:"Steal".into(),source_id:Some(id.clone()),base_revision:Some(0)}).await.is_err());
+        assert!(s.create_experiment(scope(b),Create {name:"Steal".into(),source_id:Some(id.clone()),base_revision:Some(0),lead_language:None}).await.is_err());
         let mut config = empty();
         config.periods = vec![Period {label:"Off".into(),start:"2025-01-01".into(),end:"2025-01-02".into()}];
         config.selected_languages = vec!["de".into()];
@@ -259,7 +275,7 @@ mod tests {
         let mut config: Config = serde_json::from_value(s.comparison_for(scope(a),tz,Some(id.clone())).await.unwrap()["config"].clone()).unwrap();
         config.concluded_at = Some("2025-01-03".into());
         let concluded = s.save_comparison(config,a.clone(),tz,Some(id.clone())).await.unwrap();
-        let copy = s.create_experiment(scope(a),Create {name:"Copy".into(),source_id:Some(id.clone()),base_revision:Some(3)}).await.unwrap();
+        let copy = s.create_experiment(scope(a),Create {name:"Copy".into(),source_id:Some(id.clone()),base_revision:Some(3),lead_language:None}).await.unwrap();
         let copy = s.comparison_for(scope(a),tz,Some(copy["id"].as_str().unwrap().into())).await.unwrap();
         assert_eq!(copy["config"]["periods"],concluded["periods"]);
         assert_eq!(copy["config"]["concludedAt"],Value::Null);
