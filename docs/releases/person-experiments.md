@@ -46,7 +46,7 @@ Deployed from `9781616e0` with healthy Kamal handover and lock release. Containe
 `c26a8e966ae5`, image
 `sha256:08c88bdbd8e4b4bb4f6d8f01246c8236af057fbe1df8480305cb4ca615b27f1e`.
 Full identity and verification records:
-[`server/README.md`](../../server/README.md#current-release-owntube-person-experiments-20261115-1).
+[`server/README.md`](../../server/README.md#previous-release-owntube-person-experiments-20261115-1).
 
 ## Backup and rollback
 

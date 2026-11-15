@@ -309,7 +309,46 @@ All 45 Android unit regressions, a disposable-backend HTTP contract test and the
 The ARM64 APK was installed on the Shield on 2026-11-13; versionCode 2466 and the retained app-data
 directory were verified. Post-update playback capture has not yet been checked on-device.
 
-### Current release: `owntube-person-experiments-20261115-1`
+### Current release: `owntube-calendar-picker-20261115-1`
+
+Deployed on 2026-11-15 from `5afed0f5a` using
+`kamal app boot -c deploy/deploy.yml --version owntube-calendar-picker-20261115-1`.
+Container `28e8ca079648`, image
+`localhost:5555/youtube-observer:owntube-calendar-picker-20261115-1`,
+identity `sha256:4829547279cf0cfa26b3497f191b752e80ce4b7105649148778c1d68578e95ac`.
+Source archive SHA-256:
+`d55dc3bf5558e4733cfc116ed53474a0f5abe99b733055348d6610558921957f`.
+Healthy handover completed and the deployment lock was released.
+
+The comparison editor now uses six weeks of daily language bars, clipped placement,
+four templates, keyboard navigation and touch confirmation. Person-owned plans,
+drafts and saved-result separation remain intact. Typed dates are a collapsed
+fallback. See [behavior and verification](../docs/releases/calendar-picker.md).
+
+Checks: 49 Rust tests, 284 full browser checks, 44 final focused calendar checks,
+43 real-local checks and 43 actual AMD64 restored-copy checks passed. Runtime UID
+10001 verified. Candidate and public browsers matched 12 assets, both people's
+device options and saved configurations. Desktop 1320px and phone 390px screenshots
+inspected in light/dark themes. No production decisions written.
+
+Six frozen scopes, all 386 assessments, source records, credentials, both saved
+person plans and shared revision 11 were preserved. Integrity and foreign keys
+passed. All nine unrelated proxy targets remained unchanged.
+Reports: `/home/marko/releases/youtube-observer/owntube-calendar-picker-20261115-1/`.
+
+Verified backup `before-owntube-calendar-picker-20261115-1` is retained under
+`/home/marko/Backups/youtube-observer/` and mirrored under
+`~/.local/state/youtube-observer/backups/` on the Mac. SHA-256:
+`89f908435261b24ff068cef19112eead730ce8c49ed1dac597a0182682d51238`.
+It contains 297,161 events, 604 evidence records, 995 slices, 624 metadata versions,
+3 devices, 2 people, 386 assessments, one context override, one shared comparison
+and two person plans. No schema migration; current volume retained.
+
+Previous image and stopped container `c26a8e966ae5` retained. Image-only rollback:
+`kamal rollback owntube-person-experiments-20261115-1 -c deploy/deploy.yml`.
+Keep the current data volume so newer viewing and reviews survive.
+
+### Previous release: `owntube-person-experiments-20261115-1`
 
 Deployed on 2026-11-15 from `9781616e0` using
 `kamal app boot -c deploy/deploy.yml --version owntube-person-experiments-20261115-1`.

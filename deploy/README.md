@@ -95,7 +95,16 @@ The Languages follow-up `owntube-languages-20261113-2` uses the same process fro
 commit `4369a6835`, with mobile wrapping and content-hashed module assets. Its
 backend binary is identical to `-1`; the same backup and image-only rollback apply.
 
-## Person-oriented experiments release
+## Calendar picker release
+
+`owntube-calendar-picker-20261115-1`, source `5afed0f5a`, adds the six-week
+daily-language calendar, clipped placement, four templates and keyboard/touch
+controls. Actual AMD64 candidate checks passed; public verification matched 12
+assets and both person plans. No schema migration. See
+[release details](../docs/releases/calendar-picker.md) and
+[deployment identity](../server/README.md#current-release-owntube-calendar-picker-20261115-1).
+
+## Previous person-oriented experiments release
 
 `owntube-person-experiments-20261115-1`, source `9781616e0`, gives every person an
 independent experiment and restricts the device picker to their devices.
@@ -104,7 +113,7 @@ The previous shared comparison stays read-only. The actual AMD64 image passed
 device options in light/dark desktop and phone layouts. Six frozen scopes,
 384 reviews, credentials and shared comparison revision 11 were preserved.
 See [release details](../docs/releases/person-experiments.md) and
-[deployment identity](../server/README.md#current-release-owntube-person-experiments-20261115-1).
+[deployment identity](../server/README.md#previous-release-owntube-person-experiments-20261115-1).
 
 ## Previous comparison v2 release
 
