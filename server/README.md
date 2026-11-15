@@ -309,7 +309,50 @@ All 45 Android unit regressions, a disposable-backend HTTP contract test and the
 The ARM64 APK was installed on the Shield on 2026-11-13; versionCode 2466 and the retained app-data
 directory were verified. Post-update playback capture has not yet been checked on-device.
 
-### Current release: `owntube-calendar-picker-20261115-1`
+### Current release: `owntube-named-experiments-20261115-1`
+
+Deployed on 2026-11-15 from `032a6e4b0` using
+`kamal app boot -c deploy/deploy.yml --version owntube-named-experiments-20261115-1`.
+Container `dcda3f6e9044`, image
+`localhost:5555/youtube-observer:owntube-named-experiments-20261115-1`,
+identity `sha256:033c52a22e246332c858de1d4cfde00f3faecb9053439e2442bd4d68050aa6fd`.
+Source archive SHA-256:
+`da859d1ac7009d185354b8aed1ef40934892a2a86d6bc890df01205e55ec02e4`.
+Healthy handover completed and the deployment lock was released.
+
+Each person now has a list of named experiments with create, open, rename,
+duplicate and delete actions. Calendar editing and independent local drafts
+remain available. Both previous person plans were imported as "My first experiment",
+preserving exact configs, revisions and timestamps. The old person snapshots and
+shared comparison remain intact. See [release details](../docs/releases/named-experiments.md).
+
+Checks: 51 Rust tests, 306 full mock browser checks, 24 final focused checks,
+62 real-local checks and 62 actual AMD64 restored-copy checks passed. Runtime UID
+10001 verified. Candidate and public browsers matched 13 assets, both lists,
+device options and independent plans. Desktop 1320px and phone 390px layouts were
+inspected in light/dark themes. Public checks wrote no experiment or review decisions.
+
+Six frozen scopes, all 386 assessments, source records, credentials, both imported
+plans and shared revision 11 were preserved. Integrity and foreign keys passed.
+All nine unrelated proxy targets remained unchanged.
+Reports: `/home/marko/releases/youtube-observer/owntube-named-experiments-20261115-1/`.
+
+Verified backup `before-owntube-named-experiments-20261115-1` is retained under
+`/home/marko/Backups/youtube-observer/` and mirrored under
+`~/.local/state/youtube-observer/backups/` on the Mac. SHA-256:
+`39215bf7e5225a47883cebb1de9e2b892b18b798abb036610cdda4a388adf7b4`.
+It contains 297,163 events, 620 evidence records, 1,023 slices, 640 metadata versions,
+3 devices, 2 people, 386 assessments, one context override, one shared comparison
+and two person plans. The migration adds experiment and import-marker tables.
+
+Previous calendar image and stopped container `28e8ca079648` retained.
+Prefer forward fixes once named plans change: the previous image only displays
+old person snapshots. An emergency image rollback is
+`kamal rollback owntube-calendar-picker-20261115-1 -c deploy/deploy.yml`.
+Keep the current data volume and reconcile any old-image plan edits explicitly
+before returning to this release.
+
+### Previous release: `owntube-calendar-picker-20261115-1`
 
 Deployed on 2026-11-15 from `5afed0f5a` using
 `kamal app boot -c deploy/deploy.yml --version owntube-calendar-picker-20261115-1`.

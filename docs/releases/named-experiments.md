@@ -32,6 +32,17 @@ switching and returning to the list during an in-flight save. The real-local
 server passed 62 checks, including the calendar. Desktop and phone layouts were
 inspected in light and dark themes.
 
+The actual AMD64 image passed 62 restored-production-copy browser checks.
+Before those mutation checks, the copy matched six frozen history scopes and
+386 reviews, and both imported plans matched their previous configs, revisions
+and timestamps exactly.
+
+Deployed from `032a6e4b0`. Public HTTPS verification matched 13 assets, both
+people's lists, device options and saved plans. The calendar retains its 42-day
+grid. Source records, credentials, reviews and shared revision 11 were preserved;
+all nine unrelated proxy targets remained unchanged. Public checks wrote no
+experiment or review decisions. See [deployment identity](../../server/README.md#current-release-owntube-named-experiments-20261115-1).
+
 ## Rollback
 
 Prefer a forward fix after named experiments have been edited. The previous calendar

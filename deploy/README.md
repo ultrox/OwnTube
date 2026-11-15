@@ -95,14 +95,23 @@ The Languages follow-up `owntube-languages-20261113-2` uses the same process fro
 commit `4369a6835`, with mobile wrapping and content-hashed module assets. Its
 backend binary is identical to `-1`; the same backup and image-only rollback apply.
 
-## Calendar picker release
+## Named experiments release
+
+`owntube-named-experiments-20261115-1`, source `032a6e4b0`, adds named experiments
+under each person, with create, open, rename, duplicate and delete actions.
+Both previous plans were imported exactly. The actual AMD64 candidate passed
+62 browser checks, and public verification matched 13 assets and both people's
+lists and plans. See [release details](../docs/releases/named-experiments.md) and
+[deployment identity](../server/README.md#current-release-owntube-named-experiments-20261115-1).
+
+## Previous calendar picker release
 
 `owntube-calendar-picker-20261115-1`, source `5afed0f5a`, adds the six-week
 daily-language calendar, clipped placement, four templates and keyboard/touch
 controls. Actual AMD64 candidate checks passed; public verification matched 12
 assets and both person plans. No schema migration. See
 [release details](../docs/releases/calendar-picker.md) and
-[deployment identity](../server/README.md#current-release-owntube-calendar-picker-20261115-1).
+[deployment identity](../server/README.md#previous-release-owntube-calendar-picker-20261115-1).
 
 ## Previous person-oriented experiments release
 
