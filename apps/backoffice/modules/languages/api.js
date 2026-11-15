@@ -65,6 +65,12 @@ export const liveApi = {
   // {days, device, person, language, status, query, page, group: 'video'}
   languages: (params) => request('GET', `/api/modules/languages?${query(params)}`),
   comparison: (params) => request('GET', `/api/modules/languages/comparison?${query(params)}`),
+  experiments: ({ person }) => request('GET', `/api/modules/languages/experiments?${query({ person })}`),
+  createExperiment: (body, { person }) => request('POST', `/api/modules/languages/experiments?${query({ person })}`, body),
+  renameExperiment: (id, body, { person }) => request('PATCH', `/api/modules/languages/experiments/${encodeURIComponent(id)}?${query({ person })}`, body),
+  deleteExperiment: (id, body, { person }) => request('DELETE', `/api/modules/languages/experiments/${encodeURIComponent(id)}?${query({ person })}`, body),
+  experiment: (id, params) => request('GET', `/api/modules/languages/experiments/${encodeURIComponent(id)}?${query(params)}`),
+  saveExperiment: (id, body, { person }) => request('POST', `/api/modules/languages/experiments/${encodeURIComponent(id)}?${query({ person })}`, body),
   comparisonDays: (params) => request('GET', `/api/modules/languages/comparison/days?${query(params)}`),
   saveComparison: (body, { person }) => request('POST', `/api/modules/languages/comparison?${query({ person })}`, body),
   evidence: (device, metadata) => request('GET', `/api/modules/languages/evidence?${query({ device, metadata })}`),

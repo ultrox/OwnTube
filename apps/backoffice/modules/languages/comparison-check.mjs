@@ -121,16 +121,32 @@ export async function browserChecks({ p, ok, LIVE, MODULE, OUT, control }) {
   const person = recordingStarts.sort((a, b) => a.first.localeCompare(b.first))[0].id;
   const other = catalog.people.find(p => p.id !== person)?.id;
   assert.ok(other, 'Person isolation checks require two fixture people');
-  const page = `${MODULE}#view=compare&person=${encodeURIComponent(person)}`;
-  const api = (body, scope = { person }) => p.eval(async (body, scope) => {
-    const r = await fetch('/api/modules/languages/comparison?' + new URLSearchParams(scope), body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
+  const { experimentChecks } = await import('./experiments-check.mjs');
+  if (!process.argv.includes('--calendar-only')) await experimentChecks({ p, ok, LIVE, MODULE, OUT, control, person, other });
+  if (process.argv.includes('--experiments-only')) return;
+  const ids = await p.eval(async owners => {
+    const result = {};
+    for (const person of owners) {
+      const r = await fetch('/api/modules/languages/experiments?' + new URLSearchParams({ person }), { method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Comparison regression'}) }).then(r => r.json());
+      result[person] = r.id;
+    }
+    return result;
+  }, [person, other]);
+  const page = `${MODULE}#view=compare&person=${encodeURIComponent(person)}&experiment=${encodeURIComponent(ids[person])}`;
+  const api = (body, scope = { person }) => p.eval(async (body, scope, ids) => {
+    const route = scope.person ? '/api/modules/languages/experiments/' + encodeURIComponent(ids[scope.person]) : '/api/modules/languages/comparison';
+    const r = await fetch(route + '?' + new URLSearchParams(scope), body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
     return { status: r.status, data: await r.json() };
-  }, body, scope);
+  }, body, scope, ids);
   if (process.argv.includes('--calendar-only')) {
     const { calendarChecks } = await import('./calendar-check.mjs');
     return calendarChecks({ p, ok, LIVE, page, api, control, OUT });
   }
   const settled = () => p.waitFor(() => document.querySelector('[data-compare-results]')?.getAttribute('aria-busy') === 'false' && !document.querySelector('[data-compare="reload"]').disabled);
+  const open = async owner => {
+    await p.waitFor(() => document.querySelector('.ex-list')?.getAttribute('aria-busy') === 'false');
+    await p.click(`[data-experiments="open"][data-id="${ids[owner]}"]`); await settled();
+  };
   const field = (key, value) => p.eval((key, value) => {
     const input = document.querySelector(`[data-key="${key}"]`); input.focus(); input.value = value; input.dispatchEvent(new Event('input', { bubbles: true }));
   }, key, value);
@@ -141,7 +157,7 @@ export async function browserChecks({ p, ok, LIVE, MODULE, OUT, control }) {
   const initial = (await api()).data;
   ok((await api(initial.config, {})).status === 422, 'unscoped saves cannot overwrite the shared comparison');
   ok(Array.isArray(initial.config.periods) && !initial.config.groups, 'read contract exposes ordered periods, including migrated v1');
-  ok((await api({ baseRevision: initial.config.baseRevision, groups: [] })).status === 422, 'v1 POST is explicitly rejected');
+   ok((await api({ baseRevision: initial.config.baseRevision, groups: [] })).status === 422, 'v1 POST is explicitly rejected');
   if (initial.config.concludedAt) await api({ ...initial.config, concludedAt: null });
   const current = (await api()).data;
   await api({ ...current.config, periods: [], selectedLanguages: [] });
@@ -186,16 +202,16 @@ export async function browserChecks({ p, ok, LIVE, MODULE, OUT, control }) {
   const device = await p.eval(() => document.querySelector('#f-device option[value]:not([value=""])').value);
   await p.select('#f-device', device); await settled();
   ok(await p.eval(() => document.querySelector('[data-key="compare:0:label"]').value === 'Draft survives scope' && location.hash.includes('mode=sequence') && location.hash.includes('move=2')), 'scope changes retain draft and comparison hash state');
-  await p.select('#f-person', other); await settled();
+  await p.select('#f-person', other); await open(other);
   ok(await p.eval(() => document.querySelector('#f-device').value === '' && !location.hash.includes('device=')
     && !document.querySelector('.compare').textContent.includes('Draft survives scope')), 'switching person clears incompatible device and never carries over their draft');
-  await p.select('#f-person', person); await settled();
+  await p.select('#f-person', person); await open(person);
   ok(await p.eval(() => document.querySelector('[data-key="compare:0:label"]').value === 'Draft survives scope'), 'returning to a person restores that person’s unsaved draft');
   await p.select('#f-device', device); await settled();
   await p.select('#f-person', '');
   ok(await p.waitFor(() => document.querySelector('.compare')?.textContent.includes('Choose a person for the experiment'))
     && await p.eval(() => document.querySelector('#f-device').value === '' && !location.hash.includes('person=')), 'Everyone clears the device and returns to the shared reference without reselecting its owner');
-  await p.select('#f-person', person); await settled();
+  await p.select('#f-person', person); await open(person);
   await p.click('[data-compare="discard"]'); await settled();
   await p.select('#f-device', ''); await settled();
   await field('compare:0:label', 'Unsaved local name');
@@ -236,13 +252,13 @@ export async function browserChecks({ p, ok, LIVE, MODULE, OUT, control }) {
     await field('compare:0:label', 'Save stays with owner');
     await control({ saveDelay: 800 });
     await p.click('[data-compare="save"]');
-    await p.select('#f-person', other); await settled();
+    await p.select('#f-person', other); await open(other);
     ok(await p.eval(() => document.querySelector('.compare').textContent.includes('Other person plan')
       && !document.querySelector('.compare').textContent.includes('Save stays with owner')), 'switching people during a save shows only the new person’s experiment');
-    await p.waitFor(async person => (await fetch('/api/modules/languages/comparison?person=' + person).then(r => r.json())).config.periods[0]?.label === 'Save stays with owner', person);
+    await p.waitFor(async (person, id) => (await fetch('/api/modules/languages/experiments/' + encodeURIComponent(id) + '?person=' + person).then(r => r.json())).config.periods[0]?.label === 'Save stays with owner', person, ids[person]);
     await control({ saveDelay: 0 });
     ok(JSON.stringify((await api(null, { person: other })).data.config) === JSON.stringify(otherConfig), 'an in-flight save cannot overwrite the newly selected person');
-    await p.select('#f-person', person); await settled();
+    await p.select('#f-person', person); await open(person);
     ok(await p.eval(() => document.querySelector('.compare').textContent.includes('Save stays with owner')), 'completed save is visible on returning to its owner');
   }
   if (!LIVE) {

@@ -1,6 +1,7 @@
 //! A reusable, revision-checked comparison; ranges select measured playback, not inferred use.
 use super::*;
 use chrono::{Days, NaiveDate, TimeZone};
+pub mod experiments;
 
 #[derive(Clone, Deserialize, Serialize, PartialEq, Eq, Debug)]
 #[serde(deny_unknown_fields)]
@@ -255,13 +256,21 @@ impl Store {
         }).await
     }
 
-    pub async fn save_language_comparison(&self, mut config: Config, person: String, tz: chrono_tz::Tz) -> Result<Value> {
+    #[cfg(test)]
+    pub async fn save_language_comparison(&self, config: Config, person: String, tz: chrono_tz::Tz) -> Result<Value> {
+        self.save_comparison(config, person, tz, None).await
+    }
+
+    async fn save_comparison(&self, mut config: Config, person: String, tz: chrono_tz::Tz, experiment: Option<String>) -> Result<Value> {
         self.run(move |db| {
             let today = tz.timestamp_millis_opt(now()).unwrap().date_naive();
             normalize(&mut config, today)?;
             let tx = db.transaction()?;
             validate_scope(&tx, &Scope { person: person.clone(), device: String::new() })?;
-            let old = saved(&tx, today, &person)?;
+            let old = match &experiment {
+                Some(id) => experiments::stored(&tx, &person, id)?.1,
+                None => saved(&tx, today, &person)?,
+            };
             if config.base_revision != old.base_revision {
                 return Err(conflict("Comparison changed in another browser. Reload saved periods before saving."));
             }
@@ -273,7 +282,10 @@ impl Store {
             }
             let mut next = config;
             next.base_revision += 1;
-            if person.is_empty() {
+            if let Some(id) = experiment {
+                tx.execute("UPDATE language_experiments SET revision=?,config=?,updated=? WHERE id=? AND person_id=?",
+                    params![next.base_revision, serde_json::to_string(&next).unwrap(), now(), id, person])?;
+            } else if person.is_empty() {
                 tx.execute("INSERT INTO language_comparison(id,revision,config,updated) VALUES(1,?,?,?)
                 ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,config=excluded.config,updated=excluded.updated",
                 params![next.base_revision, serde_json::to_string(&next).unwrap(), now()])?;
@@ -288,6 +300,10 @@ impl Store {
     }
 
     pub async fn language_comparison(&self, scope: Scope, tz: chrono_tz::Tz) -> Result<Value> {
+        self.comparison_for(scope, tz, None).await
+    }
+
+    async fn comparison_for(&self, scope: Scope, tz: chrono_tz::Tz, experiment: Option<String>) -> Result<Value> {
         if scope.device.len() > 200 || scope.person.len() > 200 {
             return Err(invalid("Invalid comparison scope"));
         }
@@ -296,7 +312,14 @@ impl Store {
             validate_scope(db, &scope)?;
             let at = now();
             let today = tz.timestamp_millis_opt(at).unwrap().date_naive();
-            let config = saved(db, today, &scope.person)?;
+            let (metadata, config) = match &experiment {
+                Some(id) => {
+                    let (metadata, mut config) = experiments::stored(db, &scope.person, id)?;
+                    normalize(&mut config, today)?;
+                    (Some(metadata), config)
+                },
+                None => (None, saved(db, today, &scope.person)?),
+            };
             let selected: BTreeSet<String> = db.prepare(
                 "SELECT id FROM devices WHERE (?='' OR id=?) AND
                 (?='' OR person_id=? OR (?='unassigned' AND person_id IS NULL))")?
@@ -380,7 +403,7 @@ impl Store {
                 let recent = (0..30).map(|n| today.checked_sub_days(Days::new(n)).unwrap()).collect();
                 measure(&recent)?;
             }
-            Ok(json!({"personId":scope.person, "config":config, "periods":periods, "groups":groups, "availableLanguages":available_languages,
+            Ok(json!({"personId":scope.person, "experiment":metadata, "config":config, "periods":periods, "groups":groups, "availableLanguages":available_languages,
                 "timezone":tz.to_string(), "today":today.to_string(), "asOf":at}))
         }).await
     }
@@ -426,8 +449,7 @@ pub async fn save(State(app): State<App>, headers: HeaderMap, Query(scope): Quer
     if value.get("groups").is_some() {
         return Err(invalid("Use comparison v2 periods instead of groups. Reload this page before saving."));
     }
-    let config = serde_json::from_value(value).map_err(|e| invalid(&format!("Invalid comparison: {e}")))?;
-    Ok(Json(app.store.save_language_comparison(config, scope.person, app.timezone).await?))
+    Err(conflict("Experiments now have their own names. Reload this page and open an experiment before saving."))
 }
 
 #[cfg(test)]

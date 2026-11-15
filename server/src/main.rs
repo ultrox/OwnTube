@@ -422,6 +422,8 @@ fn router(app: App, public: PathBuf) -> Router {
         .route("/api/modules/languages", get(languages::dashboard))
         .route("/api/modules/languages/comparison", get(languages::comparison::get).post(languages::comparison::save))
         .route("/api/modules/languages/comparison/days", get(languages::comparison::get_days))
+        .route("/api/modules/languages/experiments", get(languages::comparison::experiments::list).post(languages::comparison::experiments::create))
+        .route("/api/modules/languages/experiments/{id}", get(languages::comparison::experiments::get).post(languages::comparison::experiments::save).patch(languages::comparison::experiments::rename).delete(languages::comparison::experiments::delete))
         .route("/api/modules/languages/evidence", get(languages::evidence))
         .route("/api/modules/languages/assessment", post(languages::assess))
         .route("/api/diagnostics", get(diagnostics))

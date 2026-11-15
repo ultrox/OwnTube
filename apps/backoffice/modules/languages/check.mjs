@@ -71,7 +71,7 @@ async function startMock() {
   const readBody = (req) => new Promise((resolve) => { let s = ''; req.on('data', (c) => { s += c; }); req.on('end', () => { try { resolve(s ? JSON.parse(s) : null); } catch { resolve(s); } }); });
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://mock');
-    const body = req.method === 'POST' ? await readBody(req) : null;
+    const body = ['POST', 'PATCH', 'DELETE'].includes(req.method) ? await readBody(req) : null;
     if (url.pathname === '/__mock') { Object.assign(mock, body || {}); return send(res, 200, { ok: true }); }
     if (url.pathname === '/__mock/requests') { const r = mock.requests; mock.requests = []; return send(res, 200, r); }
     if (url.pathname === '/__mock/bump') { // another tab changed one version
@@ -91,6 +91,20 @@ async function startMock() {
       if (!authed) return send(res, 401, { error: 'Unauthorized' });
       if (url.pathname === '/api/session') return send(res, 200, { ok: true });
       try {
+        if (url.pathname === '/api/modules/languages/experiments') {
+          if (mock.fail === 'experiments500') return send(res, 500, { error: 'Experiments could not be loaded.' });
+          const scope = Object.fromEntries(url.searchParams);
+          return send(res, 200, req.method === 'POST' ? await api.createExperiment(body, scope) : await api.experiments(scope));
+        }
+        if (url.pathname.startsWith('/api/modules/languages/experiments/')) {
+          const id = decodeURIComponent(url.pathname.split('/').at(-1)), scope = Object.fromEntries(url.searchParams);
+          if (req.method === 'POST' && mock.saveDelay) await sleep(mock.saveDelay);
+          if (req.method === 'GET' && mock.comparison) return send(res, 200, mock.comparison);
+          const data = req.method === 'PATCH' ? await api.renameExperiment(id, body, scope)
+            : req.method === 'DELETE' ? await api.deleteExperiment(id, body, scope)
+              : req.method === 'POST' ? await api.saveExperiment(id, body, scope) : await api.experiment(id, scope);
+          return send(res, 200, data);
+        }
         if (url.pathname === '/api/modules/languages/comparison/days') {
           if (mock.daysDelay) await sleep(mock.daysDelay);
           if (mock.fail === 'days500') return send(res, 500, { error: 'Daily viewing is unavailable.' });
@@ -258,7 +272,7 @@ const signIn = async () => {
 
 try {
   await p.size(1440, 900);
-  if (argv.includes('--comparison-only') || argv.includes('--calendar-only')) {
+  if (argv.includes('--comparison-only') || argv.includes('--calendar-only') || argv.includes('--experiments-only')) {
     await p.go(MODULE);
     await signIn();
   } else {

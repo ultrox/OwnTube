@@ -33,7 +33,21 @@ pub fn initialize(db: &Connection) -> rusqlite::Result<()> {
            config TEXT NOT NULL, updated INTEGER NOT NULL);
          CREATE TABLE IF NOT EXISTS person_language_comparisons(
            person_id TEXT PRIMARY KEY REFERENCES people(id), revision INTEGER NOT NULL,
-           config TEXT NOT NULL, updated INTEGER NOT NULL);",
+            config TEXT NOT NULL, updated INTEGER NOT NULL);
+         CREATE TABLE IF NOT EXISTS language_experiments(
+           id TEXT PRIMARY KEY, person_id TEXT NOT NULL REFERENCES people(id),
+           name TEXT NOT NULL, revision INTEGER NOT NULL, config TEXT NOT NULL,
+           created INTEGER NOT NULL, updated INTEGER NOT NULL);
+         CREATE INDEX IF NOT EXISTS language_experiments_person ON language_experiments(person_id,created);
+         CREATE TABLE IF NOT EXISTS language_experiment_imports(
+           person_id TEXT PRIMARY KEY REFERENCES people(id));
+         SAVEPOINT import_experiments;
+         INSERT INTO language_experiments(id,person_id,name,revision,config,created,updated)
+           SELECT 'imported:' || p.person_id,p.person_id,'My first experiment',p.revision,p.config,p.updated,p.updated
+           FROM person_language_comparisons p
+           WHERE NOT EXISTS(SELECT 1 FROM language_experiment_imports i WHERE i.person_id=p.person_id);
+         INSERT OR IGNORE INTO language_experiment_imports SELECT person_id FROM person_language_comparisons;
+         RELEASE import_experiments;",
     )
 }
 

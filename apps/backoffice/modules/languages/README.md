@@ -15,7 +15,14 @@ results, not experiment ownership. Incompatible selections are cleared, includin
 The previous shared comparison remains read-only under Everyone, without assigning it to anyone.
 The API reads its old two-group configuration without rewriting it.
 
-**Plan and edit.** The empty state opens the compact calendar picker with today in
+**Experiments.** Choose a person to see their named experiment list. Create a named
+experiment, open its results, rename it, duplicate its saved plan or delete it.
+Cards show date range, languages and Planned, Running, Ready to conclude or Concluded.
+Existing plans become "My first experiment", preserving revisions and conclusions.
+Deletion removes only the plan; viewing and reviews are retained. Browser back/forward
+and bookmarked experiment IDs work, and local drafts are independent per experiment.
+
+**Plan and edit.** A new experiment opens the compact calendar picker with today in
 the third of six week rows. Daily bars show measured languages, including past
 recordings. Zero days, future days and untracked days are distinct. Use a 7, 10 or
 14-day preset, or Free for two-click endpoints. Placement clips at another period

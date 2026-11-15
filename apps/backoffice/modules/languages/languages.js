@@ -2,7 +2,7 @@
 // Live by default. `?demo` loads an in-memory sample adapter instead, behind a permanent demo strip;
 // demo mode makes no /api requests and live mode never contains sample data.
 import { ApiError, liveApi } from './api.js';
-import { createComparison } from './comparison.js';
+import { createExperiments } from './experiments.js';
 import { openLanguagePicker } from './language-picker.js';
 import { versionKey, findVersion, versionPickerHTML, savedEvidence, EvidenceDigests } from '/shared/recorded-versions.js';
 
@@ -115,7 +115,7 @@ const state = {
   quick: new Map(),
   view: new URLSearchParams(location.hash.slice(1)).get('view') === 'compare' ? 'compare' : 'overview',
 };
-const comparison = createComparison({
+const comparison = createExperiments({
   api: () => api,
   scope: () => ({ device: state.filters.device, person: state.filters.person }),
   personName: () => state.data?.people?.find(p => p.id === state.filters.person)?.name || 'selected person',
@@ -143,6 +143,7 @@ function writeFilters() {
   const f = state.filters;
   const h = new URLSearchParams();
   const current = new URLSearchParams(location.hash.slice(1));
+  if ((current.get('person') || '') === f.person && current.has('experiment')) h.set('experiment', current.get('experiment'));
   for (const key of ['mode', 'move', 'lead', 'dir', 'bars']) if (current.has(key)) h.set(key, current.get(key));
   if (f.days !== 7) h.set('days', f.days);
   for (const k of ['device', 'person', 'query']) if (f[k]) h.set(k, f[k]);
@@ -358,7 +359,7 @@ function workspaceHTML() {
         ${people.length ? `<div><label class="label" for="f-person">Person</label>
           <select class="select" id="f-person" data-action="person" data-key="f:person"><option value="">Everyone</option>${people.map((p) => `<option value="${esc(p.id)}" ${f.person === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></div>` : ''}
         <div><label class="label" for="f-device">Device</label>
-          <select class="select" id="f-device" data-action="device" data-key="f:device" ${state.view === 'compare' && !f.person ? 'disabled' : ''}><option value="">${f.person ? 'All devices for this person' : 'All devices'}</option>${deviceOptions()}</select></div>
+          <select class="select" id="f-device" data-action="device" data-key="f:device" ${state.view === 'compare' && (!f.person || !new URLSearchParams(location.hash.slice(1)).has('experiment')) ? 'disabled' : ''}><option value="">${f.person ? 'All devices for this person' : 'All devices'}</option>${deviceOptions()}</select></div>
         <div ${state.view === 'compare' ? 'hidden' : ''}><span class="label" id="f-days">Period</span>
           <div class="seg" role="group" aria-labelledby="f-days">${DAYS.map((n) => `<button type="button" aria-pressed="${f.days === n}" data-action="days" data-value="${n}" data-key="f:days:${n}">${n} days</button>`).join('')}</div></div>
       </div>
@@ -381,7 +382,7 @@ function workspaceHTML() {
         <p class="lede">Watch time by the language of the audio that actually played, background included.</p></div>
       <div class="view-tabs" role="group" aria-label="Languages view">
         <button class="btn btn--quiet" type="button" data-action="view" data-value="overview" aria-pressed="${state.view === 'overview'}" data-key="view:overview">Overview</button>
-        <button class="btn btn--quiet" type="button" data-action="view" data-value="compare" aria-pressed="${state.view === 'compare'}" data-key="view:compare">Compare periods</button>
+        <button class="btn btn--quiet" type="button" data-action="view" data-value="compare" aria-pressed="${state.view === 'compare'}" data-key="view:compare">Experiments</button>
       </div>
       ${body}
     </div></section>
@@ -1128,7 +1129,7 @@ function say(text) {
 /* ------------------------------------------------------------------ events */
 
 document.addEventListener('click', (e) => {
-  const compare = e.target.closest('[data-compare]');
+  const compare = e.target.closest('[data-compare], [data-experiments]');
   if (compare && !compare.disabled) { comparison.click(compare, e); return; }
   const el = e.target.closest('[data-action]');
   if (!el || el.disabled) return;
@@ -1257,7 +1258,7 @@ window.addEventListener('hashchange', () => {
   if (view !== state.view || JSON.stringify(next) !== JSON.stringify(state.filters)) {
     state.view = view; state.filters = next;
     if (state.auth === 'signedIn') load({ keepPage: true });
-  } else if (state.view === 'compare') render();
+  } else if (state.view === 'compare') comparison.locationChanged();
 });
 
 boot();

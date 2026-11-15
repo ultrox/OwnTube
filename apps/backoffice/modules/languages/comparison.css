@@ -22,6 +22,18 @@
 }
 
 /* Colour identifies the current lead language. Periods use monochrome marks. */
+.ex-breadcrumb { max-width: 1280px; margin: 20px auto; }
+.ex-heading, .ex-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.ex-heading { margin-bottom: 24px; }
+.ex-heading p { color: var(--ink-2); }
+.ex-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 16px; margin-top: 20px; }
+.ex-card { padding: 20px; background: var(--sheet); border: 1px solid var(--rule); border-radius: var(--radius); min-width: 0; }
+.ex-card h3 { margin: 0; font-size: 20px; }
+.ex-card-heading .cx-stamp { flex: none; }
+.ex-card .cx-actions { margin-top: 20px; flex-wrap: wrap; }
+.ex-empty { padding: 32px 0; }
+[data-experiment-dialog] form > label { display: grid; gap: 8px; margin: 20px 0; }
+[data-experiment-dialog] input { width: 100%; box-sizing: border-box; }
 .cp { max-width: 890px; font-size: 13px; }
 .cx .cp .btn, .cx .cp .input { min-height: 32px; font-size: 12px; padding: 5px 8px; }
 .cp-header { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-bottom: 14px; }

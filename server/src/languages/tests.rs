@@ -564,9 +564,23 @@ async fn routes_require_owner_and_run_real_saved_evidence_analysis() {
     assert_eq!(legacy.0,StatusCode::UNPROCESSABLE_ENTITY);
     assert!(legacy.1["error"].as_str().unwrap().contains("v2 periods"));
     assert_eq!(request(&app, "POST", &format!("{person_comparison}&device=tv"), cookie, config.clone()).await.0, StatusCode::UNPROCESSABLE_ENTITY);
-    assert_eq!(request(&app, "POST", &person_comparison, cookie, config.clone()).await.0, StatusCode::OK);
+    assert_eq!(request(&app, "POST", &person_comparison, cookie, config.clone()).await.0, StatusCode::CONFLICT);
+    let experiments = format!("/api/modules/languages/experiments?person={person}");
+    for method in ["GET","POST"] {
+        assert_eq!(request(&app, method, &experiments, None, json!({"name":"Trial"})).await.0, StatusCode::UNAUTHORIZED);
+    }
+    let created = request(&app,"POST",&experiments,cookie,json!({"name":"Trial"})).await;
+    assert_eq!(created.0,StatusCode::OK);
+    let experiment = format!("/api/modules/languages/experiments/{}?person={person}",created.1["id"].as_str().unwrap());
+    for method in ["GET","POST","PATCH","DELETE"] {
+        let body = if method == "POST" { config.clone() } else { json!({"baseRevision":0,"name":"Renamed"}) };
+        assert_eq!(request(&app,method,&experiment,None,body).await.0,StatusCode::UNAUTHORIZED);
+    }
+    assert_eq!(request(&app,"POST",&experiment,cookie,config.clone()).await.0,StatusCode::OK);
+    assert_eq!(request(&app,"POST",&experiment,cookie,config.clone()).await.0,StatusCode::CONFLICT);
+    assert_eq!(request(&app,"GET",&experiment,cookie,Value::Null).await.1["config"]["baseRevision"],1);
     assert_eq!(request(&app, "POST", &person_comparison, cookie, config).await.0, StatusCode::CONFLICT);
-    assert_eq!(request(&app, "GET", &person_comparison, cookie, Value::Null).await.1["config"]["baseRevision"], 1);
+    assert_eq!(request(&app, "GET", &person_comparison, cookie, Value::Null).await.1["config"]["baseRevision"], 0);
     assert_eq!(request(&app, "GET", comparison, cookie, Value::Null).await.1["config"]["baseRevision"], 0);
     for query in [
         "?days=1",

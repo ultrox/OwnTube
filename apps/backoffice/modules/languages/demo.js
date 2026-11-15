@@ -178,6 +178,21 @@ export async function createDemoApi({ external = false } = {}) {
   const now = Date.now();
   const emptyComparison = () => ({ baseRevision: 0, selectedLanguages: [], periods: [], concludedAt: null });
   const comparisons = new Map();
+  const experiments = new Map();
+  const experiment = (id, person) => {
+    checkScope(person);
+    const item = experiments.get(id);
+    if (!person || !item || item.personId !== person) throw fail(404, 'This experiment is no longer available for this person');
+    return item;
+  };
+  const experimentName = name => {
+    name = String(name || '').trim();
+    if (!name || [...name].length > 120) throw fail(422, 'Use an experiment name from 1 to 120 characters');
+    return name;
+  };
+  const experimentRevision = (item, revision) => {
+    if (item.revision !== revision) throw fail(409, 'This experiment changed in another browser. Refresh before trying again.');
+  };
   const checkScope = (person, device = '') => {
     if (person && !PEOPLE.some(p => p.id === person)) throw fail(422, 'Choose an existing person for this experiment');
     if (device && !DEVICES.some(d => d.id === device && (!person || d.personId === person))) throw fail(422, 'Choose a device belonging to the selected person');
@@ -263,6 +278,48 @@ export async function createDemoApi({ external = false } = {}) {
     session: () => later({ ok: true }, 20),
     login: () => later({ ok: true }, 20),
     logout: () => later({ ok: true }, 20),
+    experiments({ person }) {
+      checkScope(person);
+      if (!person) throw fail(422, 'Choose a person');
+      const today = localDate(now);
+      return later({ today, experiments: [...experiments.values()].filter(x => x.personId === person).reverse().map(({ config, ...item }) => {
+        const start = config.periods[0]?.start || null, end = config.periods.at(-1)?.end || null;
+        return { ...item, start, end, selectedLanguages: config.selectedLanguages, periodCount: config.periods.length,
+          status: config.concludedAt ? 'concluded' : !start || start > today ? 'planned' : end < today ? 'ready' : 'running' };
+      }) });
+    },
+    createExperiment({ name, sourceId, baseRevision }, { person, device = '' }) {
+      checkScope(person);
+      if (!person || device) throw fail(422, 'Choose a person. Devices only filter experiment results.');
+      name = experimentName(name);
+      const source = sourceId ? experiment(sourceId, person) : null;
+      if (source) experimentRevision(source, baseRevision);
+      const item = { id: crypto.randomUUID(), personId: person, name, revision: 0, createdAt: Date.now(), updatedAt: Date.now(),
+        config: { ...(source ? structuredClone(source.config) : emptyComparison()), baseRevision: 0, concludedAt: null } };
+      experiments.set(item.id, item);
+      const { config, ...metadata } = item;
+      return later(metadata);
+    },
+    renameExperiment(id, { name, baseRevision }, { person, device = '' }) {
+      if (device) throw fail(422, 'Devices only filter experiment results.');
+      const item = experiment(id, person); experimentRevision(item, baseRevision);
+      item.name = experimentName(name); item.revision++; item.config.baseRevision = item.revision; item.updatedAt = Date.now();
+      const { config, ...metadata } = item;
+      return later(metadata);
+    },
+    deleteExperiment(id, { baseRevision }, { person, device = '' }) {
+      if (device) throw fail(422, 'Devices only filter experiment results.');
+      const item = experiment(id, person); experimentRevision(item, baseRevision);
+      experiments.delete(id); return later({ ok: true });
+    },
+    experiment(id, params) { return this.comparison({ ...params, experimentId: id }); },
+    saveExperiment(id, config, { person, device = '' }) {
+      if (device) throw fail(422, 'Devices only filter experiment results.');
+      const item = experiment(id, person);
+      const next = normalizeConfig(config, localDate(now), item.config);
+      next.baseRevision++; item.config = next; item.revision = next.baseRevision; item.updatedAt = Date.now();
+      return later(next);
+    },
     comparisonDays({ from, to, device = '', person = '' }) {
       checkScope(person, device);
       const count = length({ start: from, end: to });
@@ -297,9 +354,10 @@ export async function createDemoApi({ external = false } = {}) {
       comparisons.set(person, comparisonConfig);
       return later(comparisonConfig);
     },
-    comparison({ device = '', person = '' } = {}) {
+    comparison({ device = '', person = '', experimentId = '' } = {}) {
       checkScope(person, device);
-      const comparisonConfig = comparisons.get(person) || emptyComparison();
+      const item = experimentId ? experiment(experimentId, person) : null;
+      const comparisonConfig = item?.config || comparisons.get(person) || emptyComparison();
       const today = localDate(now);
       const availableLanguages = new Set(comparisonConfig.selectedLanguages);
       const measure = (planned) => {
@@ -337,7 +395,7 @@ export async function createDemoApi({ external = false } = {}) {
         return { label, periods: indexes, ...measure([...new Set(indexes.flatMap(i => periodDays(periods[i])))]) };
       });
       if (periods.every(p => !p.calendarDays)) measure(Array.from({ length: 30 }, (_, n) => addDays(today, -n)));
-      return later({ personId: person, config: comparisonConfig, periods, groups, availableLanguages: [...availableLanguages].sort(), today, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, asOf: now });
+      return later({ personId: person, experiment: item ? { id:item.id,personId:item.personId,name:item.name,revision:item.revision } : null, config: comparisonConfig, periods, groups, availableLanguages: [...availableLanguages].sort(), today, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, asOf: now });
     },
     languages(q) {
       const { n, start, rows } = scopeOf(q);

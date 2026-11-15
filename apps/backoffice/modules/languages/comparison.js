@@ -4,10 +4,10 @@ import { createCalendar } from './calendar.js';
 import { clipRange, placed } from './calendar-model.js';
 export * from './comparison-model.js';
 
-export function createComparison({ api, scope, personName, render, expired, esc, spent, langName, pickLanguage, announce = () => {}, demo = false }) {
+export function createComparison({ api, scope, personName, experimentId = () => '', render, expired, esc, spent, langName, pickLanguage, announce = () => {}, demo = false }) {
   const fresh = () => ({ data: null, draft: null, dirty: false, busy: false, loading: false, failed: false, error: '', request: 0, editing: null, conflict: false });
   const people = new Map();
-  let person = '', s = fresh();
+  let person = '', identity = '', s = fresh();
   people.set(person, s);
   const view = comparisonView({ esc, spent, langName });
   const e = esc;
@@ -27,11 +27,13 @@ export function createComparison({ api, scope, personName, render, expired, esc,
   }
   async function load({ replace = false } = {}) {
     const selected = scope();
-    if (person !== selected.person) {
+    const nextIdentity = `${selected.person}:${experimentId()}`;
+    if (identity !== nextIdentity) {
       ++s.request;
       person = selected.person;
-      if (!people.has(person)) people.set(person, fresh());
-      s = people.get(person);
+      identity = nextIdentity;
+      if (!people.has(identity)) people.set(identity, fresh());
+      s = people.get(identity);
     }
     if (s.busy) { render(); return; }
     if (s.picker && s.picker.scope !== JSON.stringify(selected)) {
@@ -132,12 +134,12 @@ export function createComparison({ api, scope, personName, render, expired, esc,
   }
   function safeLength(p) { try { return dayText(length(p)); } catch { return 'Choose dates'; } }
   function html() {
-    if (person !== scope().person) return '<section class="compare"><p>Loading this person’s experiment…</p></section>';
+    if (identity !== `${scope().person}:${experimentId()}`) return '<section class="compare"><p>Loading experiment…</p></section>';
     if (!s.draft) return `<section class="compare"><h2>Compare periods</h2>${s.error ? `<p role="alert">${e(s.error)}</p>${button('reload', 'Try again')}` : '<p>Loading saved periods…</p>'}</section>`;
     const c = view.context(s.data);
     if (!person) return `<section class="compare cx"><h2>Choose a person for the experiment</h2><p>Each person has their own periods, languages and conclusion. Choose a person above to plan or open their experiment.</p>
       ${s.data.periods.length ? `<h3>Previous shared comparison</h3><p class="cx-note">Kept for reference. This comparison has not been assigned to a person.</p>${view.results(s.data, c)}` : ''}</section>`;
-    return `<section class="compare cx"><h2 data-experiment-person>Experiment for ${e(personName())}</h2><p class="cx-note">Periods and languages are saved for this person. The device filter only changes the results.</p>${setup(c)}${draftBanner()}
+    return `<section class="compare cx"><h2 data-experiment-person>${e(s.data.experiment?.name || `Experiment for ${personName()}`)}</h2><p class="cx-note">For ${e(personName())}. The device filter only changes the results.</p>${setup(c)}${draftBanner()}
       <p class="problem" data-compare-error role="alert" ${s.error || (s.dirty && validation()) ? '' : 'hidden'}>${e(s.error || (s.dirty && validation()) || '')}</p>
       ${s.conflict ? button('discard', 'Reload saved periods') : ''}${editor()}
       ${s.loading ? '<p role="status">Updating comparison…</p>' : ''}<div data-compare-results aria-busy="${s.loading}" class="${s.loading ? 'is-updating' : ''}">${s.failed ? '' : view.results(s.data, c)}</div></section>`;
@@ -221,5 +223,9 @@ export function createComparison({ api, scope, personName, render, expired, esc,
     });
     picker.updatePreview();
   }
-  return { html, load, click, input, reset() { ++s.request; people.clear(); person = ''; s = fresh(); people.set(person, s); } };
+  return { html, load, click, input,
+    deactivate() { ++s.request; identity = ''; person = ''; s = fresh(); },
+    hasDraft(owner, id) { return !!people.get(`${owner}:${id}`)?.dirty; },
+    forget(owner, id) { people.delete(`${owner}:${id}`); if (identity === `${owner}:${id}`) { ++s.request; identity = ''; s = fresh(); } },
+    reset() { ++s.request; people.clear(); person = ''; identity = ''; s = fresh(); people.set(person, s); } };
 }

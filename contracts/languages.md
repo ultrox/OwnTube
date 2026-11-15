@@ -7,6 +7,41 @@ versions; assessments remain audited per device/version.
 
 ## Read
 
+### Named experiments
+
+Each person has a list of named experiments. The UI starts at the list; opening an
+item adds `experiment=<id>` to the hash. Person changes return to that person's
+list. Device filters affect an open experiment's measurements only. Drafts are
+kept by person and experiment for the page session.
+
+All routes require an owner session and `?person=<person-id>`:
+
+- `GET /api/modules/languages/experiments` returns `{experiments, today}`.
+  Entries include `id`, `personId`, `name`, `revision`, `createdAt`, `updatedAt`,
+  `start`, `end`, `periodCount`, `selectedLanguages` and `status`.
+  Status is `planned`, `running`, `ready` (all periods ended), or `concluded`.
+- `POST /api/modules/languages/experiments` with `{name}` creates an empty plan.
+  Names are trimmed, nonempty and at most 120 characters. Duplicate names are valid.
+  Optional `{sourceId, baseRevision}` copies that person's saved plan and languages
+  into a new revision-zero experiment, with its conclusion cleared.
+- `PATCH /api/modules/languages/experiments/<id>` with `{name, baseRevision}`
+  renames it and increments the shared revision.
+- `DELETE /api/modules/languages/experiments/<id>` with `{baseRevision}` deletes
+  that plan only. Viewing history, evidence and classification records remain.
+- `GET` and `POST /api/modules/languages/experiments/<id>` read measurements and
+  save the plan as described below. Only GET accepts a device filter.
+
+Stale mutations fail atomically with 409. Missing/deleted experiments and IDs
+belonging to another person return 404. Device-scoped mutations return 422.
+Deletion cannot be undone by a stale plan save.
+
+`language_experiments` stores stable IDs, person ownership, names and plans.
+Startup copies every previous `person_language_comparisons` row once, preserving
+its exact config, revision, conclusion and update time, as "My first experiment".
+An independent import marker prevents deleted imported plans from reappearing.
+The previous person rows and shared comparison remain unchanged for reference.
+Old person-scoped comparison POSTs return 409 with a reload instruction.
+
 ### Saved period comparison v2
 
 The editor uses a six-week custom calendar with daily measured language bars,
@@ -38,15 +73,15 @@ loading or an explicit retryable error, never a measured zero.
 
 ### Saved configuration and measurements
 
-`GET /api/modules/languages/comparison?person=<person-id>&device=` reads that
-person's saved experiment and calculates current assessed language watch time
+`GET /api/modules/languages/experiments/<id>?person=<person-id>&device=` reads that
+experiment and calculates current assessed language watch time
 across their devices. An optional device narrows results without changing the
 experiment, its revision or its saved selection. Unknown people/devices and
 cross-person device combinations return 422.
 It is independent of Overview's days, language, status and search filters.
 
-`POST /api/modules/languages/comparison?person=<person-id>` saves the complete
-configuration for that person. A person is required; a nonempty device on save
+`POST /api/modules/languages/experiments/<id>?person=<person-id>` saves the complete
+configuration for that experiment. A person is required; a nonempty device on save
 is rejected with 422 because devices only filter results:
 
 ```json
@@ -64,9 +99,9 @@ is rejected with 422 because devices only filter results:
 
 Both endpoints require the owner session. Save returns the configuration with
 the next `baseRevision`; stale revisions fail atomically with 409. Configurations
-are stored in `person_language_comparisons`, keyed by the stable person ID, and
-survive restart. Each person has independent periods, languages, conclusion state
-and revision. A person without a saved experiment starts empty at revision 0.
+are stored in `language_experiments` and survive restart. Each experiment has
+independent periods, languages, conclusion state and revision.
+A newly created experiment starts empty at revision 0.
 There are 0 to 128 periods, each with a trimmed nonempty label up to 80 characters.
 Dates are strict YYYY-MM-DD, from 2000 onward, at most 366 days after today in the
 server time zone. Both endpoints are included; at most 3,660 unique days are allowed
@@ -74,13 +109,14 @@ across the whole experiment. Saves sort periods by start and merge overlapping o
 touching periods with the same exact label. Different labels cannot overlap (422).
 Groups are derived from exact labels, in first chronological appearance order.
 
-The old singleton `language_comparison` is retained unchanged. GET without a
+The old singleton `language_comparison` is retained unchanged. Legacy comparison GET without a
 person reads that previous shared comparison for reference, interpreting v1
 `groups` in memory. It does not assign the old plan to anyone. Unscoped POST
 is rejected, including from an older browser. Reads never rewrite saved rows.
 POST accepts v2 only and rejects `groups` with a clear 422 reload message.
 
-Read returns `{personId, config, periods, groups, availableLanguages, timezone, today, asOf}`.
+Read returns `{personId, experiment, config, periods, groups, availableLanguages, timezone, today, asOf}`.
+`experiment` contains the ID, owner, name, revision and timestamps.
 `personId` is empty only for the previous shared comparison.
 `availableLanguages` is the union of saved selected codes and assessed languages
 with positive playback in elapsed saved days and the current device/person scope.
