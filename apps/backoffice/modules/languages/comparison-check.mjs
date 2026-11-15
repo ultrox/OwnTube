@@ -113,22 +113,33 @@ export function fixture(kind) {
 export async function browserChecks({ p, ok, LIVE, MODULE, OUT, control }) {
   console.log('Comparison v2');
   pureChecks(); ok(true, 'directional arithmetic, trace, waffles, axes, lead, observations and calendar normalization');
-  const api = body => p.eval(async body => {
-    const r = await fetch('/api/modules/languages/comparison', body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
+  const catalog = await p.eval(() => fetch('/api/modules/languages').then(r => r.json()));
+  const person = catalog.people.find(p => catalog.devices.filter(d => d.personId === p.id).length > 1)?.id || catalog.people[0].id;
+  const other = catalog.people.find(p => p.id !== person)?.id;
+  assert.ok(other, 'Person isolation checks require two fixture people');
+  const page = `${MODULE}#view=compare&person=${encodeURIComponent(person)}`;
+  const api = (body, scope = { person }) => p.eval(async (body, scope) => {
+    const r = await fetch('/api/modules/languages/comparison?' + new URLSearchParams(scope), body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
     return { status: r.status, data: await r.json() };
-  }, body);
+  }, body, scope);
   const settled = () => p.waitFor(() => document.querySelector('[data-compare-results]')?.getAttribute('aria-busy') === 'false' && !document.querySelector('[data-compare="reload"]').disabled);
   const field = (key, value) => p.eval((key, value) => {
     const input = document.querySelector(`[data-key="${key}"]`); input.focus(); input.value = value; input.dispatchEvent(new Event('input', { bubbles: true }));
   }, key, value);
+  const shared = (await api(null, {})).data.config;
+  await p.go(`${MODULE}#view=compare`);
+  ok(await p.waitFor(() => document.querySelector('.compare')?.textContent.includes('Choose a person for the experiment'))
+    && await p.eval(() => document.querySelector('#f-device').disabled && !document.querySelector('[data-compare="fill"]')), 'experiments require a person; everyone keeps the previous shared comparison read-only');
   const initial = (await api()).data;
+  ok((await api(initial.config, {})).status === 422, 'unscoped saves cannot overwrite the shared comparison');
   ok(Array.isArray(initial.config.periods) && !initial.config.groups, 'read contract exposes ordered periods, including migrated v1');
   ok((await api({ baseRevision: initial.config.baseRevision, groups: [] })).status === 422, 'v1 POST is explicitly rejected');
   if (initial.config.concludedAt) await api({ ...initial.config, concludedAt: null });
   const current = (await api()).data;
   await api({ ...current.config, periods: [], selectedLanguages: [] });
-  await p.go(`${MODULE}#view=compare`);
+  await p.go(page);
   await settled();
+  ok(await p.eval((person, devices) => [...document.querySelectorAll('#f-device option')].every(o => !o.value || devices.some(d => d.id === o.value && d.personId === person)), person, catalog.devices), 'person picker limits devices to that person');
   ok(await p.eval(() => !document.querySelector('#cx-editor').hidden && document.querySelector('[data-compare="save"]').closest('[hidden]') && document.querySelector('#f-days').parentElement.hidden), 'empty state opens planner, no spurious save, independent dates');
   await p.click('[data-compare="fill"]');
   ok(await p.eval(() => document.querySelectorAll('.cx-period-row').length === 3 && !document.querySelector('[data-compare-draft-note]').hidden && document.querySelector('[data-compare="add"]').nextElementSibling.dataset.compare === 'add-language'), 'planner makes three editable periods, marks draft and keeps add controls adjacent');
@@ -164,6 +175,16 @@ export async function browserChecks({ p, ok, LIVE, MODULE, OUT, control }) {
   const device = await p.eval(() => document.querySelector('#f-device option[value]:not([value=""])').value);
   await p.select('#f-device', device); await settled();
   ok(await p.eval(() => document.querySelector('[data-key="compare:0:label"]').value === 'Draft survives scope' && location.hash.includes('mode=sequence') && location.hash.includes('move=2')), 'scope changes retain draft and comparison hash state');
+  await p.select('#f-person', other); await settled();
+  ok(await p.eval(() => document.querySelector('#f-device').value === '' && !location.hash.includes('device=')
+    && !document.querySelector('.compare').textContent.includes('Draft survives scope')), 'switching person clears incompatible device and never carries over their draft');
+  await p.select('#f-person', person); await settled();
+  ok(await p.eval(() => document.querySelector('[data-key="compare:0:label"]').value === 'Draft survives scope'), 'returning to a person restores that person’s unsaved draft');
+  await p.select('#f-device', device); await settled();
+  await p.select('#f-person', '');
+  ok(await p.waitFor(() => document.querySelector('.compare')?.textContent.includes('Choose a person for the experiment'))
+    && await p.eval(() => document.querySelector('#f-device').value === '' && !location.hash.includes('person=')), 'Everyone clears the device and returns to the shared reference without reselecting its owner');
+  await p.select('#f-person', person); await settled();
   await p.click('[data-compare="discard"]'); await settled();
   await p.select('#f-device', ''); await settled();
   await field('compare:0:label', 'Unsaved local name');
@@ -189,9 +210,33 @@ export async function browserChecks({ p, ok, LIVE, MODULE, OUT, control }) {
   await p.click('[data-compare="reopen"]');
   await p.click('dialog[open] [value="yes"]'); await settled();
   ok((await api()).data.config.concludedAt === null, 'explicit confirmed reopen unlocks periods');
+  const savedPerson = (await api()).data.config;
+  let otherConfig = (await api(null, { person: other })).data.config;
+  if (otherConfig.concludedAt) otherConfig = (await api({ ...otherConfig, concludedAt: null }, { person: other })).data;
+  otherConfig = (await api({ ...otherConfig, periods: [{ label: 'Other person plan', start: addDays(today, 1), end: addDays(today, 3) }], selectedLanguages: ['ja'] }, { person: other })).data;
+  ok(JSON.stringify((await api()).data.config) === JSON.stringify(savedPerson), 'saving another person’s plan preserves this person’s periods, languages, revision and conclusion');
+  ok(JSON.stringify((await api(null, {})).data.config) === JSON.stringify(shared), 'person experiments leave the previous shared comparison untouched');
+  const foreignDevice = catalog.devices.find(d => d.personId === other).id;
+  ok((await api(null, { person, device: foreignDevice })).status === 422, 'API rejects a device belonging to a different person');
+  await p.go(`${page}&device=${encodeURIComponent(foreignDevice)}`); await settled();
+  ok(await p.eval(() => document.querySelector('#f-device').value === '' && !location.hash.includes('device=')), 'incompatible bookmarked person/device selection is repaired before loading the experiment');
+  if (!LIVE) {
+    await p.click('[data-compare="edit"]');
+    await field('compare:0:label', 'Save stays with owner');
+    await control({ saveDelay: 800 });
+    await p.click('[data-compare="save"]');
+    await p.select('#f-person', other); await settled();
+    ok(await p.eval(() => document.querySelector('.compare').textContent.includes('Other person plan')
+      && !document.querySelector('.compare').textContent.includes('Save stays with owner')), 'switching people during a save shows only the new person’s experiment');
+    await p.waitFor(async person => (await fetch('/api/modules/languages/comparison?person=' + person).then(r => r.json())).config.periods[0]?.label === 'Save stays with owner', person);
+    await control({ saveDelay: 0 });
+    ok(JSON.stringify((await api(null, { person: other })).data.config) === JSON.stringify(otherConfig), 'an in-flight save cannot overwrite the newly selected person');
+    await p.select('#f-person', person); await settled();
+    ok(await p.eval(() => document.querySelector('.compare').textContent.includes('Save stays with owner')), 'completed save is visible on returning to its owner');
+  }
   if (!LIVE) {
     await control({ comparison: fixture('equal') });
-    await p.go(`${MODULE}#view=compare&lead=de`); await settled();
+    await p.go(`${page}&lead=de`); await settled();
     await p.click('[data-compare="lead"][data-value="en"]');
     ok(await p.eval(() => document.querySelector('[data-lead]').dataset.lead === 'en'
       && location.hash.includes('lead=en') && document.activeElement?.dataset.key === 'compare:lead:en'
@@ -206,7 +251,7 @@ export async function browserChecks({ p, ok, LIVE, MODULE, OUT, control }) {
       && document.activeElement?.dataset.key === 'compare:reverse'), 'reverse reads the directional decrease and retains focus');
     for (const kind of ['equal', 'unequal', 'upcoming', 'running', 'concluded', 'one-language', 'three-languages', 'no-share', 'decrease', 'same', 'zero', 'trace', 'long', 'long-labels']) {
       await control({ comparison: fixture(kind) });
-      await p.go(`${MODULE}#view=compare&lead=de`); await settled();
+      await p.go(`${page}&lead=de`); await settled();
       for (const scheme of ['light', 'dark']) {
         await p.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: scheme }] });
         for (const width of [1320, 859, 390]) {
@@ -229,7 +274,7 @@ export async function browserChecks({ p, ok, LIVE, MODULE, OUT, control }) {
       }
     }
     await control({ comparison: null });
-    await p.go(`${MODULE}#view=compare`); await settled();
+    await p.go(page); await settled();
     await p.click('[data-compare="edit"]');
     for (const scheme of ['light', 'dark']) {
       await p.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: scheme }] });

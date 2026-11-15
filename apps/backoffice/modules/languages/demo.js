@@ -176,7 +176,12 @@ async function sha256(text) {
 
 export async function createDemoApi({ external = false } = {}) {
   const now = Date.now();
-  let comparisonConfig = { baseRevision: 0, selectedLanguages: [], periods: [], concludedAt: null };
+  const emptyComparison = () => ({ baseRevision: 0, selectedLanguages: [], periods: [], concludedAt: null });
+  const comparisons = new Map();
+  const checkScope = (person, device = '') => {
+    if (person && !PEOPLE.some(p => p.id === person)) throw fail(422, 'Choose an existing person for this experiment');
+    if (device && !DEVICES.some(d => d.id === device && (!person || d.personId === person))) throw fail(422, 'Choose a device belonging to the selected person');
+  };
   const localDate = (at) => {
     const d = new Date(at);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -258,12 +263,17 @@ export async function createDemoApi({ external = false } = {}) {
     session: () => later({ ok: true }, 20),
     login: () => later({ ok: true }, 20),
     logout: () => later({ ok: true }, 20),
-    saveComparison(config) {
-      comparisonConfig = normalizeConfig(config, localDate(now), comparisonConfig);
+    saveComparison(config, { person = '', device = '' } = {}) {
+      if (!person || device) throw fail(422, 'Choose a person before saving. Devices only filter experiment results.');
+      checkScope(person);
+      const comparisonConfig = normalizeConfig(config, localDate(now), comparisons.get(person) || emptyComparison());
       comparisonConfig.baseRevision++;
+      comparisons.set(person, comparisonConfig);
       return later(comparisonConfig);
     },
     comparison({ device = '', person = '' } = {}) {
+      checkScope(person, device);
+      const comparisonConfig = comparisons.get(person) || emptyComparison();
       const today = localDate(now);
       const availableLanguages = new Set(comparisonConfig.selectedLanguages);
       const measure = (planned) => {
@@ -301,7 +311,7 @@ export async function createDemoApi({ external = false } = {}) {
         return { label, periods: indexes, ...measure([...new Set(indexes.flatMap(i => periodDays(periods[i])))]) };
       });
       if (periods.every(p => !p.calendarDays)) measure(Array.from({ length: 30 }, (_, n) => addDays(today, -n)));
-      return later({ config: comparisonConfig, periods, groups, availableLanguages: [...availableLanguages].sort(), today, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, asOf: now });
+      return later({ personId: person, config: comparisonConfig, periods, groups, availableLanguages: [...availableLanguages].sort(), today, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, asOf: now });
     },
     languages(q) {
       const { n, start, rows } = scopeOf(q);

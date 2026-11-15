@@ -520,6 +520,7 @@ async fn request(
 async fn routes_require_owner_and_run_real_saved_evidence_analysis() {
     let s = Store::open(":memory:".into()).unwrap();
     seed(&s).await;
+    let person = dashboard(&s, json!({})).await["people"][0]["id"].as_str().unwrap().to_owned();
     s.add_session(hash("owner-session")).await.unwrap();
     let row = unknown_browser(&dashboard(&s, json!({})).await);
     let app = crate::router(
@@ -554,12 +555,16 @@ async fn routes_require_owner_and_run_real_saved_evidence_analysis() {
     for method in ["GET", "POST"] {
         assert_eq!(request(&app, method, comparison, None, config.clone()).await.0, StatusCode::UNAUTHORIZED);
     }
-    let legacy = request(&app,"POST",comparison,cookie,json!({"baseRevision":0,"groups":[]})).await;
+    assert_eq!(request(&app, "POST", comparison, cookie, config.clone()).await.0, StatusCode::UNPROCESSABLE_ENTITY);
+    let person_comparison = format!("{comparison}?person={person}");
+    let legacy = request(&app,"POST",&person_comparison,cookie,json!({"baseRevision":0,"groups":[]})).await;
     assert_eq!(legacy.0,StatusCode::UNPROCESSABLE_ENTITY);
     assert!(legacy.1["error"].as_str().unwrap().contains("v2 periods"));
-    assert_eq!(request(&app, "POST", comparison, cookie, config.clone()).await.0, StatusCode::OK);
-    assert_eq!(request(&app, "POST", comparison, cookie, config).await.0, StatusCode::CONFLICT);
-    assert_eq!(request(&app, "GET", comparison, cookie, Value::Null).await.1["config"]["baseRevision"], 1);
+    assert_eq!(request(&app, "POST", &format!("{person_comparison}&device=tv"), cookie, config.clone()).await.0, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(request(&app, "POST", &person_comparison, cookie, config.clone()).await.0, StatusCode::OK);
+    assert_eq!(request(&app, "POST", &person_comparison, cookie, config).await.0, StatusCode::CONFLICT);
+    assert_eq!(request(&app, "GET", &person_comparison, cookie, Value::Null).await.1["config"]["baseRevision"], 1);
+    assert_eq!(request(&app, "GET", comparison, cookie, Value::Null).await.1["config"]["baseRevision"], 0);
     for query in [
         "?days=1",
         "?page=0",

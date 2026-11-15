@@ -9,11 +9,16 @@ versions; assessments remain audited per device/version.
 
 ### Saved period comparison v2
 
-`GET /api/modules/languages/comparison?device=&person=` reads the owner's single
-saved experiment and calculates current assessed language watch time.
+`GET /api/modules/languages/comparison?person=<person-id>&device=` reads that
+person's saved experiment and calculates current assessed language watch time
+across their devices. An optional device narrows results without changing the
+experiment, its revision or its saved selection. Unknown people/devices and
+cross-person device combinations return 422.
 It is independent of Overview's days, language, status and search filters.
 
-`POST /api/modules/languages/comparison` saves the complete configuration:
+`POST /api/modules/languages/comparison?person=<person-id>` saves the complete
+configuration for that person. A person is required; a nonempty device on save
+is rejected with 422 because devices only filter results:
 
 ```json
 {
@@ -30,7 +35,9 @@ It is independent of Overview's days, language, status and search filters.
 
 Both endpoints require the owner session. Save returns the configuration with
 the next `baseRevision`; stale revisions fail atomically with 409. Configurations
-are stored in the singleton `language_comparison` table and survive restart.
+are stored in `person_language_comparisons`, keyed by the stable person ID, and
+survive restart. Each person has independent periods, languages, conclusion state
+and revision. A person without a saved experiment starts empty at revision 0.
 There are 0 to 128 periods, each with a trimmed nonempty label up to 80 characters.
 Dates are strict YYYY-MM-DD, from 2000 onward, at most 366 days after today in the
 server time zone. Both endpoints are included; at most 3,660 unique days are allowed
@@ -38,11 +45,14 @@ across the whole experiment. Saves sort periods by start and merge overlapping o
 touching periods with the same exact label. Different labels cannot overlap (422).
 Groups are derived from exact labels, in first chronological appearance order.
 
-Stored v1 `groups` configurations are converted and normalized in memory on read.
-GET never rewrites the saved row; the next successful v2 save migrates it.
+The old singleton `language_comparison` is retained unchanged. GET without a
+person reads that previous shared comparison for reference, interpreting v1
+`groups` in memory. It does not assign the old plan to anyone. Unscoped POST
+is rejected, including from an older browser. Reads never rewrite saved rows.
 POST accepts v2 only and rejects `groups` with a clear 422 reload message.
 
-Read returns `{config, periods, groups, availableLanguages, timezone, today, asOf}`.
+Read returns `{personId, config, periods, groups, availableLanguages, timezone, today, asOf}`.
+`personId` is empty only for the previous shared comparison.
 `availableLanguages` is the union of saved selected codes and assessed languages
 with positive playback in elapsed saved days and the current device/person scope.
 If no period has elapsed days, suggestions use the last 30 days in that scope.
@@ -93,6 +103,12 @@ Client view state is hash-only: `mode=sequence|pooled`, one-based `move`,
 repeat, otherwise sequence. Moves are adjacent pairs; the first is featured by
 default. Automatic lead uses greatest absolute share shift, then rate shift, then
 alphabetical code. Rate and share differences use displayed one-decimal values.
+
+The UI asks for a person before planning. Person appears before Device; selecting
+a person limits the device options and clears an incompatible selection, including
+bookmarked combinations. Drafts are retained separately per person for the current
+page session. Switching devices preserves that person's draft. An in-flight save
+keeps its original person identity even if the picker changes before it finishes.
 
 ### Overview
 

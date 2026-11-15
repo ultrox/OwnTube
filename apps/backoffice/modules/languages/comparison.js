@@ -2,8 +2,11 @@ import { addDays, length, dayText, rangeText, periodDays, planPeriods, normalize
 import { comparisonView, mark, swatch } from './comparison-view.js';
 export * from './comparison-model.js';
 
-export function createComparison({ api, scope, render, expired, esc, spent, langName, pickLanguage, announce = () => {}, demo = false }) {
-  const s = { data: null, draft: null, dirty: false, busy: false, loading: false, failed: false, error: '', request: 0, editing: null, planner: null, conflict: false };
+export function createComparison({ api, scope, personName, render, expired, esc, spent, langName, pickLanguage, announce = () => {}, demo = false }) {
+  const fresh = () => ({ data: null, draft: null, dirty: false, busy: false, loading: false, failed: false, error: '', request: 0, editing: null, planner: null, conflict: false });
+  const people = new Map();
+  let person = '', s = fresh();
+  people.set(person, s);
   const view = comparisonView({ esc, spent, langName });
   const e = esc;
   const DRAFT = 'The results still show the saved comparison until you save.';
@@ -14,38 +17,53 @@ export function createComparison({ api, scope, render, expired, esc, spent, lang
     try { normalizeConfig(s.draft, s.data.today, s.data.config); return ''; } catch (error) { return error.message; }
   }
   async function load({ replace = false } = {}) {
-    const request = ++s.request;
+    const selected = scope();
+    if (person !== selected.person) {
+      ++s.request;
+      person = selected.person;
+      if (!people.has(person)) people.set(person, fresh());
+      s = people.get(person);
+    }
+    if (s.busy) { render(); return; }
+    const target = s, request = ++s.request;
     s.loading = true; s.error = ''; render();
     try {
-      const data = await api().comparison(scope());
-      if (request !== s.request) return;
+      const data = await api().comparison(selected);
+      if (target !== s || request !== s.request) return;
       s.data = data; s.failed = false;
       if (!s.draft || replace || !s.dirty) { s.draft = structuredClone(data.config); s.dirty = false; s.conflict = false; }
       if (s.editing == null) s.editing = !s.draft.periods.length;
       s.planner ||= { start: addDays(data.today, 1), days: 10, count: 3 };
     } catch (error) {
-      if (request !== s.request) return;
+      if (target !== s || request !== s.request) return;
       if (error.status === 401) { expired(); return; }
       s.error = error.message; s.failed = true;
     } finally {
-      if (request === s.request) { s.loading = false; render(); }
+      if (target === s && request === s.request) { s.loading = false; render(); }
     }
   }
   async function save(message = 'Comparison saved.') {
-    if (s.busy || s.loading || !s.draft) return;
+    if (s.busy || s.loading || !s.draft || !person) return;
     const invalid = validation();
     if (invalid) { s.error = invalid; render(); announce(invalid); return; }
+    const target = s, owner = person;
     s.busy = true; s.error = ''; render();
     try {
-      s.draft = await api().saveComparison(structuredClone(s.draft));
-      s.dirty = false; s.conflict = false;
-      s.editing = !s.draft.periods.length;
+      target.draft = await api().saveComparison(structuredClone(target.draft), { person: owner });
+      target.dirty = false; target.conflict = false;
+      target.editing = !target.draft.periods.length;
+      target.busy = false;
+      if (target !== s) return;
       await load();
       announce(message);
     } catch (error) {
       if (error.status === 401) { expired(); return; }
-      s.error = error.message; s.conflict = error.status === 409; announce(error.message);
-    } finally { s.busy = false; render(); focus(s.editing ? 'compare:save' : 'compare:edit'); }
+      target.error = error.message; target.conflict = error.status === 409;
+      if (target === s) announce(error.message);
+    } finally {
+      target.busy = false;
+      if (target === s) { render(); focus(s.editing ? 'compare:save' : 'compare:edit'); }
+    }
   }
   function confirm(text, label, opener) {
     return new Promise(resolve => {
@@ -115,9 +133,12 @@ export function createComparison({ api, scope, render, expired, esc, spent, lang
   }
   function safeLength(p) { try { return dayText(length(p)); } catch { return 'Choose dates'; } }
   function html() {
+    if (person !== scope().person) return '<section class="compare"><p>Loading this person’s experiment…</p></section>';
     if (!s.draft) return `<section class="compare"><h2>Compare periods</h2>${s.error ? `<p role="alert">${e(s.error)}</p>${button('reload', 'Try again')}` : '<p>Loading saved periods…</p>'}</section>`;
     const c = view.context(s.data);
-    return `<section class="compare cx"><h2 class="vh">Compare periods</h2>${setup(c)}${draftBanner()}
+    if (!person) return `<section class="compare cx"><h2>Choose a person for the experiment</h2><p>Each person has their own periods, languages and conclusion. Choose a person above to plan or open their experiment.</p>
+      ${s.data.periods.length ? `<h3>Previous shared comparison</h3><p class="cx-note">Kept for reference. This comparison has not been assigned to a person.</p>${view.results(s.data, c)}` : ''}</section>`;
+    return `<section class="compare cx"><h2 data-experiment-person>Experiment for ${e(personName())}</h2><p class="cx-note">Periods and languages are saved for this person. The device filter only changes the results.</p>${setup(c)}${draftBanner()}
       <p class="problem" data-compare-error role="alert" ${s.error || (s.dirty && validation()) ? '' : 'hidden'}>${e(s.error || (s.dirty && validation()) || '')}</p>
       ${s.conflict ? button('discard', 'Reload saved periods') : ''}${editor()}
       ${s.loading ? '<p role="status">Updating comparison…</p>' : ''}<div data-compare-results aria-busy="${s.loading}" class="${s.loading ? 'is-updating' : ''}">${s.failed ? '' : view.results(s.data, c)}</div></section>`;
@@ -135,6 +156,7 @@ export function createComparison({ api, scope, render, expired, esc, spent, lang
     if (['mode', 'move', 'lead'].includes(action)) return hash(action, el.dataset.value);
     if (action === 'reverse') return hash('dir', new URLSearchParams(location.hash.slice(1)).get('dir') === 'rev' ? null : 'rev');
     if (action === 'reload') return load();
+    if (!person) return;
     if (action === 'discard') { await load({ replace: true }); announce('Draft discarded. Saved comparison loaded.'); focus('compare:edit'); return; }
     if (action === 'save') return save();
     if (action === 'edit') { s.editing = !s.editing; render(); return; }
@@ -143,14 +165,18 @@ export function createComparison({ api, scope, render, expired, esc, spent, lang
       try {
         const periods = planPeriods(s.planner.start, Number(s.planner.days), s.planner.count);
         normalizeConfig({ ...s.draft, periods }, s.data.today);
+        const target = s;
         if (s.draft.periods.length && !await confirm(`Replace the ${s.draft.periods.length} periods in this draft?`, 'Replace periods', key)) return;
+        if (target !== s) return;
         s.draft.periods = periods; dirty(); focus('compare:0:label');
       } catch (error) { s.error = error.message; render(); announce(error.message); }
       return;
     }
     if (action === 'conclude' || action === 'reopen') {
       if (s.dirty) return;
+      const target = s;
       if (action === 'reopen' && !await confirm('Reopen this experiment to edit its periods?', 'Reopen experiment', key)) return;
+      if (target !== s) return;
       s.draft.concludedAt = action === 'conclude' ? s.data.today : null;
       s.dirty = true;
       return save(action === 'conclude' ? 'Experiment concluded. Periods are locked; numbers stay live.' : 'Experiment reopened.');
@@ -173,7 +199,7 @@ export function createComparison({ api, scope, render, expired, esc, spent, lang
     if (action === 'remove') { s.draft.periods.splice(Number(el.dataset.period), 1); dirty(); focus('compare:add'); }
   }
   function input(el) {
-    if (s.busy || !s.draft) return;
+    if (s.busy || s.loading || !s.draft || !person) return;
     if (el.dataset.planField) { s.planner[el.dataset.planField] = el.value; return; }
     if (s.data.config.concludedAt) return;
     const p = s.draft.periods[Number(el.dataset.period)];
@@ -190,5 +216,5 @@ export function createComparison({ api, scope, render, expired, esc, spent, lang
     document.querySelector(`[data-period-length="${el.dataset.period}"]`).textContent = safeLength(p);
     document.querySelector('[data-plan-calendar]').innerHTML = calendar();
   }
-  return { html, load, click, input, reset() { ++s.request; Object.assign(s, { data: null, draft: null, dirty: false, busy: false, loading: false, failed: false, error: '', editing: null, planner: null, conflict: false }); } };
+  return { html, load, click, input, reset() { ++s.request; people.clear(); person = ''; s = fresh(); people.set(person, s); } };
 }

@@ -93,7 +93,8 @@ async function startMock() {
       try {
         if (url.pathname === '/api/modules/languages/comparison') {
           if (req.method !== 'POST' && mock.comparison) return send(res, 200, mock.comparison);
-          return send(res, 200, req.method === 'POST' ? await api.saveComparison(body) : await api.comparison(Object.fromEntries(url.searchParams)));
+          if (req.method === 'POST' && mock.saveDelay) await sleep(mock.saveDelay);
+          return send(res, 200, req.method === 'POST' ? await api.saveComparison(body, Object.fromEntries(url.searchParams)) : await api.comparison(Object.fromEntries(url.searchParams)));
         }
         if (url.pathname === '/api/modules/languages') {
           if (mock.fail === 'list500') return send(res, 500, { error: 'Database is busy.' });

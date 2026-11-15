@@ -30,6 +30,9 @@ pub fn initialize(db: &Connection) -> rusqlite::Result<()> {
          CREATE INDEX IF NOT EXISTS language_observations ON viewing_slices(device,metadata_id);
          CREATE TABLE IF NOT EXISTS language_comparison(
            id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL,
+           config TEXT NOT NULL, updated INTEGER NOT NULL);
+         CREATE TABLE IF NOT EXISTS person_language_comparisons(
+           person_id TEXT PRIMARY KEY REFERENCES people(id), revision INTEGER NOT NULL,
            config TEXT NOT NULL, updated INTEGER NOT NULL);",
     )
 }

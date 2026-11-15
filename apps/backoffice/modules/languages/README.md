@@ -8,15 +8,19 @@ Design notes: [`docs/backoffice-design.md`](../../../../docs/backoffice-design.m
 
 ## Compare periods
 
-The saved experiment is an ordered list of inclusive periods. Matching labels pool into groups;
+Each person has their own saved experiment, an ordered list of inclusive periods. Matching labels pool into groups;
 overlapping or touching periods with the same label merge. Different labels cannot share a date.
-The API reads old two-group configurations without rewriting them until the next successful save.
+Choose a person first, then all their devices or one of their devices. Device filters change
+results, not experiment ownership. Incompatible selections are cleared, including bookmarks.
+The previous shared comparison remains read-only under Everyone, without assigning it to anyone.
+The API reads its old two-group configuration without rewriting it.
 
 **Plan and edit.** The empty state opens the experiment planner: tomorrow, ten days per period,
 Off/On/Off by default. Filling an existing draft requires confirmation. Every generated name
 and date remains editable. A calendar preview shows the boundaries and adjacent moves.
 **Add period** and **Add language** stay beside each other. Future dates are allowed, but
-future days never dilute measured daily averages. Drafts survive scope changes. Save folds the
+future days never dilute measured daily averages. Drafts are kept separately per person and survive
+device changes and switching back to that person in the same page session. Save folds the
 editor, discard explicitly reloads, and conflicts retain the draft. Results always describe the
 saved configuration and say so while changes are unsaved.
 
@@ -47,7 +51,7 @@ Underlying totals and calculation notes remain available in disclosure sections.
 language selection stays editable and numbers stay live as classifications are audited.
 Confirmed reopening is a separate save before periods can be edited.
 
-**Languages** are one shared selection. Removing all pills restores all languages. Suggestions
+**Languages** are one selection per person's experiment. Removing all pills restores all languages. Suggestions
 contain scoped recorded languages plus saved selections; future-only or empty plans fall back
 to the last 30 days. Selecting languages never rebases share to 100%. The classification picker
 still supports the full catalogue.

@@ -118,6 +118,7 @@ const state = {
 const comparison = createComparison({
   api: () => api,
   scope: () => ({ device: state.filters.device, person: state.filters.person }),
+  personName: () => state.data?.people?.find(p => p.id === state.filters.person)?.name || 'selected person',
   render, expired: () => signedOut('Your session ended. Sign in again.'), esc, spent, langName, demo: DEMO, announce: say,
   pickLanguage: (options) => openLanguagePicker({ ...options, esc, langName }),
 });
@@ -156,11 +157,27 @@ function writeFilters() {
 
 /* ------------------------------------------------------------------ data */
 
+function normalizeScope() {
+  if (!state.data) return false;
+  const f = state.filters, before = `${f.person}:${f.device}`;
+  if (f.person && !state.data.people.some(p => p.id === f.person)) f.person = '';
+  const device = state.data.devices.find(d => d.id === f.device);
+  if (f.device && (!device || (f.person && device.personId !== f.person))) {
+    f.device = '';
+    say('Device filter cleared. Showing this person’s devices.');
+  } else if (state.view === 'compare' && device?.personId && !f.person) {
+    f.person = device.personId;
+  }
+  return before !== `${f.person}:${f.device}`;
+}
+
 async function load({ keepPage = false } = {}) {
+  normalizeScope();
   if (!keepPage) state.filters.page = Math.max(1, state.filters.page);
   writeFilters();
   const mine = ++generation;
-  if (state.auth === 'signedIn' && state.view === 'compare') comparison.load();
+  const comparisonStarted = !!state.data && state.auth === 'signedIn' && state.view === 'compare';
+  if (comparisonStarted) comparison.load();
   state.loading = true;
   render();
   try {
@@ -169,6 +186,8 @@ async function load({ keepPage = false } = {}) {
     if (mine !== generation) return;
     state.data = readable(data);
     state.error = null;
+    if (normalizeScope()) return load({ keepPage });
+    if (!comparisonStarted && state.view === 'compare') comparison.load();
     if (Number(data?.page) && Number(data.page) !== f.page) { f.page = Number(data.page); writeFilters(); }
   } catch (error) {
     if (mine !== generation) return;
@@ -318,7 +337,7 @@ function workspaceHTML() {
   const d = state.data;
   const f = state.filters;
   const people = d?.people || [];
-  const devices = d?.devices || [];
+  const devices = (d?.devices || []).filter(x => !f.person || x.personId === f.person);
   const deviceOptions = () => {
     const opt = (x) => `<option value="${esc(x.id)}" ${f.device === x.id ? 'selected' : ''}>${esc(x.label)}</option>`;
     if (people.length > 1) {
@@ -336,10 +355,10 @@ function workspaceHTML() {
       <div class="side__head"><h1 class="title" tabindex="-1" data-heading>Languages</h1>
         <p class="lede">Watch time by the language of the audio that actually played.</p></div>
       <div class="side__filters">
-        <div><label class="label" for="f-device">Device</label>
-          <select class="select" id="f-device" data-action="device" data-key="f:device"><option value="">All devices</option>${deviceOptions()}</select></div>
-        ${people.length > 1 ? `<div><label class="label" for="f-person">Person</label>
+        ${people.length ? `<div><label class="label" for="f-person">Person</label>
           <select class="select" id="f-person" data-action="person" data-key="f:person"><option value="">Everyone</option>${people.map((p) => `<option value="${esc(p.id)}" ${f.person === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></div>` : ''}
+        <div><label class="label" for="f-device">Device</label>
+          <select class="select" id="f-device" data-action="device" data-key="f:device" ${state.view === 'compare' && !f.person ? 'disabled' : ''}><option value="">${f.person ? 'All devices for this person' : 'All devices'}</option>${deviceOptions()}</select></div>
         <div ${state.view === 'compare' ? 'hidden' : ''}><span class="label" id="f-days">Period</span>
           <div class="seg" role="group" aria-labelledby="f-days">${DAYS.map((n) => `<button type="button" aria-pressed="${f.days === n}" data-action="days" data-value="${n}" data-key="f:days:${n}">${n} days</button>`).join('')}</div></div>
       </div>
@@ -1117,8 +1136,7 @@ document.addEventListener('click', (e) => {
   const f = state.filters;
   switch (a) {
     case 'view':
-      state.view = el.dataset.value; writeFilters(); render();
-      if (state.view === 'compare') comparison.load();
+      state.view = el.dataset.value; load();
       break;
     case 'other-language': {
       const g = state.data?.videos.find((v) => String(v.id) === el.dataset.id);
@@ -1154,7 +1172,7 @@ document.addEventListener('change', (e) => {
   const t = e.target;
   const f = state.filters;
   if (t.dataset.action === 'device') { f.device = t.value; f.page = 1; load(); }
-  else if (t.dataset.action === 'person') { f.person = t.value; f.page = 1; load(); }
+  else if (t.dataset.action === 'person') { f.person = t.value; if (!f.person) f.device = ''; f.page = 1; load(); }
   else if (t.dataset.action === 'language-select') { f.language = t.value; f.page = 1; load(); }
   else if (t.dataset.action === 'version' && state.dialog) {
     // Another recorded version: its own evidence and audit; the decision form keeps its values.

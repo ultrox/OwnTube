@@ -129,10 +129,15 @@ fn days(period: &Period, through: NaiveDate) -> Result<BTreeSet<NaiveDate>> {
     Ok((0..=(end - start).num_days()).map(|n| start.checked_add_days(Days::new(n as u64)).unwrap()).collect())
 }
 
-fn saved(db: &Connection, today: NaiveDate) -> Result<Config> {
-    let row: Option<(i64, String)> = db
+fn saved(db: &Connection, today: NaiveDate, person: &str) -> Result<Config> {
+    let row: Option<(i64, String)> = if person.is_empty() {
+        db
         .query_row("SELECT revision,config FROM language_comparison WHERE id=1", [], |r| Ok((r.get(0)?, r.get(1)?)))
-        .optional()?;
+        .optional()?
+    } else {
+        db.query_row("SELECT revision,config FROM person_language_comparisons WHERE person_id=?", [person],
+            |r| Ok((r.get(0)?, r.get(1)?))).optional()?
+    };
     match row {
         Some((revision, text)) => {
             let value: Value = decode(&text)?;
@@ -187,12 +192,13 @@ fn windows(selected: &BTreeSet<NaiveDate>, tz: chrono_tz::Tz, at: i64) -> Result
 }
 
 impl Store {
-    pub async fn save_language_comparison(&self, mut config: Config, tz: chrono_tz::Tz) -> Result<Value> {
+    pub async fn save_language_comparison(&self, mut config: Config, person: String, tz: chrono_tz::Tz) -> Result<Value> {
         self.run(move |db| {
             let today = tz.timestamp_millis_opt(now()).unwrap().date_naive();
             normalize(&mut config, today)?;
             let tx = db.transaction()?;
-            let old = saved(&tx, today)?;
+            validate_scope(&tx, &Scope { person: person.clone(), device: String::new() })?;
+            let old = saved(&tx, today, &person)?;
             if config.base_revision != old.base_revision {
                 return Err(conflict("Comparison changed in another browser. Reload saved periods before saving."));
             }
@@ -204,9 +210,15 @@ impl Store {
             }
             let mut next = config;
             next.base_revision += 1;
-            tx.execute("INSERT INTO language_comparison(id,revision,config,updated) VALUES(1,?,?,?)
+            if person.is_empty() {
+                tx.execute("INSERT INTO language_comparison(id,revision,config,updated) VALUES(1,?,?,?)
                 ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,config=excluded.config,updated=excluded.updated",
                 params![next.base_revision, serde_json::to_string(&next).unwrap(), now()])?;
+            } else {
+                tx.execute("INSERT INTO person_language_comparisons(person_id,revision,config,updated) VALUES(?,?,?,?)
+                    ON CONFLICT(person_id) DO UPDATE SET revision=excluded.revision,config=excluded.config,updated=excluded.updated",
+                    params![person, next.base_revision, serde_json::to_string(&next).unwrap(), now()])?;
+            }
             tx.commit()?;
             Ok(json!(next))
         }).await
@@ -218,9 +230,10 @@ impl Store {
         }
         self.sync_legacy().await?;
         self.read(move |db| {
+            validate_scope(db, &scope)?;
             let at = now();
             let today = tz.timestamp_millis_opt(at).unwrap().date_naive();
-            let config = saved(db, today)?;
+            let config = saved(db, today, &scope.person)?;
             let selected: BTreeSet<String> = db.prepare(
                 "SELECT id FROM devices WHERE (?='' OR id=?) AND
                 (?='' OR person_id=? OR (?='unassigned' AND person_id IS NULL))")?
@@ -304,7 +317,7 @@ impl Store {
                 let recent = (0..30).map(|n| today.checked_sub_days(Days::new(n)).unwrap()).collect();
                 measure(&recent)?;
             }
-            Ok(json!({"config":config, "periods":periods, "groups":groups, "availableLanguages":available_languages,
+            Ok(json!({"personId":scope.person, "config":config, "periods":periods, "groups":groups, "availableLanguages":available_languages,
                 "timezone":tz.to_string(), "today":today.to_string(), "asOf":at}))
         }).await
     }
@@ -316,18 +329,34 @@ fn period_status(planned: &BTreeSet<NaiveDate>, today: NaiveDate) -> &'static st
     else { "running" }
 }
 
+fn validate_scope(db: &Connection, scope: &Scope) -> Result<()> {
+    if !scope.person.is_empty() && !db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM people WHERE id=?)", [&scope.person], |r| r.get::<_, bool>(0))? {
+        return Err(invalid("Choose an existing person for this experiment"));
+    }
+    if !scope.device.is_empty() && !db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM devices WHERE id=? AND (?='' OR person_id=?))",
+        params![scope.device, scope.person, scope.person], |r| r.get::<_, bool>(0))? {
+        return Err(invalid("Choose a device belonging to the selected person"));
+    }
+    Ok(())
+}
+
 pub async fn get(State(app): State<App>, headers: HeaderMap, Query(scope): Query<Scope>) -> Result<Json<Value>> {
     owner(&app, &headers).await?;
     Ok(Json(app.store.language_comparison(scope, app.timezone).await?))
 }
 
-pub async fn save(State(app): State<App>, headers: HeaderMap, Json(value): Json<Value>) -> Result<Json<Value>> {
+pub async fn save(State(app): State<App>, headers: HeaderMap, Query(scope): Query<Scope>, Json(value): Json<Value>) -> Result<Json<Value>> {
     owner(&app, &headers).await?;
+    if scope.person.is_empty() || !scope.device.is_empty() {
+        return Err(invalid("Choose a person before saving. Devices only filter experiment results."));
+    }
     if value.get("groups").is_some() {
         return Err(invalid("Use comparison v2 periods instead of groups. Reload this page before saving."));
     }
     let config = serde_json::from_value(value).map_err(|e| invalid(&format!("Invalid comparison: {e}")))?;
-    Ok(Json(app.store.save_language_comparison(config, app.timezone).await?))
+    Ok(Json(app.store.save_language_comparison(config, scope.person, app.timezone).await?))
 }
 
 #[cfg(test)]
@@ -390,8 +419,8 @@ mod tests {
             ],
         }).await.unwrap();
         let c = config(&[("2026-03-29", "2026-03-29"), ("2026-03-29", "2026-03-29")], &[("2026-03-31", "2026-04-01")]);
-        assert_eq!(s.save_language_comparison(c.clone(), tz).await.unwrap()["baseRevision"], 1);
-        assert_eq!(s.save_language_comparison(c, tz).await.unwrap_err().0, StatusCode::CONFLICT);
+        assert_eq!(s.save_language_comparison(c.clone(), String::new(), tz).await.unwrap()["baseRevision"], 1);
+        assert_eq!(s.save_language_comparison(c, String::new(), tz).await.unwrap_err().0, StatusCode::CONFLICT);
         let data = s.language_comparison(Scope::default(), tz).await.unwrap();
         assert_eq!(data["groups"][0]["seconds"], 20.);
         assert_eq!(data["groups"][0]["calendarDays"], 1);
@@ -414,7 +443,7 @@ mod tests {
         assert_eq!(updated["groups"][0]["languages"][1]["share"], 0.75);
         let mut chosen: Config = serde_json::from_value(updated["config"].clone()).unwrap();
         chosen.selected_languages = vec!["JA".into(), "ja".into(), "ru".into()];
-        assert_eq!(s.save_language_comparison(chosen, tz).await.unwrap()["selectedLanguages"], json!(["ja","ru"]));
+        assert_eq!(s.save_language_comparison(chosen, String::new(), tz).await.unwrap()["selectedLanguages"], json!(["ja","ru"]));
         let chosen = s.language_comparison(Scope::default(), tz).await.unwrap();
         assert_eq!(chosen["groups"][0]["seconds"], 5.);
         assert_eq!(chosen["groups"][0]["allSeconds"], 20.);
@@ -429,7 +458,8 @@ mod tests {
             "Suggestions retain the saved selection alongside recorded assessed languages");
         let mut invalid_choice: Config = serde_json::from_value(chosen["config"].clone()).unwrap();
         invalid_choice.selected_languages = vec!["Japanese".into()];
-        assert!(s.save_language_comparison(invalid_choice,tz).await.is_err());
+        assert!(s.save_language_comparison(invalid_choice,String::new(),tz).await.is_err());
+        s.create_device("other".into(), "Other".into(), "Guest".into(), hash("other-key")).await.unwrap();
         let excluded = s.language_comparison(Scope { device:"other".into(),person:String::new() }, tz).await.unwrap();
         assert_eq!(excluded["groups"][0]["seconds"], 0.);
         assert_eq!(excluded["groups"][0]["calendarDays"], 1);
@@ -457,7 +487,7 @@ mod tests {
         s.correct_playback_context("tv".into(), serde_json::from_value(json!({
             "context":"foreground","reason":"TV playback is foreground"
         })).unwrap()).await.unwrap();
-        s.save_language_comparison(config(&[("2026-10-24","2026-10-24")], &[("2026-10-25","2026-10-25")]),tz).await.unwrap();
+        s.save_language_comparison(config(&[("2026-10-24","2026-10-24")], &[("2026-10-25","2026-10-25")]),String::new(),tz).await.unwrap();
         let value = s.language_comparison(Scope::default(),tz).await.unwrap();
         assert_eq!(value["groups"][0]["seconds"],20.);
         assert_eq!(value["groups"][1]["seconds"],30.);
@@ -466,8 +496,9 @@ mod tests {
         // A cumulative record lasts ten wall-clock minutes but contains only 30 measured seconds.
         assert_eq!(value["groups"][1]["minutesPerDay"],0.5);
         let person: String = s.read(|db| Ok(db.query_row("SELECT person_id FROM devices WHERE id='tv'",[],|r| r.get(0))?)).await.unwrap();
+        s.save_language_comparison(config(&[("2026-10-24","2026-10-24")], &[("2026-10-25","2026-10-25")]),person.clone(),tz).await.unwrap();
         assert_eq!(s.language_comparison(Scope {device:String::new(),person},tz).await.unwrap()["groups"],value["groups"]);
-        assert_eq!(s.language_comparison(Scope {device:String::new(),person:"unassigned".into()},tz).await.unwrap()["groups"][1]["seconds"],0.);
+        assert!(s.language_comparison(Scope {device:String::new(),person:"unassigned".into()},tz).await.is_err());
     }
 
     #[tokio::test]
@@ -479,7 +510,7 @@ mod tests {
                 {"label":"Off","ranges":[{"start":"2026-01-02","end":"2026-01-04"},{"start":"2026-01-01","end":"2026-01-02"},{"start":"2026-01-07","end":"2026-01-08"}]}
             ]}).to_string();
             db.execute("INSERT INTO language_comparison VALUES(1,7,?,123)", [&old])?;
-            let c = saved(db, date("2026-11-13")?)?;
+            let c = saved(db, date("2026-11-13")?, "")?;
             assert_eq!(c.base_revision, 7);
             assert_eq!(c.selected_languages, vec!["de", "en"]);
             assert_eq!(c.periods.iter().map(|p| p.label.as_str()).collect::<Vec<_>>(), vec!["Off","On","Off"]);
@@ -493,7 +524,7 @@ mod tests {
         assert_eq!(d["groups"][0]["periods"], json!([0,2]));
         assert_eq!(d["groups"][0]["calendarDays"], 6);
         let c: Config = serde_json::from_value(d["config"].clone()).unwrap();
-        assert_eq!(s.save_language_comparison(c, chrono_tz::UTC).await.unwrap()["baseRevision"], 8);
+        assert_eq!(s.save_language_comparison(c, String::new(), chrono_tz::UTC).await.unwrap()["baseRevision"], 8);
         s.read(|db| {
             let text: String = db.query_row("SELECT config FROM language_comparison", [], |r| r.get(0))?;
             assert!(!text.contains("\"groups\""));
@@ -514,7 +545,7 @@ mod tests {
         ]}).await.unwrap();
         let mut c = config(&[(&day(1), &day(10))], &[]);
         c.selected_languages = vec!["ja".into()];
-        s.save_language_comparison(c,tz).await.unwrap();
+        s.save_language_comparison(c,String::new(),tz).await.unwrap();
         let future = s.language_comparison(Scope::default(),tz).await.unwrap();
         assert_eq!(future["availableLanguages"], json!(["de","ja"]));
         assert_eq!(future["periods"][0]["status"], "upcoming");
@@ -522,6 +553,7 @@ mod tests {
         assert_eq!(future["periods"][0]["calendarDays"], 0);
         assert_eq!(future["periods"][0]["minutesPerDay"], Value::Null);
         assert_eq!(future["periods"][0]["share"], Value::Null);
+        s.create_device("absent".into(), "Empty".into(), "Guest".into(), hash("empty-key")).await.unwrap();
         let scoped = s.language_comparison(Scope{device:"absent".into(),person:String::new()},tz).await.unwrap();
         assert_eq!(scoped["availableLanguages"], json!(["ja"]));
         let mut c: Config = serde_json::from_value(future["config"].clone()).unwrap();
@@ -531,7 +563,7 @@ mod tests {
             Period{label:"On".into(),start:day(-1),end:day(2)},
             Period{label:"Off".into(),start:day(3),end:day(5)},
         ];
-        s.save_language_comparison(c,tz).await.unwrap();
+        s.save_language_comparison(c,String::new(),tz).await.unwrap();
         let d = s.language_comparison(Scope::default(),tz).await.unwrap();
         assert_eq!(d["periods"][0]["status"], "complete");
         assert_eq!(d["periods"][1]["status"], "running");
@@ -545,22 +577,22 @@ mod tests {
         assert_eq!(d["groups"][0]["periods"], json!([0,2]));
         let mut c: Config = serde_json::from_value(d["config"].clone()).unwrap();
         c.concluded_at = Some(day(0));
-        assert_eq!(s.save_language_comparison(c.clone(),tz).await.unwrap_err().0,StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(s.save_language_comparison(c.clone(),String::new(),tz).await.unwrap_err().0,StatusCode::UNPROCESSABLE_ENTITY);
         c.periods = vec![Period{label:"Done".into(),start:day(-3),end:day(-1)}];
-        let concluded = s.save_language_comparison(c,tz).await.unwrap();
+        let concluded = s.save_language_comparison(c,String::new(),tz).await.unwrap();
         let mut c: Config = serde_json::from_value(concluded).unwrap();
         c.selected_languages = vec!["de".into()];
-        let selected = s.save_language_comparison(c,tz).await.unwrap();
+        let selected = s.save_language_comparison(c,String::new(),tz).await.unwrap();
         let mut c: Config = serde_json::from_value(selected).unwrap();
         c.periods[0].label = "Changed".into();
-        assert!(s.save_language_comparison(c.clone(),tz).await.is_err());
+        assert!(s.save_language_comparison(c.clone(),String::new(),tz).await.is_err());
         c.concluded_at = None;
-        assert!(s.save_language_comparison(c.clone(),tz).await.is_err(), "Reopen before editing");
+        assert!(s.save_language_comparison(c.clone(),String::new(),tz).await.is_err(), "Reopen before editing");
         c.periods[0].label = "Done".into();
-        let reopened = s.save_language_comparison(c,tz).await.unwrap();
+        let reopened = s.save_language_comparison(c,String::new(),tz).await.unwrap();
         let mut c: Config = serde_json::from_value(reopened).unwrap();
         c.periods[0].label = "Changed".into();
-        assert!(s.save_language_comparison(c,tz).await.is_ok());
+        assert!(s.save_language_comparison(c,String::new(),tz).await.is_ok());
     }
 
     #[test]
@@ -584,6 +616,70 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn person_experiments_are_independent_persistent_and_device_scoped() {
+        let path = std::env::temp_dir().join(format!("person-comparison-{}.sqlite", crate::token()));
+        let s = Store::open(path.clone()).unwrap();
+        let tz = chrono_tz::UTC;
+        let at = midnight(date("2026-01-02").unwrap(), tz).unwrap() + 60_000;
+        for (device, person, seconds) in [("tv", "Marko", 6.), ("laptop", "Marko", 12.), ("other", "Snjezana", 20.)] {
+            s.create_device(device.into(), device.into(), person.into(), hash(device)).await.unwrap();
+            s.ingest(hash(device), crate::store::Batch { device_id:device.into(), evidence:Default::default(), events:vec![
+                json!({"eventId":device,"kind":"watch","t":at,"seconds":seconds,"videoId":"abcdefghijk","title":"Scoped viewing",
+                    "lang":"de","source":"audio-track","conf":"high","playbackContext":"foreground"})
+            ] }).await.unwrap();
+        }
+        let (marko, other): (String, String) = s.read(|db| Ok((
+            db.query_row("SELECT person_id FROM devices WHERE id='tv'", [], |r| r.get(0))?,
+            db.query_row("SELECT person_id FROM devices WHERE id='other'", [], |r| r.get(0))?
+        ))).await.unwrap();
+        let legacy = json!({"baseRevision":11,"groups":[{"label":"Old","ranges":[{"start":"2026-01-01","end":"2026-01-02"}]}],
+            "selectedLanguages":["en"]}).to_string();
+        let original = legacy.clone();
+        s.run(move |db| {
+            db.execute("INSERT INTO language_comparison VALUES(1,11,?,123)", [legacy])?;
+            Ok(())
+        }).await.unwrap();
+        let scope = |person: &str, device: &str| Scope { person:person.into(),device:device.into() };
+        assert_eq!(s.language_comparison(scope(&marko,""),tz).await.unwrap()["config"]["baseRevision"],0);
+        let mut a = config(&[("2026-01-01","2026-01-02")], &[]);
+        a.selected_languages = vec!["de".into()];
+        a.concluded_at = Some("2026-01-03".into());
+        s.save_language_comparison(a.clone(),marko.clone(),tz).await.unwrap();
+        let b = config(&[("2026-01-02","2026-01-02")], &[]);
+        s.save_language_comparison(b.clone(),other.clone(),tz).await.unwrap();
+        assert_eq!(s.save_language_comparison(a,marko.clone(),tz).await.unwrap_err().0,StatusCode::CONFLICT);
+        let all = s.language_comparison(scope(&marko,""),tz).await.unwrap();
+        let tv = s.language_comparison(scope(&marko,"tv"),tz).await.unwrap();
+        assert_eq!(all["personId"],marko);
+        assert_eq!(all["config"],tv["config"],"Device filtering must not change experiment identity");
+        assert_eq!(all["periods"][0]["seconds"],18.);
+        assert_eq!(tv["periods"][0]["seconds"],6.);
+        assert_eq!(s.language_comparison(scope(&other,""),tz).await.unwrap()["periods"][0]["seconds"],20.);
+        for bad in [scope(&marko,"other"),scope("missing",""),scope(&marko,"missing")] {
+            assert_eq!(s.language_comparison(bad,tz).await.unwrap_err().0,StatusCode::UNPROCESSABLE_ENTITY);
+        }
+        assert!(s.save_language_comparison(b,"missing".into(),tz).await.is_err());
+        let mut other_config: Config = serde_json::from_value(s.language_comparison(scope(&other,""),tz).await.unwrap()["config"].clone()).unwrap();
+        other_config.periods[0].label = "Independent".into();
+        s.save_language_comparison(other_config,other.clone(),tz).await.unwrap();
+        assert_eq!(s.language_comparison(scope(&marko,""),tz).await.unwrap()["config"],all["config"]);
+        drop(s);
+        let s = Store::open(path.clone()).unwrap();
+        assert_eq!(s.language_comparison(scope(&marko,""),tz).await.unwrap()["config"],all["config"]);
+        assert_eq!(s.language_comparison(scope(&other,""),tz).await.unwrap()["config"]["baseRevision"],2);
+        s.read(move |db| {
+            let row: (i64,String,i64) = db.query_row("SELECT revision,config,updated FROM language_comparison", [],
+                |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?)))?;
+            assert_eq!(row,(11,original,123),"Person saves must preserve the previous shared comparison exactly");
+            assert_eq!(db.query_row("SELECT count(*) FROM events",[],|r| r.get::<_,i64>(0))?,3);
+            assert_eq!(db.query_row("SELECT count(*) FROM language_assessments",[],|r| r.get::<_,i64>(0))?,0);
+            Ok(())
+        }).await.unwrap();
+        drop(s);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[tokio::test]
     async fn comparison_survives_store_reopen_and_empty_groups_have_no_average() {
         let path = std::env::temp_dir().join(format!("comparison-{}.sqlite", crate::token()));
         let s = Store::open(path.clone()).unwrap();
@@ -593,7 +689,7 @@ mod tests {
         ]}).to_string();
         s.run(move |db| {
             db.execute("INSERT INTO language_comparison VALUES(1,0,?,123)", [&old])?;
-            let read = saved(db, date("2026-11-13")?)?;
+            let read = saved(db, date("2026-11-13")?, "")?;
             assert!(read.selected_languages.is_empty());
             assert!(read.periods.is_empty());
             assert_eq!(db.query_row("SELECT config FROM language_comparison", [], |r| r.get::<_,String>(0))?, old);
@@ -601,7 +697,7 @@ mod tests {
         }).await.unwrap();
         let mut c = config(&[("2026-03-01", "2026-03-02")], &[]);
         c.selected_languages = vec!["de".into(), "ja".into()];
-        s.save_language_comparison(c, chrono_tz::UTC).await.unwrap();
+        s.save_language_comparison(c, String::new(), chrono_tz::UTC).await.unwrap();
         drop(s);
         let s = Store::open(path.clone()).unwrap();
         let read = s.language_comparison(Scope::default(), chrono_tz::UTC).await.unwrap();
