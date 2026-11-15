@@ -18,6 +18,14 @@ test skipped; 199 mock comparison/calendar checks and 68 real-local checks passe
 Coverage includes persistent and combined leads, conclusion locks, separate drafts,
 revision conflicts, copying and restart persistence.
 
+Deployed from `5bce00bf4` after the AMD64 restored-copy suite passed 68 checks.
+Candidate and public verification matched 13 assets, both people's experiment
+lists, saved plans and device filters, plus the Save lead control in desktop
+and phone layouts. Six frozen history scopes, 386 reviews, existing experiments
+and shared revision 11 were preserved. All nine unrelated proxy targets remained
+unchanged. Public checks wrote no experiment or review decisions.
+See [deployment identity](../../server/README.md#current-release-owntube-saved-lead-20261115-1).
+
 No schema migration. Prefer a forward fix after a lead has been saved: previous
 images reject the new config field. An image rollback would first require a
 targeted, backed-up removal of `leadLanguage` from affected experiment configs.

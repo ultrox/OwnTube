@@ -41,7 +41,7 @@ Deployed from `032a6e4b0`. Public HTTPS verification matched 13 assets, both
 people's lists, device options and saved plans. The calendar retains its 42-day
 grid. Source records, credentials, reviews and shared revision 11 were preserved;
 all nine unrelated proxy targets remained unchanged. Public checks wrote no
-experiment or review decisions. See [deployment identity](../../server/README.md#current-release-owntube-named-experiments-20261115-1).
+experiment or review decisions. See [deployment identity](../../server/README.md#previous-release-owntube-named-experiments-20261115-1).
 
 ## Rollback
 
