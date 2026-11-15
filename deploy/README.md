@@ -95,14 +95,24 @@ The Languages follow-up `owntube-languages-20261113-2` uses the same process fro
 commit `4369a6835`, with mobile wrapping and content-hashed module assets. Its
 backend binary is identical to `-1`; the same backup and image-only rollback apply.
 
-## Saved lead release
+## Lead settings release
+
+`owntube-lead-settings-20261115-1`, source `b15cf589b`, requires the lead language
+when creating an experiment and moves later changes into automatically saved
+**Experiment settings**. 52 Rust tests, 207 mock checks, 74 real-local and
+74 AMD64 candidate checks passed. Public verification matched 13 assets and
+preserved all three existing experiments and viewing data.
+See [release details](../docs/releases/experiment-lead-settings.md) and
+[deployment identity](../server/README.md#current-release-owntube-lead-settings-20261115-1).
+
+## Previous saved lead release
 
 `owntube-saved-lead-20261115-1`, source `5bce00bf4`, adds **Save lead** beside
 **Lead with**. Each experiment remembers its individual or combined lead.
 52 Rust tests, 199 mock checks, 68 real-local and 68 AMD64 candidate checks passed.
 Public verification matched 13 assets and preserved all existing plans.
 See [release details](../docs/releases/saved-lead.md) and
-[deployment identity](../server/README.md#current-release-owntube-saved-lead-20261115-1).
+[deployment identity](../server/README.md#previous-release-owntube-saved-lead-20261115-1).
 
 ## Previous named experiments release
 

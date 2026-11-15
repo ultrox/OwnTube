@@ -24,3 +24,38 @@ Before image build: 52 Rust tests, 207 mock comparison/calendar checks and
 Coverage includes creation with an explicit lead, independent experiments,
 duplication, concluded plans, automatic-save errors/retry and preserved drafts.
 Creation dialogs were inspected on desktop and phone in light/dark themes.
+
+## Build and recovery
+
+Source commit: `b15cf589b`. Server-local AMD64 image:
+`localhost:5555/youtube-observer:owntube-lead-settings-20261115-1`.
+Image identity:
+`sha256:d4a0e70a51ce93ac91f284d352dac8e800e60779987f41de2f6bc45cf0701959`.
+Tracked-source archive SHA-256:
+`95ecbcdd81bcfb882d6fb4445f1637cfeacc7c741e593f247114b124136e278f`.
+
+Verified backup `before-owntube-lead-settings-20261115-1` is retained on hserver
+under `/home/marko/Backups/youtube-observer/` and mirrored locally under
+`~/.local/state/youtube-observer/backups/`. SQLite SHA-256:
+`8c8e4beb518811c975f5b06e5f428ef0e5505ecefd5955a67afac3edfa8e5b57`.
+Integrity and foreign keys passed. The restored candidate preserved all three
+named experiments, both import markers, previous person snapshots, shared
+revision 11, 386 assessments, credentials and six frozen history scopes.
+
+## Deployment verification
+
+Deployed on 2026-11-15 using
+`kamal app boot -c deploy/deploy.yml --version owntube-lead-settings-20261115-1`.
+Container `155e9fe2d870` is running the verified image as UID 10001. Healthy
+handover completed and the deployment lock was released.
+
+All 74 actual AMD64 candidate browser checks passed. Candidate and public checks
+matched 13 assets, both people's experiment lists and device options, required
+creation lead selection and top-level settings. Desktop 1320px and phone 390px
+layouts passed in light/dark themes. Public checks wrote no experiment decisions.
+
+Production preservation checks matched the restored-copy guarantees above,
+including all three exact experiment rows. All nine unrelated proxy targets
+remained unchanged. Reports and screenshots are retained under
+`/home/marko/releases/youtube-observer/owntube-lead-settings-20261115-1/`.
+The previous saved-lead image and stopped container `7e1f16b34fad` are retained.

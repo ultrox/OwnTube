@@ -309,7 +309,46 @@ All 45 Android unit regressions, a disposable-backend HTTP contract test and the
 The ARM64 APK was installed on the Shield on 2026-11-13; versionCode 2466 and the retained app-data
 directory were verified. Post-update playback capture has not yet been checked on-device.
 
-### Current release: `owntube-saved-lead-20261115-1`
+### Current release: `owntube-lead-settings-20261115-1`
+
+Deployed on 2026-11-15 from `b15cf589b` using
+`kamal app boot -c deploy/deploy.yml --version owntube-lead-settings-20261115-1`.
+Container `155e9fe2d870`, image
+`localhost:5555/youtube-observer:owntube-lead-settings-20261115-1`,
+identity `sha256:d4a0e70a51ce93ac91f284d352dac8e800e60779987f41de2f6bc45cf0701959`.
+Source archive SHA-256:
+`95ecbcdd81bcfb882d6fb4445f1637cfeacc7c741e593f247114b124136e278f`.
+Healthy handover completed and the deployment lock was released.
+
+Creation requires a name and lead language, saved together before opening the
+calendar. Later changes live in automatically saved **Experiment settings**.
+See [behavior and rollback](../docs/releases/experiment-lead-settings.md).
+
+52 Rust tests, 207 mock comparison/calendar checks, 74 real-local checks and
+74 actual AMD64 restored-copy checks passed. Runtime UID 10001 verified.
+Candidate and public browsers matched 13 assets, both people's lists, independent
+configs and device options. Creation and settings passed desktop/phone light/dark
+checks. Public checks wrote no experiment or review decisions.
+
+Six frozen history scopes, all 386 assessments, source records, credentials,
+all three experiment rows, both import markers, old person snapshots and shared
+revision 11 were preserved. Integrity and foreign keys passed. All nine unrelated
+proxy targets remained unchanged.
+Reports: `/home/marko/releases/youtube-observer/owntube-lead-settings-20261115-1/`.
+
+Verified backup `before-owntube-lead-settings-20261115-1` is retained under
+`/home/marko/Backups/youtube-observer/` and mirrored under
+`~/.local/state/youtube-observer/backups/` on the Mac. SHA-256:
+`8c8e4beb518811c975f5b06e5f428ef0e5505ecefd5955a67afac3edfa8e5b57`.
+It contains 297,183 events, 621 evidence records, 1,024 slices, 641 metadata versions,
+3 devices, 2 people, 386 assessments, one context override, one shared comparison,
+two old person plans, three named experiments and two import markers.
+
+No schema migration. Previous saved-lead image and stopped container `7e1f16b34fad`
+retained. That image can read these configs; keep the current data volume for an
+image-only rollback.
+
+### Previous release: `owntube-saved-lead-20261115-1`
 
 Deployed on 2026-11-15 from `5bce00bf4` using
 `kamal app boot -c deploy/deploy.yml --version owntube-saved-lead-20261115-1`.
