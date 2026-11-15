@@ -70,4 +70,14 @@ explicit mapping to the old format. Do not restore the whole old database over
 new watch history or reviews. Prefer a forward fix when the current experiment
 cannot be represented by v1.
 
-Deployment identity and public verification are recorded in `server/README.md`.
+## Deployment
+
+Deployed on 2026-11-15 from `f19dbf112`. Public verification matched all ten
+frontend assets and owner authentication. Desktop and phone screenshots were
+inspected in both themes. Six frozen scopes, all 376 assessments, source records
+and credentials were preserved; integrity and foreign keys passed. The saved
+comparison remained at revision 11 in v1 storage, and verification wrote no
+production decisions.
+
+Deployment identity and public verification are recorded in
+[`server/README.md`](../../server/README.md#current-release-owntube-comparison-v2-20261115-1).

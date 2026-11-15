@@ -98,8 +98,12 @@ backend binary is identical to `-1`; the same backup and image-only rollback app
 ## Comparison v2 release
 
 `owntube-comparison-v2-20261115-1` introduces the ordered-period experiment model
-and the responsive comparison redesign. Build from committed source using the
-server-local Docker/Kamal path above. Verify on a restored backup before boot.
+and the responsive comparison redesign. Deployed from `f19dbf112` through the
+server-local Docker/Kamal path after restored-backup verification. Public checks
+matched ten assets and desktop/phone layouts in both themes. Six frozen scopes,
+376 reviews, credentials and comparison revision 11 were preserved.
+Release identity and backup:
+[`server/README.md`](../server/README.md#current-release-owntube-comparison-v2-20261115-1).
 The saved configuration migrates only on its first v2 save. Rollback after that
 requires targeted configuration conversion, as described in
 [`docs/releases/comparison-v2.md`](../docs/releases/comparison-v2.md).
@@ -112,7 +116,7 @@ recorded history. Browser checks verified retry, retained exports and blocked
 uploads; public checks matched three active devices and all downloadable ZIPs.
 Eight frozen production scopes, 370 reviews and comparison revision 11 were
 preserved. Backup, release identity and rollback:
-[`server/README.md`](../server/README.md#current-release-owntube-device-removal-20261114-1).
+[`server/README.md`](../server/README.md#previous-release-owntube-device-removal-20261114-1).
 
 ## Previous short-code pairing release
 

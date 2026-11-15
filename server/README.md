@@ -309,7 +309,56 @@ All 45 Android unit regressions, a disposable-backend HTTP contract test and the
 The ARM64 APK was installed on the Shield on 2026-11-13; versionCode 2466 and the retained app-data
 directory were verified. Post-update playback capture has not yet been checked on-device.
 
-### Current release: `owntube-device-removal-20261114-1`
+### Current release: `owntube-comparison-v2-20261115-1`
+
+Deployed on 2026-11-15 from `f19dbf112` using
+`kamal app boot -c deploy/deploy.yml --version owntube-comparison-v2-20261115-1`.
+Healthy handover completed and the deploy lock was released.
+Container `3c3d922543dc`, image
+`localhost:5555/youtube-observer:owntube-comparison-v2-20261115-1`,
+identity `sha256:f56f11a3890277757f9b5621d81e9a200c492d6372ab855611acad251ef7e779`.
+Source archive SHA-256:
+`5418b18e92901be029ca65c9c7f4c1fa3dbab296ace1110b6696f812c69defc6`.
+Release files and verification reports:
+`/home/marko/releases/youtube-observer/owntube-comparison-v2-20261115-1/`.
+
+Adds ordered periods, pooled labels, adjacent comparisons, experiment planning,
+conclude/reopen, and responsive comparison charts in light and dark themes.
+See [release details and handover defaults](../docs/releases/comparison-v2.md).
+Live: `https://ytdash.gromobran.com/modules/languages/#view=compare`.
+
+Verification: 47 Rust tests passed (one production-copy-only test ignored);
+226 full mock checks passed before final refinements; the final focused comparison
+suite passed 116 checks and the real-local comparison suite passed 24 checks.
+The actual AMD64 candidate ran as UID 10001 against a disposable backup copy.
+Read-only v1 conversion kept revision 11; save/conclude/reopen advanced only the
+disposable copy to revision 14.
+
+Public verification matched all ten frontend assets, owner authentication and
+recorded-language suggestions. Desktop 1320px and phone 390px screenshots were
+visually inspected in both themes. The saved comparison stayed at revision 11
+with its original v1 configuration; verification wrote no production decisions.
+Six frozen history scopes matched, all 376 assessments and original source records
+and credentials were preserved, and integrity and foreign-key checks passed.
+All nine unrelated proxy registrations were preserved.
+
+Fresh backup `before-owntube-comparison-v2-20261115-1` is retained under
+`/home/marko/Backups/youtube-observer/` and mirrored on the Mac under
+`~/.local/state/youtube-observer/backups/`. Database SHA-256:
+`1255a714b114fa93b84daebac4f706f90cb273faff7671cd856fa8592e7163e4`.
+It contains 297,160 events, 596 evidence records, 969 slices, 616 metadata versions,
+3 devices, 2 people, 376 assessments, one context override and comparison revision 11.
+Production continues using `youtube-observer-data:/app/data`.
+
+The previous device-removal image and stopped container `71cdd9cd5023` are retained.
+Before the first v2 save, image-only rollback can use
+`kamal rollback owntube-device-removal-20261114-1 -c deploy/deploy.yml`.
+After a v2 save, first export the current comparison row and perform the targeted
+configuration conversion described in the release notes. Do not restore the whole
+old database over newer history or reviews. The disposable candidate container,
+local fixture servers and SSH tunnel were stopped after verification.
+
+### Previous release: `owntube-device-removal-20261114-1`
 
 Deployed from `01ecbe0b3` using
 `kamal app boot -c deploy/deploy.yml --version owntube-device-removal-20261114-1`.
