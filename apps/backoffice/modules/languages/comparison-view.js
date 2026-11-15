@@ -27,7 +27,7 @@ export function comparisonView({ esc, langName, spent }) {
     if (h.get('dir') === 'rev') pair.reverse();
     const selected = d.config.selectedLanguages;
     const available = selected.length ? [...selected] : [...new Set(pair.flatMap(p => p.languages.map(l => l.lang)))];
-    const code = h.get('lead');
+    const code = [h.get('lead'), d.config.leadLanguage].find(code => code === 'all' || available.includes(code));
     const lead = code === 'all' || available.includes(code) ? code : pair.length === 2 ? leadLanguage(available, pair) : available[0] || 'all';
     available.sort((a, b) => (a === lead ? -1 : b === lead ? 1 : 0)
       || (languageValue(pair.at(-1) || { languages: [] }, b).seconds - languageValue(pair.at(-1) || { languages: [] }, a).seconds)
@@ -86,7 +86,8 @@ export function comparisonView({ esc, langName, spent }) {
   }
   function hero(d, c) {
     const values = c.pair.map(p => languageValue(p, c.lead)), story = moveStory(...values.map(v => v.rate));
-    const leadControls = c.codes.length > 1 ? `<div class="cx-lead"><span class="cx-eyebrow">Lead with</span><div class="cx-segmented" role="group" aria-label="Lead language">${c.codes.map(code => button('lead', e(langName(code)), `data-value="${e(code)}" aria-pressed="${c.lead === code}"`)).join('')}${button('lead', c.selected.length === 2 ? e(c.selected.map(langName).join(' + ')) : 'All selected', `data-value="all" aria-pressed="${c.lead === 'all'}"`)}</div></div>` : '';
+    const leadControls = c.codes.length > 1 ? `<div class="cx-lead"><span class="cx-eyebrow">Lead with</span><div class="cx-segmented" role="group" aria-label="Lead language">${c.codes.map(code => button('lead', e(langName(code)), `data-value="${e(code)}" aria-pressed="${c.lead === code}"`)).join('')}${button('lead', c.selected.length === 2 ? e(c.selected.map(langName).join(' + ')) : 'All selected', `data-value="all" aria-pressed="${c.lead === 'all'}"`)}</div>
+      ${c.canSaveLead ? button('save-lead', c.lead === d.config.leadLanguage ? 'Lead saved' : 'Save lead', `data-key="compare:save-lead" ${c.lead === d.config.leadLanguage || c.leadDisabled ? 'disabled' : ''}`) : ''}</div>` : '';
     const empty = c.pair.find(p => !p.calendarDays);
     return `<div class="cx-hero"><header data-story="${story.state}" data-lead="${e(c.lead)}">
       <p class="cx-eyebrow">${swatch(0)}${e(c.what)} · From ${e(c.pair[0].label)} to ${e(c.pair[1].label)}</p>

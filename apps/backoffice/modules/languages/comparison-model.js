@@ -29,7 +29,7 @@ const validLanguage = s => typeof s === 'string' && s.length <= 35
   && !/^(und|mul|zxx)-/.test(s.trim().toLowerCase());
 export function normalizeConfig(input, today, old = null) {
   if (input.groups) throw fail('Use comparison v2 periods instead of groups. Reload this page before saving.');
-  if (Object.keys(input).some(k => !['baseRevision', 'periods', 'selectedLanguages', 'concludedAt'].includes(k))) throw fail('Unknown comparison field');
+  if (Object.keys(input).some(k => !['baseRevision', 'periods', 'selectedLanguages', 'concludedAt', 'leadLanguage'].includes(k))) throw fail('Unknown comparison field');
   if (!Number.isSafeInteger(input.baseRevision) || input.baseRevision < 0) throw fail('Invalid comparison revision');
   if (!Array.isArray(input.periods) || input.periods.length > 128) throw fail('Choose up to 128 periods');
   const selection = input.selectedLanguages ?? [];
@@ -56,6 +56,11 @@ export function normalizeConfig(input, today, old = null) {
     else merged.push(p);
   }
   const result = { baseRevision: input.baseRevision, periods: merged, selectedLanguages: [...new Set(selection.map(s => s.trim().toLowerCase()))].sort(), concludedAt: input.concludedAt ?? null };
+  if (input.leadLanguage != null) {
+    if (input.leadLanguage !== 'all' && !validLanguage(input.leadLanguage)) throw fail('Choose a valid lead language');
+    const lead = input.leadLanguage.trim().toLowerCase();
+    if (lead === 'all' || !result.selectedLanguages.length || result.selectedLanguages.includes(lead)) result.leadLanguage = lead;
+  }
   if (result.concludedAt !== null) {
     dateNumber(result.concludedAt);
     if (!merged.length || merged.some(p => p.end >= today)) throw fail('Every period must be complete before concluding');

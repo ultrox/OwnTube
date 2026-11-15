@@ -195,6 +195,40 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn lead_is_persistent_copied_and_revision_checked() {
+        let path = std::env::temp_dir().join(format!("experiment-lead-{}.sqlite3",uuid::Uuid::new_v4()));
+        let s = Store::open(path.clone()).unwrap();
+        let people = owners(&s).await;
+        let person = &people[0];
+        let item = s.create_experiment(scope(person),create("Lead")).await.unwrap();
+        let id = item["id"].as_str().unwrap().to_string();
+        let mut config = empty();
+        config.selected_languages = vec!["de".into(),"en".into()];
+        config.lead_language = Some("DE".into());
+        let saved = s.save_comparison(config,person.clone(),chrono_tz::UTC,Some(id.clone())).await.unwrap();
+        assert_eq!(saved["leadLanguage"],"de");
+        drop(s);
+        let s = Store::open(path.clone()).unwrap();
+        let read = s.comparison_for(scope(person),chrono_tz::UTC,Some(id.clone())).await.unwrap();
+        assert_eq!(read["config"],saved);
+        let copy = s.create_experiment(scope(person),Create {name:"Copy".into(),source_id:Some(id.clone()),base_revision:Some(1)}).await.unwrap();
+        assert_eq!(s.comparison_for(scope(person),chrono_tz::UTC,Some(copy["id"].as_str().unwrap().into())).await.unwrap()["config"]["leadLanguage"],"de");
+        let mut combined: Config = serde_json::from_value(saved.clone()).unwrap();
+        combined.lead_language = Some("all".into());
+        let combined = s.save_comparison(combined,person.clone(),chrono_tz::UTC,Some(id.clone())).await.unwrap();
+        assert_eq!(combined["leadLanguage"],"all");
+        assert_eq!(s.save_comparison(serde_json::from_value(saved).unwrap(),person.clone(),chrono_tz::UTC,Some(id.clone())).await.unwrap_err().0,StatusCode::CONFLICT);
+        let mut invalid: Config = serde_json::from_value(combined).unwrap();
+        invalid.lead_language = Some("<script>".into());
+        assert_eq!(s.save_comparison(invalid.clone(),person.clone(),chrono_tz::UTC,Some(id.clone())).await.unwrap_err().0,StatusCode::UNPROCESSABLE_ENTITY);
+        invalid.lead_language = Some("de".into());
+        invalid.selected_languages = vec!["en".into()];
+        assert!(s.save_comparison(invalid,person.clone(),chrono_tz::UTC,Some(id)).await.unwrap().get("leadLanguage").is_none());
+        drop(s);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[tokio::test]
     async fn lifecycle_is_revision_checked_person_scoped_and_never_deletes_viewing() {
         let s = Store::open(":memory:".into()).unwrap();
         let people = owners(&s).await;

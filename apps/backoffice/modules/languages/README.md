@@ -22,6 +22,10 @@ Existing plans become "My first experiment", preserving revisions and conclusion
 Deletion removes only the plan; viewing and reviews are retained. Browser back/forward
 and bookmarked experiment IDs work, and local drafts are independent per experiment.
 
+**Lead with.** Choose an individual or combined lead, then **Save lead** to remember
+it for this experiment. It is restored when reopening the experiment. Saving the
+lead keeps unsaved period edits in their draft and works after conclusion.
+
 **Plan and edit.** A new experiment opens the compact calendar picker with today in
 the third of six week rows. Daily bars show measured languages, including past
 recordings. Zero days, future days and untracked days are distinct. Use a 7, 10 or

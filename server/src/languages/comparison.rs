@@ -33,6 +33,8 @@ pub struct Config {
     selected_languages: Vec<String>,
     #[serde(default)]
     concluded_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    lead_language: Option<String>,
 }
 
 #[derive(Default, Deserialize)]
@@ -61,6 +63,7 @@ fn empty() -> Config {
         selected_languages: vec![],
         periods: vec![],
         concluded_at: None,
+        lead_language: None,
     }
 }
 
@@ -124,6 +127,14 @@ fn normalize(config: &mut Config, today: NaiveDate) -> Result<()> {
     config.periods = merged;
     config.selected_languages = config.selected_languages.iter().map(|s| language(s).unwrap())
         .collect::<BTreeSet<_>>().into_iter().collect();
+    if let Some(lead) = &config.lead_language {
+        let lead = if lead == "all" { "all".into() } else {
+            language(lead).ok_or_else(|| invalid("Choose a valid lead language"))?
+        };
+        config.lead_language = if lead != "all" && !config.selected_languages.is_empty() && !config.selected_languages.contains(&lead) {
+            None
+        } else { Some(lead) };
+    }
     if let Some(concluded) = &config.concluded_at {
         let concluded = date(concluded)?;
         if config.periods.is_empty() || config.periods.iter().any(|p| date(&p.end).unwrap() >= today) {
@@ -164,6 +175,7 @@ fn saved(db: &Connection, today: NaiveDate, person: &str) -> Result<Config> {
                         label: g.label.clone(), start: r.start, end: r.end
                     })).collect(),
                     concluded_at: None,
+                    lead_language: None,
                 }
             } else { decode(&text)? };
             config.base_revision = revision;
@@ -461,6 +473,7 @@ mod tests {
             base_revision: 0,
             selected_languages: vec![],
             concluded_at: None,
+            lead_language: None,
             periods: [a, b].into_iter().enumerate().flat_map(|(i, ranges)| ranges.iter().map(move |(a,b)| Period {
                 label: format!("Group {i}"), start: (*a).into(), end: (*b).into()
             })).collect(),

@@ -233,10 +233,42 @@ export async function browserChecks({ p, ok, LIVE, MODULE, OUT, control }) {
   ok(await p.eval(() => [...document.querySelectorAll('[data-compare-field]')].every(e => e.readOnly)), 'concluded period fields are read-only');
   ok((await api({ ...saved.config, periods: saved.config.periods.map((p, i) => ({ ...p, label: i ? p.label : 'Changed' })) })).status === 422, 'server enforces concluded period lock');
   ok((await api({ ...saved.config, selectedLanguages: ['de', 'en'] })).status === 200, 'language selection remains editable after conclusion');
-  await p.click('[data-compare="reload"]'); await settled();
-  await p.click('[data-compare="reopen"]');
+   await p.click('[data-compare="reload"]'); await settled();
+   await p.click('[data-compare="lead"][data-value="de"]');
+   await p.click('[data-compare="save-lead"]'); await settled();
+   const leadSaved = (await api()).data.config;
+   ok(leadSaved.leadLanguage === 'de' && leadSaved.concludedAt === saved.config.concludedAt
+     && JSON.stringify(leadSaved.periods) === JSON.stringify(saved.config.periods), 'lead saves on a concluded experiment without changing its plan or conclusion');
+   await p.go(page); await settled();
+   ok(await p.eval(() => !location.hash.includes('lead=') && document.querySelector('[data-lead]').dataset.lead === 'de'
+     && document.querySelector('[data-compare="save-lead"]').disabled), 'saved lead survives a fresh page without a lead bookmark');
+   await p.click('[data-compare="lead"][data-value="all"]');
+   await p.click('[data-compare="save-lead"]'); await settled();
+   await p.go(page); await settled();
+   ok((await api()).data.config.leadLanguage === 'all'
+     && await p.eval(() => document.querySelector('[data-lead]').dataset.lead === 'all'), 'combined lead is saved and restored');
+   await p.click('[data-compare="edit"]');
+   await p.click('[data-compare="reopen"]');
   await p.click('dialog[open] [value="yes"]'); await settled();
-  ok((await api()).data.config.concludedAt === null, 'explicit confirmed reopen unlocks periods');
+   ok((await api()).data.config.concludedAt === null, 'explicit confirmed reopen unlocks periods');
+   await p.click('[data-compare="edit"]');
+   await field('compare:0:label', 'Unsaved while saving lead');
+   const beforeLead = (await api()).data.config;
+   await p.click('[data-compare="lead"][data-value="de"]');
+   await p.click('[data-compare="save-lead"]'); await settled();
+   ok((await api()).data.config.periods[0].label === beforeLead.periods[0].label
+     && await p.eval(() => document.querySelector('[data-key="compare:0:label"]').value === 'Unsaved while saving lead'
+       && !document.querySelector('[data-compare-draft-note]').hidden), 'saving the lead preserves a separate unsaved period draft');
+   await p.click('[data-compare="save"]'); await settled();
+   ok((await api()).data.config.periods[0].label === 'Unsaved while saving lead'
+     && (await api()).data.config.leadLanguage === 'de', 'period draft saves with the updated revision and keeps the saved lead');
+   const beforeConflict = (await api()).data.config;
+   await api({ ...beforeConflict, leadLanguage:'en' });
+   await p.click('[data-compare="lead"][data-value="all"]');
+   await p.click('[data-compare="save-lead"]');
+   ok(await p.waitFor(() => document.querySelector('[data-compare-error]').textContent.includes('another browser'))
+     && (await api()).data.config.leadLanguage === 'en', 'stale lead save cannot overwrite another browser’s choice');
+   await p.go(page); await settled();
   const savedPerson = (await api()).data.config;
   let otherConfig = (await api(null, { person: other })).data.config;
   if (otherConfig.concludedAt) otherConfig = (await api({ ...otherConfig, concludedAt: null }, { person: other })).data;

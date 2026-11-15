@@ -93,6 +93,29 @@ export function createComparison({ api, scope, personName, experimentId = () => 
       dialog.showModal();
     });
   }
+  async function saveLead() {
+    if (!experimentId() || s.conflict) return;
+    const target = s, owner = person, lead = view.context(s.data).lead;
+    target.busy = true; target.error = ''; render();
+    try {
+      const saved = await api().saveComparison({ ...target.data.config, leadLanguage: lead }, { person: owner });
+      target.data.config = saved;
+      target.draft.baseRevision = saved.baseRevision;
+      target.draft.leadLanguage = saved.leadLanguage;
+      target.dirty = JSON.stringify(target.draft) !== JSON.stringify(saved);
+      target.busy = false;
+      if (target !== s) return;
+      await load();
+      announce('Lead saved for this experiment.');
+    } catch (error) {
+      if (error.status === 401) { expired(); return; }
+      target.error = error.message; target.conflict = error.status === 409;
+      if (target === s) announce(error.message);
+    } finally {
+      target.busy = false;
+      if (target === s) { render(); focus(`compare:lead:${lead}`); }
+    }
+  }
   function pills() {
     const codes = s.draft.selectedLanguages;
     const c = view.context(s.data);
@@ -137,6 +160,8 @@ export function createComparison({ api, scope, personName, experimentId = () => 
     if (identity !== `${scope().person}:${experimentId()}`) return '<section class="compare"><p>Loading experiment…</p></section>';
     if (!s.draft) return `<section class="compare"><h2>Compare periods</h2>${s.error ? `<p role="alert">${e(s.error)}</p>${button('reload', 'Try again')}` : '<p>Loading saved periods…</p>'}</section>`;
     const c = view.context(s.data);
+    c.canSaveLead = !!person && !!experimentId();
+    c.leadDisabled = s.busy || s.loading || s.conflict;
     if (!person) return `<section class="compare cx"><h2>Choose a person for the experiment</h2><p>Each person has their own periods, languages and conclusion. Choose a person above to plan or open their experiment.</p>
       ${s.data.periods.length ? `<h3>Previous shared comparison</h3><p class="cx-note">Kept for reference. This comparison has not been assigned to a person.</p>${view.results(s.data, c)}` : ''}</section>`;
     return `<section class="compare cx"><h2 data-experiment-person>${e(s.data.experiment?.name || `Experiment for ${personName()}`)}</h2><p class="cx-note">For ${e(personName())}. The device filter only changes the results.</p>${setup(c)}${draftBanner()}
@@ -158,6 +183,7 @@ export function createComparison({ api, scope, personName, experimentId = () => 
     if (action === 'reverse') return hash('dir', new URLSearchParams(location.hash.slice(1)).get('dir') === 'rev' ? null : 'rev');
     if (action === 'reload') return load();
     if (!person) return;
+    if (action === 'save-lead') return saveLead();
     if (action.startsWith('cal-')) return picker.click(el, event);
     if (action === 'discard') { await load({ replace: true }); announce('Draft discarded. Saved comparison loaded.'); focus('compare:edit'); return; }
     if (action === 'save') return save();

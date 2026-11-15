@@ -35,6 +35,14 @@ Stale mutations fail atomically with 409. Missing/deleted experiments and IDs
 belonging to another person return 404. Device-scoped mutations return 422.
 Deletion cannot be undone by a stale plan save.
 
+The plan's optional `leadLanguage` saves the default "Lead with" choice for that
+experiment: a language code or `all` for the combined selection. Without it the
+view chooses automatically. A `lead` bookmark can preview another choice.
+**Save lead** persists the current choice with revision checking, including on
+concluded experiments, while retaining any separate unsaved period draft.
+Duplicating an experiment copies its saved lead. Removing that language from a
+nonempty language selection clears its saved lead.
+
 `language_experiments` stores stable IDs, person ownership, names and plans.
 Startup copies every previous `person_language_comparisons` row once, preserving
 its exact config, revision, conclusion and update time, as "My first experiment".
