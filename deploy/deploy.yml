@@ -41,6 +41,9 @@ env:
   clear:
     COOKIE_SECURE: "true"
     TIMEZONE: Europe/Zurich
+  # Home German mix; supplied by .kamal/secrets (git-ignored), never committed.
+  secret:
+    - DEEPSEEK_API_KEY
 
 volumes:
   - youtube-observer-data:/app/data

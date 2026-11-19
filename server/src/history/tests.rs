@@ -514,6 +514,7 @@ async fn history_routes_require_owner_and_validate_snapshot_pairs() {
     let app = crate::router(
         App {
             store: s,
+            feed: Arc::new(crate::feed::Feed::disabled()),
             admin_hash: Arc::new(hash("admin-key")),
             secure_cookie: false,
             timezone: chrono_tz::UTC,
@@ -681,6 +682,7 @@ async fn device_foreground_correction_preserves_evidence_time_and_other_devices(
         App {
             store: s,
             admin_hash: Arc::new(hash("admin-key")),
+            feed: Arc::new(crate::feed::Feed::disabled()),
             secure_cookie: false,
             timezone: chrono_tz::UTC,
         },

@@ -59,6 +59,8 @@ public final class Video {
     public String bgImageUrl;
     public String cardImageUrl;
     public String altCardImageUrl;
+    // Keep the publication separate from mutable playback metadata and local replacements.
+    private MediaItem mPublishedCard;
     public String author;
     public String badge;
     public String previewUrl;
@@ -161,6 +163,7 @@ public final class Video {
         video.durationMs = item.getDurationMs();
         video.searchQuery = item.getSearchQuery();
         video.mediaItem = item;
+        video.mPublishedCard = com.ultrox.owntube.OwnTubeHome.owns(item) ? item : null;
 
         return video;
     }
@@ -190,6 +193,7 @@ public final class Video {
         video.isUpcoming = item.isUpcoming;
         video.clickTrackingParams = item.clickTrackingParams;
         video.mediaItem = item.mediaItem;
+        video.mPublishedCard = item.mPublishedCard;
         video.group = item.group;
 
         return video;
@@ -289,10 +293,12 @@ public final class Video {
     }
 
     public String getTitle() {
+        if (hasPublishedCard()) return mPublishedCard.getTitle();
         return deArrowTitle != null ? deArrowTitle : title;
     }
 
     public String getTitleFull() {
+        if (hasPublishedCard()) return mPublishedCard.getTitle();
         return deArrowTitle != null ? deArrowTitle : metadataTitle != null ? metadataTitle : title;
     }
 
@@ -310,7 +316,12 @@ public final class Video {
     }
 
     public String getCardImageUrl() {
+        if (hasPublishedCard()) return mPublishedCard.getCardImageUrl();
         return altCardImageUrl != null ? altCardImageUrl : cardImageUrl;
+    }
+
+    public boolean hasPublishedCard() {
+        return mPublishedCard != null;
     }
 
     public String getAuthor() {
@@ -825,6 +836,7 @@ public final class Video {
      */
     public Video copy() {
         Video video = new Video();
+        video.mPublishedCard = mPublishedCard;
         video.videoId = videoId;
         video.playlistId = playlistId;
         video.playlistIndex = playlistIndex;

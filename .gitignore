@@ -81,6 +81,8 @@ dist/
 target/
 data/
 artifacts/
+__pycache__/
+.kamal/secrets*
 .env
 .env.*
 !.env.production.example

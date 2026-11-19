@@ -65,7 +65,7 @@ async fn expiry_invalid_person_and_start_limits_do_not_create_devices() {
 async fn routes_require_owner_to_approve_and_browser_secret_to_poll() {
     let store=store::Store::open(":memory:".into()).unwrap();
     store.add_session(store::hash("owner-session")).await.unwrap();
-    let app=crate::App{store,admin_hash:std::sync::Arc::new(store::hash("owner")),secure_cookie:false,timezone:chrono_tz::UTC};
+    let app=crate::App{store,feed:std::sync::Arc::new(crate::feed::Feed::disabled()),admin_hash:std::sync::Arc::new(store::hash("owner")),secure_cookie:false,timezone:chrono_tz::UTC};
     let router=crate::router(app,".".into());
     async fn call(r:&axum::Router,path:&str,key:Option<&str>,cookie:bool,body:Value)->(StatusCode,Value) {
         let mut req=Request::builder().method("POST").uri(path).header("content-type","application/json");

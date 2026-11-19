@@ -8,6 +8,8 @@
 import { ApiError, api } from './api.js';
 import { versionKey, recordedVersions, findVersion, versionPickerHTML, savedEvidence, EvidenceDigests } from '/shared/recorded-versions.js';
 
+if (location.hash === '#/curation' || location.hash === '#/curated') location.replace('/modules/curated/');
+
 /* ------------------------------------------------------------------ utilities */
 
 const $ = (sel, root = document) => root.querySelector(sel);

@@ -213,14 +213,23 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
     }
 
     private void initRowAndGridMapping() {
-        mRowMapping.put(MediaGroup.TYPE_HOME, getContentService().getHomeObserve());
-        mRowMapping.put(MediaGroup.TYPE_TRENDING, getContentService().getTrendingObserve());
+        mRowMapping.put(MediaGroup.TYPE_HOME, Observable.defer(() ->
+                com.ultrox.owntube.HomeFeed.enabled(getContext())
+                        ? com.ultrox.owntube.OwnTubeHome.home(getContext())
+                        : getContentService().getHomeObserve()));
+        mRowMapping.put(MediaGroup.TYPE_TRENDING, Observable.defer(() ->
+                com.ultrox.owntube.HomeFeed.enabled(getContext()) ? com.ultrox.owntube.OwnTubeHome.category(getContext(), MediaGroup.TYPE_TRENDING) : getContentService().getTrendingObserve()));
         mRowMapping.put(MediaGroup.TYPE_KIDS_HOME, getContentService().getKidsHomeObserve());
-        mRowMapping.put(MediaGroup.TYPE_SPORTS, getContentService().getSportsObserve());
-        mRowMapping.put(MediaGroup.TYPE_LIVE, getContentService().getLiveObserve());
-        mRowMapping.put(MediaGroup.TYPE_NEWS, getContentService().getNewsObserve());
-        mRowMapping.put(MediaGroup.TYPE_MUSIC, getContentService().getMusicObserve());
-        mRowMapping.put(MediaGroup.TYPE_GAMING, getContentService().getGamingObserve());
+        mRowMapping.put(MediaGroup.TYPE_SPORTS, Observable.defer(() ->
+                com.ultrox.owntube.HomeFeed.enabled(getContext()) ? com.ultrox.owntube.OwnTubeHome.category(getContext(), MediaGroup.TYPE_SPORTS) : getContentService().getSportsObserve()));
+        mRowMapping.put(MediaGroup.TYPE_LIVE, Observable.defer(() ->
+                com.ultrox.owntube.HomeFeed.enabled(getContext()) ? com.ultrox.owntube.OwnTubeHome.category(getContext(), MediaGroup.TYPE_LIVE) : getContentService().getLiveObserve()));
+        mRowMapping.put(MediaGroup.TYPE_NEWS, Observable.defer(() ->
+                com.ultrox.owntube.HomeFeed.enabled(getContext()) ? com.ultrox.owntube.OwnTubeHome.category(getContext(), MediaGroup.TYPE_NEWS) : getContentService().getNewsObserve()));
+        mRowMapping.put(MediaGroup.TYPE_MUSIC, Observable.defer(() ->
+                com.ultrox.owntube.HomeFeed.enabled(getContext()) ? com.ultrox.owntube.OwnTubeHome.category(getContext(), MediaGroup.TYPE_MUSIC) : getContentService().getMusicObserve()));
+        mRowMapping.put(MediaGroup.TYPE_GAMING, Observable.defer(() ->
+                com.ultrox.owntube.HomeFeed.enabled(getContext()) ? com.ultrox.owntube.OwnTubeHome.category(getContext(), MediaGroup.TYPE_GAMING) : getContentService().getGamingObserve()));
         mRowMapping.put(MediaGroup.TYPE_USER_PLAYLISTS, getContentService().getPlaylistRowsObserve());
 
         mGridMapping.put(MediaGroup.TYPE_SHORTS, getContentService().getShortsObserve());
@@ -851,7 +860,9 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
         //    continuation = getContentService().continueGroupObserve(mediaGroup);
         //}
 
-        continuation = getContentService().continueGroupObserve(mediaGroup);
+        continuation = com.ultrox.owntube.OwnTubeHome.owns(mediaGroup)
+                ? com.ultrox.owntube.OwnTubeHome.continueGroup(getContext(), mediaGroup)
+                : getContentService().continueGroupObserve(mediaGroup);
 
         Disposable continueAction = continuation
                 .subscribe(
@@ -866,6 +877,9 @@ public class BrowsePresenter extends BasePresenter<BrowseView> implements Sectio
                         },
                         error -> {
                             Log.e(TAG, "continueGroup error: %s", error.getMessage());
+                            if (com.ultrox.owntube.OwnTubeHome.owns(mediaGroup)) {
+                                handleLoadError(error);
+                            }
                             if (getView() != null) {
                                 getView().showProgressBar(false);
                             }

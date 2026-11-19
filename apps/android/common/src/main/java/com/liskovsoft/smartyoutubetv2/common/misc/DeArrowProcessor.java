@@ -52,9 +52,11 @@ public class DeArrowProcessor implements OnDataChange, BrowseProcessor {
         }
 
         List<String> videoIds = getVideoIds(videoGroup);
+        if (videoIds.isEmpty()) return;
         mResult = mItemService.getDeArrowDataObserve(videoIds)
                 .subscribe(deArrowData -> {
                     Video video = videoGroup.findVideoById(deArrowData.getVideoId());
+                    if (video == null || video.hasPublishedCard()) return;
                     if (mIsReplaceTitlesEnabled) {
                         video.deArrowTitle = deArrowData.getTitle();
                     }
@@ -77,7 +79,7 @@ public class DeArrowProcessor implements OnDataChange, BrowseProcessor {
         List<String> result = new ArrayList<>();
 
         for (Video video : videoGroup.getVideos()) {
-            if (video.deArrowProcessed) {
+            if (video.hasPublishedCard() || video.deArrowProcessed) {
                 continue;
             }
             video.deArrowProcessed = true;

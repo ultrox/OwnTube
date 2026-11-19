@@ -79,6 +79,20 @@ public final class TrackingActivity extends Activity {
             message.setText("Upload requested. Network backoff and key errors still apply.");
             refreshStatus();
         });
+        Button home = button(column, HomeFeed.enabled(this) ? "Server feeds: on" : "Server feeds: off", () -> { });
+        home.setOnClickListener(v -> {
+            HomeFeed.setEnabled(this, !HomeFeed.enabled(this));
+            home.setText(HomeFeed.enabled(this) ? "Server feeds: on" : "Server feeds: off");
+            message.setText("Reopen a category to apply. Home, Music, News, Gaming, Sports, Live and Trending use published server snapshots.");
+        });
+        if (HomeFeed.developmentBuild(this)) {
+            Button source = button(column, HomeFeed.local(this) ? "Home server: local Mac (ADB)" : "Home server: production", () -> { });
+            source.setOnClickListener(v -> {
+                HomeFeed.setLocal(this, !HomeFeed.local(this));
+                source.setText(HomeFeed.local(this) ? "Home server: local Mac (ADB)" : "Home server: production");
+                message.setText("Local Home uses a separate test key and an ADB reverse tunnel. Reopen Home to apply.");
+            });
+        }
         button(column, "Inspect latest captured evidence", () -> {
             EvidenceSnapshot evidence = tracking.latestEvidence;
             if (evidence == null) { message.setText("No evidence captured in this app session yet. Play a video first."); return; }

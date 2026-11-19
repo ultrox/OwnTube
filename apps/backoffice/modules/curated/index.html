@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Curated · OwnTube</title>
+  <link rel="stylesheet" href="curated.css">
+  <script type="module" src="curated.js"></script>
+</head>
+<body>
+  <header class="mast">
+    <a class="brand" href="/">◉ OwnTube <small>Backoffice</small></a>
+    <nav aria-label="Sections"><a href="/#/history">History</a><a href="/modules/languages/">Languages</a><a href="/modules/curated/" aria-current="page">Curated</a></nav>
+    <span class="live">LIVE FEED EDITOR</span>
+  </header>
+  <main id="app"><p class="empty">Loading cached feeds…</p></main>
+  <dialog id="add"><form id="add-form">
+    <header><h2>Add a video</h2><button type="button" data-action="close-add" aria-label="Close">×</button></header>
+    <p id="destination"></p>
+    <label>YouTube video URL or ID<input name="video" required autocomplete="off" placeholder="https://www.youtube.com/watch?v=…"></label>
+    <label>Position in this row<input name="position" type="number" min="1" required value="1"></label>
+    <p id="add-error" role="alert"></p>
+    <footer><button type="button" data-action="close-add">Cancel</button><button class="primary" type="submit">Look up & add to draft</button></footer>
+  </form></dialog>
+  <dialog id="catalog" class="catalog">
+    <header><div><p class="eyebrow">SOURCE LIBRARY</p><h2>HackerTube picks</h2></div><button type="button" data-action="close-catalog" aria-label="Close library">×</button></header>
+    <p id="catalog-info"></p>
+    <form id="catalog-filter" class="catalog-filter">
+      <label>Topic<select id="catalog-category"><option value="">All topics</option></select></label>
+      <label>Search<input id="catalog-search" type="search" maxlength="200" placeholder="Title, channel or topic"></label>
+      <button type="submit">Search</button>
+    </form>
+    <div class="catalog-destination">
+      <label>Add into row<select id="catalog-row"></select></label>
+      <label>At position<input id="catalog-position" type="number" min="1" step="1" value="1" required></label>
+      <label>Number of top picks<input id="catalog-count" type="number" min="1" max="48" step="1" value="6" required></label>
+      <button type="button" class="primary" data-action="catalog-batch">Add top picks to draft</button>
+    </div>
+    <p id="catalog-status" role="status" aria-live="polite"></p>
+    <div id="catalog-results" class="catalog-results"></div>
+    <button type="button" id="catalog-more" data-action="catalog-more" hidden>Load more</button>
+    <footer class="catalog-credit">Source: <a href="https://hackertube.org/data" target="_blank" rel="noopener">HackerTube</a> and
+      <a href="https://huggingface.co/datasets/open-index/hacker-news" target="_blank" rel="noopener">open-index/hacker-news</a> ·
+      <a href="https://opendatacommons.org/licenses/by/1-0/" target="_blank" rel="noopener">ODC-By 1.0</a>.
+      AI-labeled recommendations; availability and durations have not been checked.</footer>
+  </dialog>
+  <div id="notice" role="status" aria-live="polite"></div>
+</body>
+</html>

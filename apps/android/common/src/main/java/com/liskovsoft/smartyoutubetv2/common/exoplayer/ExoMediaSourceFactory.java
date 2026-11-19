@@ -284,7 +284,7 @@ public class ExoMediaSourceFactory {
      * Use OkHttp for networking
      */
     private HttpDataSource.Factory buildOkHttpDataSourceFactory(DefaultBandwidthMeter bandwidthMeter, int readTimeoutMs) {
-        OkHttpClient client = OkHttpManager.instance().getClient();
+        OkHttpClient client = com.ultrox.owntube.PlaybackHttp.streamingClient(OkHttpManager.instance().getClient());
         if (readTimeoutMs != client.readTimeoutMillis()) {
             client = client.newBuilder().readTimeout(readTimeoutMs, TimeUnit.MILLISECONDS).build(); // shares the connection pool
         }

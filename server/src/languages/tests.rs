@@ -526,6 +526,7 @@ async fn routes_require_owner_and_run_real_saved_evidence_analysis() {
     let app = crate::router(
         App {
             store: s,
+            feed: Arc::new(crate::feed::Feed::disabled()),
             admin_hash: Arc::new(hash("owner-key")),
             secure_cookie: false,
             timezone: chrono_tz::UTC,

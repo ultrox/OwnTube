@@ -58,7 +58,7 @@ public class UnlocalizedTitleProcessor implements OnDataChange, BrowseProcessor 
                         .map(newTitle -> new Pair<>(videoId, newTitle)))
                 .subscribe(title -> {
                     Video video = videoGroup.findVideoById(title.first);
-                    if (video == null) {
+                    if (video == null || video.hasPublishedCard()) {
                         return;
                     }
                     video.deArrowTitle = title.second; // sometimes player titles localized while cards not
@@ -80,7 +80,7 @@ public class UnlocalizedTitleProcessor implements OnDataChange, BrowseProcessor 
         List<String> result = new ArrayList<>();
 
         for (Video video : videoGroup.getVideos()) {
-            if (video.deArrowProcessed) {
+            if (video.hasPublishedCard() || video.deArrowProcessed) {
                 continue;
             }
             video.deArrowProcessed = true;

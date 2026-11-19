@@ -39,12 +39,27 @@ async function copyModule(source, destination) {
       if (!['tests', 'artifacts', 'node_modules'].includes(entry.name)) {
         await copyModule(`${source}/${entry.name}`, `${destination}/${entry.name}`);
       }
-    } else if (/\.(html|css|js|svg|woff2)$/.test(entry.name)) {
+    } else if (/\.(html|css|js|svg|woff2)$/.test(entry.name) && !entry.name.endsWith('.test.js')) {
       await fs.copyFile(`${source}/${entry.name}`, `${destination}/${entry.name}`);
     }
   }
 }
 await copyModule('modules', 'dist/modules');
+// Curated has its own live API and immutable asset graph.
+let curatedHtml = await fs.readFile('dist/modules/curated/index.html', 'utf8');
+const curatedModel = await fs.readFile('modules/curated/model.js');
+const curatedModelName = `model.${createHash('sha256').update(curatedModel).digest('hex').slice(0,16)}.js`;
+await fs.writeFile(`dist/modules/curated/${curatedModelName}`, curatedModel);
+const curatedGerman = await fs.readFile('modules/curated/german.js');
+const curatedGermanName = `german.${createHash('sha256').update(curatedGerman).digest('hex').slice(0,16)}.js`;
+await fs.writeFile(`dist/modules/curated/${curatedGermanName}`, curatedGerman);
+for (const file of ['curated.js', 'curated.css']) {
+  const source = (await fs.readFile(`modules/curated/${file}`, 'utf8')).replaceAll('./model.js', `./${curatedModelName}`).replaceAll('./german.js', `./${curatedGermanName}`);
+  const name = file.replace(/(\.[^.]+)$/, `.${createHash('sha256').update(source).digest('hex').slice(0,16)}$1`);
+  await fs.writeFile(`dist/modules/curated/${name}`, source);
+  curatedHtml = curatedHtml.replaceAll(`"${file}"`, `"${name}"`);
+}
+await fs.writeFile('dist/modules/curated/index.html', curatedHtml);
 await copyModule('modules/connect', 'dist/connect');
 let connectHtml = await fs.readFile('dist/connect/index.html', 'utf8');
 for (const file of ['connect.js', 'connect.css']) {

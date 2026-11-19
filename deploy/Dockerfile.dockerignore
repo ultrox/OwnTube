@@ -22,3 +22,5 @@
 !apps/backoffice/desk/**
 !apps/backoffice/shared/
 !apps/backoffice/shared/**
+!scripts/
+!scripts/german-matcher.py

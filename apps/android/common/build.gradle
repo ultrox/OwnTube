@@ -57,9 +57,14 @@ dependencies {
 
     implementation 'androidx.appcompat:appcompat:' + appCompatXVersion
     testImplementation 'junit:junit:' + junitVersion
-    testImplementation 'org.robolectric:robolectric:' + robolectricVersion
-
+    // Match owntube's test runtime; upstream 4.6.1 cannot instrument JDK 17.
+    testImplementation 'org.robolectric:robolectric:4.12.2'
     implementation project(':sharedutils')
+    // Explicit types used to exclude body-consuming diagnostics from streaming.
+    implementation 'com.squareup.okhttp3:logging-interceptor:' + okhttpVersion
+    implementation('com.localebro:okhttpprofiler:' + okhttpProfilerVersion) {
+        exclude group: 'com.squareup.okhttp3', module: 'okhttp'
+    }
     implementation project(':fragment-1.1.0')
     implementation project(':mediaserviceinterfaces')
     implementation project(':youtubeapi')

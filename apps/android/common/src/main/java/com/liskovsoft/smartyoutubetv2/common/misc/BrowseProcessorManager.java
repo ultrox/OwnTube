@@ -17,6 +17,9 @@ public class BrowseProcessorManager implements BrowseProcessor {
 
     @Override
     public void process(VideoGroup videoGroup) {
+        if (videoGroup != null && com.ultrox.owntube.OwnTubeHome.owns(videoGroup.getMediaGroup())) {
+            return; // Published titles and thumbnails are already curated.
+        }
         for (BrowseProcessor processor : mProcessors) {
             processor.process(videoGroup);
         }

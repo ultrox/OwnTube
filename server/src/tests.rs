@@ -328,6 +328,7 @@ async fn api_owner_and_device_credentials_are_separate() {
     let app = router(
         App {
             store: s,
+            feed: Arc::new(feed::Feed::disabled()),
             admin_hash: Arc::new(store::hash("owner")),
             secure_cookie: false,
             timezone: chrono_tz::UTC,

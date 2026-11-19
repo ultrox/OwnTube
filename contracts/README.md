@@ -17,6 +17,10 @@ submitted revision so an in-flight response cannot discard newer measurements.
 
 ## Planned: feed control
 
+The opt-in [cached feed and Curated contract](home-feed.md) is implemented locally.
+Real cached rows, draft/publish, and in-row edits have been verified on the Shield.
+Production rollout is pending.
+
 The curation API is not implemented. Its design must cover suggestions, firm
 exclusions, published revisions, and inspectable composition results. Blocks
 override suggestions. Recommendation exposure and viewing duration are separate

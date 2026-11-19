@@ -43,7 +43,14 @@ service, and volume names remain explicit deployment settings.
 
 ## Next feed-control slice
 
-One personal configuration for Marko: suggestions and explicit blocks, preview,
+The [cached feed editor](home-feed-bridge.md) provides an opt-in local path:
+Android category → published SQLite snapshot → existing TV rows. The backend
+refreshes YouTube sources in six-hour windows and preserves editorial overlays.
+Curated edits real rows and publishes immutable versions; the Shield has verified
+in-row insertion, removal and reorder. Its HTTP shape is documented in
+[the feed contract](../contracts/home-feed.md). Production rollout is pending.
+
+The earlier prototype proposed one personal configuration for Marko: suggestions and explicit blocks, preview,
 then publishing to OwnTube Home. Rule precedence needs a decision before real feed
 enforcement: the original plan gives hard blocks priority, while the approved
 interactive preview implements specific rules overriding general rules.

@@ -224,6 +224,8 @@ impl Store {
         compact::initialize(&db)?;
         crate::languages::initialize(&db)?;
         crate::pairing::initialize(&db)?;
+        crate::feed::cache::initialize(&db)?;
+        crate::catalog::initialize(&db)?;
         while compact::import_chunk(&mut db)? {}
         let metrics = Arc::new(crate::metrics::Metrics::default());
         metrics.pipeline(compact::progress(&db)?);

@@ -21,11 +21,14 @@ mod legacy_analytics;
 mod metrics;
 mod playback;
 mod pairing;
+mod feed;
+mod catalog;
 mod snapshots;
 
 #[derive(Clone)]
 pub struct App {
     store: store::Store,
+    feed: Arc<feed::Feed>,
     admin_hash: Arc<String>,
     secure_cookie: bool,
     timezone: chrono_tz::Tz,
@@ -429,6 +432,18 @@ fn router(app: App, public: PathBuf) -> Router {
         .route("/api/diagnostics", get(diagnostics))
         .route("/api/metrics/client", post(browser_metric))
         .route("/api/device", get(device_identity))
+        .route("/api/device/home", post(feed::cache::serve))
+        .route("/api/curation", get(feed::cache::list))
+        .route("/api/catalog/hackertube", get(catalog::browse))
+        .route("/api/catalog/hackertube/videos", get(catalog::videos))
+        .route("/api/curation/resolve", post(feed::cache::resolve))
+        .route("/api/curation/{id}", get(feed::cache::get).put(feed::cache::save))
+        .route("/api/curation/{id}/publish", post(feed::cache::publish))
+        .route("/api/curation/{id}/refresh", post(feed::cache::refresh))
+        .route("/api/curation/{id}/german", axum::routing::put(feed::cache::german::settings))
+        .route("/api/curation/{id}/german/run", post(feed::cache::german::run))
+        .route("/api/curation/{id}/german/fill", post(feed::cache::german::fill))
+        .route("/api/curation/{id}/german/undo", post(feed::cache::german::undo))
         .route("/api/events/{seq}", get(event))
         .route("/api/export", get(export))
         .route("/api/viewings/{device}/{id}", get(viewing))
@@ -474,11 +489,13 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         .parse()?;
     let app = App {
         store: store::Store::open(data.join("observer.sqlite3"))?,
+        feed: Arc::new(feed::Feed::from_env()?),
         admin_hash: Arc::new(store::hash(&admin_token)),
         secure_cookie: std::env::var("COOKIE_SECURE").is_ok_and(|v| v == "true"),
         timezone,
     };
     let address = std::env::var("BIND").unwrap_or_else(|_| "127.0.0.1:3210".into());
+    feed::cache::german::resume(app.clone());
     let listener = tokio::net::TcpListener::bind(&address).await?;
     println!("YouTube Observer listening on http://{address}");
     if std::env::var("ADMIN_TOKEN").is_err() {

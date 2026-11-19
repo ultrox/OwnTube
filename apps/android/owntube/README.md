@@ -1,5 +1,10 @@
 # OwnTube tracking
 
+An opt-in **Server Home** switch is also available in the tracking settings.
+It uses the paired device key to request Home from our backend and adapts the
+result to the existing TV renderer. See the
+[development status and setup](../../../docs/home-feed-bridge.md).
+
 The `owntube` Android library owns pairing, capture, storage, delivery, and the settings screen.
 It is active only in package `com.ultrox.owntube`. No upstream submodule is modified.
 
