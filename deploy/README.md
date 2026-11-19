@@ -95,7 +95,16 @@ The Languages follow-up `owntube-languages-20261113-2` uses the same process fro
 commit `4369a6835`, with mobile wrapping and content-hashed module assets. Its
 backend binary is identical to `-1`; the same backup and image-only rollback apply.
 
-## Lead settings release
+## Home feed release
+
+`owntube-home-feed-20261119-1`, source `21781c421`, serves the curated TV Home feed
+from production instead of the Mac/ADB tunnel, with the Curated editor and
+HackerTube catalog. The image adds Python, pinned yt-dlp, Deno and the German
+matcher; automatic German matching is paused on hserver (YouTube bot-checks its
+per-video lookups). Home version 42 and the catalog were migrated to the TV's
+production device. See [release details](../docs/releases/home-feed.md).
+
+## Previous lead settings release
 
 `owntube-lead-settings-20261115-1`, source `b15cf589b`, requires the lead language
 when creating an experiment and moves later changes into automatically saved

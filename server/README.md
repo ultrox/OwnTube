@@ -309,7 +309,19 @@ All 45 Android unit regressions, a disposable-backend HTTP contract test and the
 The ARM64 APK was installed on the Shield on 2026-11-13; versionCode 2466 and the retained app-data
 directory were verified. Post-update playback capture has not yet been checked on-device.
 
-### Current release: `owntube-lead-settings-20261115-1`
+### Current release: `owntube-home-feed-20261119-1`
+
+Deployed on 2026-11-19 from `21781c421` (deploy config `f86cf014a`) using
+`kamal app boot -c deploy/deploy.yml --version owntube-home-feed-20261119-1`.
+Container `94bcbfdfd230`, image identity
+`sha256:0de69af888e085873d8bc3a839fa0a5d9dac7631477f1324e8a7b35ad2354aea`.
+Adds server-side curated TV feeds; automatic German matching is paused here.
+Backup `before-owntube-home-feed-20261119-1`, SHA-256
+`35bfe7b21fa55cbf5a8f69d28f8cbba664581cce29a57b548e69013d14470ec3`.
+Verification, migration, downtime and rollback:
+[`docs/releases/home-feed.md`](../docs/releases/home-feed.md).
+
+### Previous release: `owntube-lead-settings-20261115-1`
 
 Deployed on 2026-11-15 from `b15cf589b` using
 `kamal app boot -c deploy/deploy.yml --version owntube-lead-settings-20261115-1`.

@@ -33,9 +33,17 @@ content is served immediately while refreshing; errors retain the last good
 publication. Edits persist across refreshes. The first snapshot takes longer to
 prepare. Cache size and limits are disclosed in the UI.
 
+## Production
+
+Since 2026-11-19 the TV uses `https://ytdash.gromobran.com` (release
+`owntube-home-feed-20261119-1`); edit feeds at `/modules/curated/` there with the
+production owner key. The local setup below is for development only. Automatic
+German matching is paused in production; see
+[the release notes](releases/home-feed.md).
+
 ## Local setup
 
-No production deployment is needed. Build the web app and server:
+For development only. Build the web app and server:
 
 ```sh
 pnpm --dir apps/backoffice build
