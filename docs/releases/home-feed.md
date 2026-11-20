@@ -78,4 +78,19 @@ navigation (previously only History linked it). Frontend only: the server binary
 is byte-identical to the Home feed release. Healthy handover without downtime;
 public pages serve the new link. Rollback: `kamal rollback owntube-home-feed-20261119-1 -c deploy/deploy.yml`.
 
+## Follow-up: `owntube-deepseek-key-20261120-1`
+
+Source `45c8db2b9`. Fixes a frozen Home: with the mix enabled, refreshes waited for
+the mix to publish, and while it could not run (no key) Home stayed on version 42.
+Refreshes now publish directly unless the mix can run now, and a failed mix still
+publishes a newer source. Owners can save a DeepSeek key in Curated (verified with
+DeepSeek, stored 0600 as `DATA_DIR/deepseek-api-key`, never returned; included in
+volume backups). `DEEPSEEK_API_KEY` is restored in `deploy.yml` from `.env` and takes
+precedence. A configured key lifts the stale missing-key pause. 77 Rust and 9 JS
+tests passed; candidate matched the previous image except timestamps; healthy
+handover. Backup `before-owntube-deepseek-key-20261120-1`, SHA-256
+`62c4a918d8a61c3a0b037f294fbdf490b7cd8233d125be17b539d1af57a5ebd3`.
+Rollback: `kamal rollback owntube-curated-nav-20261120-1 -c deploy/deploy.yml`.
+YouTube still bot-checks per-video lookups from hserver, so expect few matches.
+
 The former local data is retained at `~/.local/state/owntube-home/data` on the Mac.
