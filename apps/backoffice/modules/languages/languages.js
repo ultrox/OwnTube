@@ -267,7 +267,7 @@ function renderChrome() {
   // sits beside the History desk at the backoffice root; the old dashboard lives at /legacy/.
   $('#nav').innerHTML = DEMO
     ? `<a class="nav__link" href="../../#/curation">Curation</a><a class="nav__link" href="../../#/history">History</a><a class="nav__link" href="./?demo=1" aria-current="page">Languages</a>`
-    : `<a class="nav__link" href="../../#/history" data-nav="history">History</a><a class="nav__link" href="./" aria-current="page" data-nav="languages">Languages</a>`;
+    : `<a class="nav__link" href="../../#/history" data-nav="history">History</a><a class="nav__link" href="./" aria-current="page" data-nav="languages">Languages</a><a class="nav__link" href="../curated/" data-nav="curated">Curated</a>`;
   renderMastEnd();
 }
 function renderMastEnd() {
