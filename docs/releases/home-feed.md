@@ -71,4 +71,11 @@ Schema additions only (`curated_*`, `catalog_*`). Image-only rollback:
 image ignores the new tables; keep the data volume. Then set the TV's `local`
 preference back on only if a Mac server and tunnel are running.
 
+## Follow-up: `owntube-curated-nav-20261120-1`
+
+Source `e494abaef` adds the **Curated** link to the Languages and Connect device
+navigation (previously only History linked it). Frontend only: the server binary
+is byte-identical to the Home feed release. Healthy handover without downtime;
+public pages serve the new link. Rollback: `kamal rollback owntube-home-feed-20261119-1 -c deploy/deploy.yml`.
+
 The former local data is retained at `~/.local/state/owntube-home/data` on the Mac.

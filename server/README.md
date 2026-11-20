@@ -309,7 +309,13 @@ All 45 Android unit regressions, a disposable-backend HTTP contract test and the
 The ARM64 APK was installed on the Shield on 2026-11-13; versionCode 2466 and the retained app-data
 directory were verified. Post-update playback capture has not yet been checked on-device.
 
-### Current release: `owntube-home-feed-20261119-1`
+### Current release: `owntube-curated-nav-20261120-1`
+
+Frontend-only follow-up from `e494abaef`: Curated is linked from Languages and
+Connect device. Same server binary as below. See
+[`docs/releases/home-feed.md`](../docs/releases/home-feed.md#follow-up-owntube-curated-nav-20261120-1).
+
+### Previous release: `owntube-home-feed-20261119-1`
 
 Deployed on 2026-11-19 from `21781c421` (deploy config `f86cf014a`) using
 `kamal app boot -c deploy/deploy.yml --version owntube-home-feed-20261119-1`.
