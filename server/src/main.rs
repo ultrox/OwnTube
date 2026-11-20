@@ -437,6 +437,7 @@ fn router(app: App, public: PathBuf) -> Router {
         .route("/api/catalog/hackertube", get(catalog::browse))
         .route("/api/catalog/hackertube/videos", get(catalog::videos))
         .route("/api/curation/resolve", post(feed::cache::resolve))
+        .route("/api/curation/deepseek-key", axum::routing::put(feed::cache::german::save_key).delete(feed::cache::german::remove_key))
         .route("/api/curation/{id}", get(feed::cache::get).put(feed::cache::save))
         .route("/api/curation/{id}/publish", post(feed::cache::publish))
         .route("/api/curation/{id}/refresh", post(feed::cache::refresh))

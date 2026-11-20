@@ -236,7 +236,7 @@ fn queue_refresh(app: App, id: String, request: Request, headers: HeaderMap) {
                     doc.error = None;
                     doc.retry_at = 0;
                     doc.next_refresh_at = (now().div_euclid(WINDOW) + 1) * WINDOW;
-                    if doc.category == "home" && doc.german.settings.enabled {
+                    if german::defer_to_mix(&doc) {
                         doc.german.undo_version = (doc.version>0).then_some(doc.version);
                         store(&tx, &doc)?;
                     } else {

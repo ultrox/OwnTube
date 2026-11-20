@@ -41,10 +41,11 @@ env:
   clear:
     COOKIE_SECURE: "true"
     TIMEZONE: Europe/Zurich
-  # Automatic Home German matching is paused on hserver: YouTube bot-checks its
-  # per-video audio lookups from this datacenter address. Existing matches remain
-  # published. To resume (after routing lookups via a residential connection), add:
-  #   secret: [DEEPSEEK_API_KEY]   # supplied by git-ignored .kamal/secrets
+  # Home German mix. Read from the git-ignored .env via .kamal/secrets; never committed.
+  # Takes precedence over a key saved in the Curated editor. Note: YouTube bot-checks
+  # per-video audio lookups from this datacenter address, so few matches are expected.
+  secret:
+    - DEEPSEEK_API_KEY
 
 volumes:
   - youtube-observer-data:/app/data

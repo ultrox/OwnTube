@@ -57,6 +57,14 @@ function mixUsage(report) {
   const u=report.totalUsage;
   return `${u.apiCalls} translation calls · ${u.inputTokens} input + ${u.outputTokens} output tokens · ${u.estimatedCostUsd==null?'cost unavailable':`$${Number(u.estimatedCostUsd).toFixed(6)} estimated total (peak rates)`}.`;
 }
+// The key is write-only: the server reports where it comes from, never its value.
+function deepseekKey(g) {
+  const busy=state.busy?'disabled':'';
+  const form=label=>`<form id="deepseek-key" class="key-form"><label>${label}<input name="key" type="password" required minlength="20" maxlength="200" autocomplete="off" spellcheck="false" data-1p-ignore data-lpignore="true" data-bwignore data-protonpass-ignore placeholder="sk-…" ${busy}></label><button class="primary" ${busy}>Check & save key</button></form>`;
+  if(g.keySource==='server')return '<p class="key-status">DeepSeek key: set in the server configuration.</p>';
+  if(g.keySource==='saved')return `<div class="key-status"><p>DeepSeek key: saved here.</p><details><summary>Replace or remove the key</summary>${form('New DeepSeek API key')}<button type="button" data-action="deepseek-remove" ${busy}>Remove saved key</button></details></div>`;
+  return `<div class="key-status"><p class="banner">Add your DeepSeek API key to start matching. It is checked with DeepSeek, stored only on the server and never shown again.</p>${form('DeepSeek API key')}</div>`;
+}
 function germanPanel(d) {
   if(d.category!=='home')return '';
   const g=d.german,s=state.mixDraft||g.settings,disabled=state.busy||state.dirty?'disabled':'';
@@ -67,8 +75,8 @@ function germanPanel(d) {
     <strong data-mix-headline>${esc(mixHeadline(g))}</strong></header>
     <p data-mix-progress role="status" aria-live="polite">${esc(mixProgress(g))}</p>
     <p class="explain">At each chosen position, search using that original video’s translated title. Its German alternative takes that position; the original stays in this row’s tail, below the first ten. Other rows stay unchanged. At the row cap, an ordinary tail card gives way (it remains in the source snapshot). Pins, manual cards and matching positions are protected; rows without a safe tail slot stay unchanged. Alternatives require German original-audio metadata, not just a localized title. Existing German-title originals remain a title estimate.</p>
-    ${!g.configured?'<p class="banner">Configure the server’s DeepSeek key to start matching.</p>':''}
-    ${g.error?`<p class="banner error">${esc(g.error)}</p>`:''}
+    ${deepseekKey(g)}
+    ${g.error&&!/^(Add a DeepSeek API key|Set DEEPSEEK_API_KEY)/.test(g.error)?`<p class="banner error">${esc(g.error)}</p>`:''}
     <form id="german-settings"><fieldset ${disabled}><div class="german-controls">
       <label><span>Automatic publication</span><input name="enabled" type="checkbox" ${s.enabled?'checked':''}></label>
       <label>Whole-Home target (%)<input name="targetPercent" type="number" min="0" max="100" required value="${s.targetPercent}"></label>
@@ -395,6 +403,10 @@ document.addEventListener('click', async event => {
         await request(`/api/curation/${d.id}/german/${action.slice('german-'.length)}`,'POST',{revision:d.revision,generation:d.generation});
         await load(d.id);
       });break;
+    case 'deepseek-remove':
+      if(!confirm('Remove the saved DeepSeek key? Automatic German matching stops until a key is added again.'))return;
+      await run(async()=>{await request('/api/curation/deepseek-key','DELETE');await load(state.doc.id);notice('Saved DeepSeek key removed.');});
+      break;
     case 'save': case 'publish': await run(async()=>{
       const d=state.doc;
       await request(`/api/curation/${d.id}${action==='publish'?'/publish':''}`,action==='publish'?'POST':'PUT',{revision:d.revision,generation:d.generation,edits:state.edits});
@@ -477,6 +489,19 @@ document.addEventListener('submit',async event=>{
       state.mixDraft=null;
       await load(d.id);notice(result.changed===false?'These mix rules are already saved.':'Mix rules applied. Title-search matches publish automatically.');
     });return;
+  }
+  if(event.target.id==='deepseek-key') {
+    event.preventDefault();
+    const form=event.target;
+    if(state.busy||!form.reportValidity())return;
+    const key=new FormData(form).get('key');
+    form.reset();
+    await run(async()=>{
+      await request('/api/curation/deepseek-key','PUT',{key});
+      await load(state.doc.id);
+      notice(state.doc.german.settings.enabled?'Key accepted by DeepSeek and saved. Matching starts now.':'Key accepted by DeepSeek and saved. Turn on Automatic publication and apply to start matching.');
+    });
+    return;
   }
   if(event.target.id==='catalog-filter') {event.preventDefault();await loadLibrary();return;}
   if(event.target.id==='login') {

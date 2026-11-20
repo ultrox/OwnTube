@@ -194,7 +194,97 @@ pub(super) fn selection(doc: &Document, edits: &Edits) -> (Vec<Row>, Vec<Match>,
     (rows, selected, total, native)
 }
 
-fn configured() -> bool {
+/// Hold a refreshed Home for the mix only when the mix can actually run now;
+/// otherwise the refresh publishes immediately with existing matches.
+pub(super) fn defer_to_mix(doc: &Document) -> bool {
+    doc.category == "home" && doc.german.settings.enabled && configured() && doc.german.retry_at <= now()
+}
+pub(super) const MISSING_KEY: &str = "Add a DeepSeek API key above to start matching.";
+fn missing_key_error(error: &str) -> bool { error == MISSING_KEY || error.starts_with("Set DEEPSEEK_API_KEY") }
+/// Once a key exists (server config or saved), lift the stale missing-key pause.
+fn clear_missing_key(doc: &mut Document, configured: bool) -> bool {
+    if !configured || !doc.german.error.as_deref().is_some_and(missing_key_error) { return false; }
+    doc.german.error = None;
+    doc.german.retry_at = 0;
+    true
+}
+
+/// Owner-saved key, kept beside the database and never returned to clients.
+fn saved_key_path() -> std::path::PathBuf {
+    std::path::PathBuf::from(std::env::var("DATA_DIR").unwrap_or_else(|_| "data".into())).join("deepseek-api-key")
+}
+pub(super) fn configured() -> bool { server_configured() || saved_key_path().is_file() }
+/// "server" (environment/config file, takes precedence), "saved" (owner UI) or none.
+fn key_source() -> Option<&'static str> {
+    if server_configured() { Some("server") } else if saved_key_path().is_file() { Some("saved") } else { None }
+}
+fn valid_key(key: &str) -> bool { (20..=200).contains(&key.len()) && key.bytes().all(|b| b.is_ascii_graphic()) }
+/// Atomically replace the key file with owner-only permissions.
+fn write_key(path: &std::path::Path, key: &str) -> std::io::Result<()> {
+    use std::io::Write;
+    let temporary = path.with_extension(format!("tmp-{}", token()));
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)] { use std::os::unix::fs::OpenOptionsExt; options.mode(0o600); }
+    let result = options.open(&temporary).and_then(|mut file| { file.write_all(key.as_bytes())?; file.sync_all() })
+        .and_then(|_| std::fs::rename(&temporary, path));
+    if result.is_err() { let _ = std::fs::remove_file(&temporary); }
+    result
+}
+/// Ask DeepSeek whether it accepts the key (lists models; no tokens are used).
+async fn verify_key(base: &str, key: &str) -> Result<()> {
+    let response = reqwest::Client::builder().timeout(Duration::from_secs(15)).build()
+        .map_err(|_| upstream_error("Could not check the key with DeepSeek"))?
+        .get(format!("{base}/models")).bearer_auth(key).send().await
+        .map_err(|_| upstream_error("Could not reach DeepSeek to check the key; it was not saved. Try again."))?;
+    match response.status().as_u16() {
+        200..=299 => Ok(()),
+        401 | 403 => Err(invalid("DeepSeek rejected this key; it was not saved.")),
+        _ => Err(upstream_error("DeepSeek could not check the key right now; it was not saved. Try again.")),
+    }
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct KeyInput { key: String }
+pub async fn save_key(axum::extract::State(app): axum::extract::State<App>, headers: HeaderMap, Json(input): Json<KeyInput>) -> Result<Json<Value>> {
+    owner(&app, &headers).await?;
+    let key = input.key.trim().to_owned();
+    if !valid_key(&key) { return Err(invalid("Paste the whole DeepSeek API key (20–200 characters, no spaces).")); }
+    let base = std::env::var("DEEPSEEK_API_BASE").unwrap_or_else(|_| "https://api.deepseek.com".into());
+    verify_key(&base, &key).await?;
+    let path = saved_key_path();
+    tokio::task::spawn_blocking(move || write_key(&path, &key)).await
+        .map_err(|_| upstream_error("Could not save the key"))?.map_err(|_| upstream_error("Could not save the key"))?;
+    // Lift the missing-key pause so matching can start now rather than after its cooldown.
+    let ids = app.store.run(|db| {
+        let texts = db.prepare("SELECT payload FROM curated_feeds")?
+            .query_map([], |r| r.get::<_, String>(0))?.collect::<rusqlite::Result<Vec<_>>>()?;
+        let tx = db.transaction()?;
+        let mut ids = Vec::new();
+        for text in texts {
+            let mut doc: Document = decode(&text)?;
+            if clear_missing_key(&mut doc, true) {
+                store(&tx, &doc)?;
+                if doc.german.settings.enabled { ids.push(doc.id); }
+            }
+        }
+        tx.commit()?;
+        Ok(ids)
+    }).await?;
+    for id in ids { queue(app.clone(), id); }
+    Ok(Json(json!({"ok":true,"keySource":key_source()})))
+}
+pub async fn remove_key(axum::extract::State(app): axum::extract::State<App>, headers: HeaderMap) -> Result<Json<Value>> {
+    owner(&app, &headers).await?;
+    match std::fs::remove_file(saved_key_path()) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(_) => return Err(upstream_error("Could not remove the key")),
+    }
+    Ok(Json(json!({"ok":true,"keySource":key_source()})))
+}
+
+fn server_configured() -> bool {
     std::env::var("DEEPSEEK_API_KEY").is_ok_and(|v| !v.trim().is_empty())
         || std::env::var("DEEP_SEEK_API").is_ok_and(|v| !v.trim().is_empty())
         || std::env::var("DEEPSEEK_API_KEY_FILE").is_ok_and(|p| std::path::Path::new(&p).is_file())
@@ -204,7 +294,7 @@ fn configured() -> bool {
 }
 pub(super) fn view(doc: &Document, running: bool) -> Value {
     let Publication { selected, total, native } = &doc.german.publication;
-    json!({"settings":doc.german.settings,"running":running,"fillPending":doc.german.fill_pending,"configured":configured(),"evidenceMode":"title-search-audio",
+    json!({"settings":doc.german.settings,"running":running,"fillPending":doc.german.fill_pending,"configured":configured(),"keySource":key_source(),"evidenceMode":"title-search-audio",
         "checkedAt":doc.german.checked_at,"retryAt":doc.german.retry_at,"error":doc.german.error,"undoAvailable":doc.german.undo_version.is_some(),
         "matches":doc.german.matches,"selected":selected,"nativeOriginals":doc.german.native_originals,
         "total":total,"native":native,"replacements":selected.len(),
@@ -321,9 +411,12 @@ pub async fn undo(axum::extract::State(app): axum::extract::State<App>, headers:
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Output { matches: Vec<Match>, native_originals: Vec<String>, report: Value }
 async fn worker(doc: &Document, feed: &Feed) -> Result<Output> {
-    if !configured() { return Err(invalid("Set DEEPSEEK_API_KEY or DEEPSEEK_API_KEY_FILE on the server to start matching.")); }
+    if !configured() { return Err(invalid(MISSING_KEY)); }
     let script=std::env::var("OWNTUBE_GERMAN_WORKER").unwrap_or_else(|_| "scripts/german-matcher.py".into());
-    let mut child=tokio::process::Command::new("python3").arg(script)
+    let mut command=tokio::process::Command::new("python3");
+    // Server configuration takes precedence; otherwise hand the worker the owner-saved key file.
+    if !server_configured() { command.env("DEEPSEEK_API_KEY_FILE", saved_key_path()); }
+    let mut child=command.arg(script)
         .stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped()).kill_on_drop(true).spawn()
         .map_err(|_| upstream_error("Could not start the German matcher"))?;
@@ -432,7 +525,9 @@ fn complete(db: &mut Connection, key: &str, doc: &Document, output: Result<Outpu
         Err(error) => {
             current.german.retry_at=now()+if error.0==StatusCode::TOO_MANY_REQUESTS {3_600_000} else {WINDOW};
             current.german.error=Some(error.1);
-            store(&tx,&current)?;
+            // Never let a failed mix freeze the feed: publish a newer source with existing matches.
+            if current.cached_at.unwrap_or(0) > current.published_at.unwrap_or(0) { publish_rows(&tx,&mut current)?; }
+            else { store(&tx,&current)?; }
         }
     }
     tx.commit()?;
@@ -471,6 +566,9 @@ pub fn resume(app: App) {
                 for text in texts {
                     let mut doc:Document=decode(&text)?;
                     if doc.category!="home" { continue; }
+                    if clear_missing_key(&mut doc, configured()) {
+                        let tx=db.transaction()?;store(&tx,&doc)?;tx.commit()?;
+                    }
                     if title_mode(&mut doc) {
                         // Retire title-only selections immediately, even if the
                         // provider is unavailable. Existing pagination is immutable.

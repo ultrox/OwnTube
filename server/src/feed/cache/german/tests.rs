@@ -238,6 +238,8 @@ async fn all_mix_controls_require_owner_authentication() {
         ("POST","/api/curation/test/german/run",json!({})),
         ("POST","/api/curation/test/german/fill",json!({"revision":0,"generation":0})),
         ("POST","/api/curation/test/german/undo",json!({"revision":0,"generation":0})),
+        ("PUT","/api/curation/deepseek-key",json!({"key":"sk-0123456789abcdef0123"})),
+        ("DELETE","/api/curation/deepseek-key",json!({})),
     ] {
         let response=router.clone().oneshot(axum::http::Request::builder().method(method).uri(url)
             .header("Authorization","Bearer device").header("Content-Type","application/json")
@@ -245,6 +247,89 @@ async fn all_mix_controls_require_owner_authentication() {
         assert_eq!(response.status(),StatusCode::UNAUTHORIZED);
     }
     drop(router);let _=std::fs::remove_file(path);
+}
+
+#[test]
+fn saved_key_is_validated_private_and_atomically_replaced() {
+    assert!(valid_key("sk-0123456789abcdef0123"));
+    for bad in ["", "short", "sk-0123456789 abcdef0123", &"x".repeat(201), "sk-0123456789abcdéf0123"] {
+        assert!(!valid_key(bad), "{bad:?}");
+    }
+    let dir=std::env::temp_dir().join(format!("deepseek-key-{}",token()));
+    std::fs::create_dir(&dir).unwrap();
+    let path=dir.join("deepseek-api-key");
+    write_key(&path,"sk-first-key-0123456789").unwrap();
+    write_key(&path,"sk-second-key-0123456789").unwrap();
+    assert_eq!(std::fs::read_to_string(&path).unwrap(),"sk-second-key-0123456789");
+    #[cfg(unix)] {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode()&0o777,0o600);
+    }
+    assert_eq!(std::fs::read_dir(&dir).unwrap().count(),1,"no temporary files remain");
+    let _=std::fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
+async fn key_check_distinguishes_rejected_keys_from_unavailable_provider() {
+    let upstream=Router::new().route("/models",axum::routing::get(|headers:HeaderMap| async move {
+        match headers.get("authorization").and_then(|v|v.to_str().ok()) {
+            Some("Bearer sk-good-key-0123456789") => StatusCode::OK,
+            Some("Bearer sk-down-key-0123456789") => StatusCode::SERVICE_UNAVAILABLE,
+            _ => StatusCode::UNAUTHORIZED,
+        }
+    }));
+    let listener=tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base=format!("http://{}",listener.local_addr().unwrap());
+    let task=tokio::spawn(async move {axum::serve(listener,upstream).await.unwrap()});
+    assert!(verify_key(&base,"sk-good-key-0123456789").await.is_ok());
+    assert_eq!(verify_key(&base,"sk-bad-key-0123456789").await.err().unwrap().0,StatusCode::UNPROCESSABLE_ENTITY);
+    assert_ne!(verify_key(&base,"sk-down-key-0123456789").await.err().unwrap().0,StatusCode::UNPROCESSABLE_ENTITY);
+    task.abort();
+    assert!(verify_key("http://127.0.0.1:1","sk-good-key-0123456789").await.is_err());
+}
+
+#[tokio::test]
+async fn failed_mix_publishes_newer_source_once_and_never_freezes_home() {
+    let path=std::env::temp_dir().join(format!("german-freeze-{}.sqlite3",token()));
+    let s=store::Store::open(path.clone()).unwrap();
+    s.create_device("tv".into(),"TV".into(),"".into(),store::hash("device")).await.unwrap();
+    let mut d=document();
+    d.german.settings.enabled=true;
+    s.run({let mut d=d.clone();move |db| {store(db,&d)?;publish_rows(db,&mut d)}}).await.unwrap();
+    // A refresh stored a newer source but the mix failed: publish it anyway.
+    let refreshed=s.run(|db| {let mut d=load(db,"test")?;d.cached_at=Some(d.published_at.unwrap()+1);d.generation+=1;store(db,&d)?;Ok(d)}).await.unwrap();
+    let missing=Err(invalid(MISSING_KEY));
+    s.run({let r=refreshed.clone();move |db| complete(db,"test",&r,missing)}).await.unwrap();
+    let after=s.read(|db| load(db,"test")).await.unwrap();
+    assert_eq!(after.version,refreshed.version+1,"newer source published despite the failed mix");
+    assert_eq!(after.german.error.as_deref(),Some(MISSING_KEY));
+    // A repeated failure without newer source does not create another version.
+    s.run({let a=after.clone();move |db| complete(db,"test",&a,Err(invalid(MISSING_KEY)))}).await.unwrap();
+    assert_eq!(s.read(|db| load(db,"test")).await.unwrap().version,after.version);
+    // Only an enabled, runnable Home mix may hold back a refreshed publication.
+    let mut held=after.clone();
+    held.german.retry_at=now()+60_000;
+    assert!(!defer_to_mix(&held));
+    held.german.retry_at=0;held.category="music".into();
+    assert!(!defer_to_mix(&held));
+    held.category="home".into();held.german.settings.enabled=false;
+    assert!(!defer_to_mix(&held));
+    held.german.settings.enabled=true;
+    assert_eq!(defer_to_mix(&held),configured());
+    drop(s);let _=std::fs::remove_file(path);
+}
+
+#[test]
+fn a_new_key_lifts_only_the_missing_key_pause() {
+    let mut d=document();
+    for old in [MISSING_KEY,"Set DEEPSEEK_API_KEY or DEEPSEEK_API_KEY_FILE on the server to start matching."] {
+        d.german.error=Some(old.into());d.german.retry_at=now()+WINDOW;
+        assert!(!clear_missing_key(&mut d,false),"still no key: keep the pause");
+        assert!(clear_missing_key(&mut d,true));
+        assert_eq!((d.german.error.as_deref(),d.german.retry_at),(None,0));
+    }
+    d.german.error=Some("DeepSeek rate limit".into());d.german.retry_at=now()+WINDOW;
+    assert!(!clear_missing_key(&mut d,true),"other provider errors keep their cooldown");
 }
 
 #[test]
