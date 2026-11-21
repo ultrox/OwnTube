@@ -53,13 +53,8 @@ watch history.
 
 `deploy.yml` retains service/image `youtube-observer`, host
 `ytdash.gromobran.com`, and volume `youtube-observer-data:/app/data`.
-The configuration now uses this repository's Dockerfile paths. A future release
-must build from this repository and preserve the existing database and owner key.
-
-```sh
-# From the repository root, when preparing an intentional production release:
-kamal deploy -c deploy/deploy.yml
-```
+Releases must preserve the existing database and owner key. Do not use
+`kamal deploy`; follow [hserver rules for every release](#hserver-rules-for-every-release).
 
 Historical release and recovery records are retained in
 [`server/README.md`](../server/README.md). Repository reorganization alone does not
@@ -100,10 +95,32 @@ backend binary is identical to `-1`; the same backup and image-only rollback app
 Agreed with the hserver administrator (Hox) on 2026-11-21 after OwnTube release
 files grew the root disk from 14 GB to 41 GB.
 
-**Builds.** Never build images on hserver; it only pulls and runs. Build in CI
-(GitHub Actions → private GHCR, deploy by digest) or on the Mac. Until the CI
-pipeline is in place, ask Hox before any on-server build. Do not prune the shared
-builder or build cache; that is administrator-owned.
+**Builds.** Never build images on hserver; it only pulls and runs. Do not prune the
+shared builder or build cache; that is administrator-owned.
+
+Images are built by GitHub Actions (`.github/workflows/hserver-image.yml`) on every
+push to `master` that touches the server image, as native AMD64, and published as
+`ghcr.io/ultrox/youtube-observer:<full commit SHA>`. The run uploads `release.json`
+(image, version, digest). The GHCR package must be **private**; this repository is
+public, so set the package's visibility to Private in its GitHub package settings
+once after the first build. The deploy tool refuses a public package.
+
+Release, from the repository root, after the CI run succeeds and the pre-release
+backup is taken and mirrored:
+
+```sh
+gh run download <run-id> -R ultrox/OwnTube -n release -D /tmp/owntube-release
+export DEEPSEEK_API_KEY="$(sed -n 's/^DEEP_SEEK_API=//p' .env)"   # never echo it
+python3 /Users/marko/code/elm-rust-starter/deployment/tools/deploy.py deploy hserver-app.json \
+  --release /tmp/owntube-release/release.json
+```
+
+`deploy.py` (elm-rust-starter platform) verifies the package is private, pulls the
+exact digest with the Keychain `ghcr` credential, checks AMD64 and the commit label,
+runs Kamal's health-gated `app boot`, then public checks from `hserver-app.json`.
+`config/deploy.hserver.yml` is generated from the manifest by `deploy.py scaffold`;
+do not hand-edit it. Rollback: `kamal rollback <commit SHA> -c config/deploy.hserver.yml`.
+`deploy/deploy.yml` is legacy, kept only to roll back to pre-CI releases.
 
 <a id="hserver-retention"></a>**Retention.** Run after every release, once it is
 verified:

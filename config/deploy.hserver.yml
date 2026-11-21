@@ -1,0 +1,59 @@
+{
+  "service": "youtube-observer",
+  "image": "ultrox/youtube-observer",
+  "servers": {
+    "web": [
+      "hserver"
+    ]
+  },
+  "ssh": {
+    "user": "marko",
+    "keys": [
+      "~/.ssh/id_ed25519"
+    ],
+    "keys_only": true,
+    "proxy_command": "tailscale nc %h %p"
+  },
+  "registry": {
+    "server": "ghcr.io",
+    "username": "ultrox",
+    "password": [
+      "KAMAL_REGISTRY_PASSWORD"
+    ]
+  },
+  "builder": {
+    "arch": "amd64",
+    "context": ".",
+    "dockerfile": "deploy/Dockerfile"
+  },
+  "proxy": {
+    "host": "ytdash.gromobran.com",
+    "app_port": 3210,
+    "ssl": false,
+    "forward_headers": true,
+    "healthcheck": {
+      "path": "/health"
+    },
+    "run": {
+      "bind_ips": [
+        "127.0.0.1"
+      ],
+      "http_port": 8080,
+      "https_port": 8443
+    }
+  },
+  "deploy_timeout": 45,
+  "drain_timeout": 15,
+  "volumes": [
+    "youtube-observer-data:/app/data"
+  ],
+  "env": {
+    "clear": {
+      "COOKIE_SECURE": "true",
+      "TIMEZONE": "Europe/Zurich"
+    },
+    "secret": [
+      "DEEPSEEK_API_KEY"
+    ]
+  }
+}

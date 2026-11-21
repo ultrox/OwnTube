@@ -1,4 +1,8 @@
-# Run Kamal from the repository root with -c deploy/deploy.yml.
+# LEGACY, rollback only: releases up to owntube-deepseek-key-20261120-1 used
+# hserver-built localhost:5555 images. New releases use hserver-app.json and
+# config/deploy.hserver.yml (CI-built GHCR images; see deploy/README.md). Never
+# build or `kamal deploy` with this file. Rollback example, from the repo root:
+#   kamal rollback owntube-curated-nav-20261120-1 -c deploy/deploy.yml
 service: youtube-observer
 image: youtube-observer
 
@@ -31,11 +35,9 @@ proxy:
 registry:
   server: localhost:5555
 
+# No remote builder: images are never built on hserver (administrator policy).
 builder:
   arch: amd64
-  remote: ssh://marko@hserver
-  context: .
-  dockerfile: deploy/Dockerfile
 
 env:
   clear:

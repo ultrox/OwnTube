@@ -1,0 +1,16 @@
+{
+  "service": "youtube-observer",
+  "github_repository": "ultrox/OwnTube",
+  "hostname": "ytdash.gromobran.com",
+  "port": 3210,
+  "health_path": "/health",
+  "dockerfile": "deploy/Dockerfile",
+  "context": ".",
+  "volumes": ["youtube-observer-data:/app/data"],
+  "env": {"COOKIE_SECURE": "true", "TIMEZONE": "Europe/Zurich"},
+  "secret_names": ["DEEPSEEK_API_KEY"],
+  "http_checks": [
+    {"path": "/", "status": 200},
+    {"path": "/modules/curated/", "status": 200}
+  ]
+}
