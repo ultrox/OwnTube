@@ -298,6 +298,11 @@ An invalid event rejects the entire batch. Keep client clocks reasonably synchro
 
 Production address: **https://ytdash.gromobran.com**.
 
+Every release follows the [hserver rules](../deploy/README.md#hserver-rules-for-every-release):
+no image builds on hserver, and `deploy/retention.py` applies backup/release/Docker
+retention afterwards. Older release records below mention on-server builds and
+retained candidate copies; those practices are retired.
+
 ### Android collector and integration guide
 
 OwnTube in `/Users/marko/code/tv-tube` now checkpoints cumulative viewing records starting with

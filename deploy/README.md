@@ -95,6 +95,37 @@ The Languages follow-up `owntube-languages-20261113-2` uses the same process fro
 commit `4369a6835`, with mobile wrapping and content-hashed module assets. Its
 backend binary is identical to `-1`; the same backup and image-only rollback apply.
 
+## hserver rules for every release
+
+Agreed with the hserver administrator (Hox) on 2026-11-21 after OwnTube release
+files grew the root disk from 14 GB to 41 GB.
+
+**Builds.** Never build images on hserver; it only pulls and runs. Build in CI
+(GitHub Actions → private GHCR, deploy by digest) or on the Mac. Until the CI
+pipeline is in place, ask Hox before any on-server build. Do not prune the shared
+builder or build cache; that is administrator-owned.
+
+<a id="hserver-retention"></a>**Retention.** Run after every release, once it is
+verified:
+
+```sh
+python3 deploy/retention.py --current <release> --rollback <previous release>          # plan
+python3 deploy/retention.py --current <release> --rollback <previous release> --apply  # delete
+```
+
+- Backups (`/home/marko/Backups/youtube-observer`): keep the 5 most recent plus
+  `before-<current>`, the restore point for the possible rollback. Every backup is
+  mirrored to `~/.local/state/youtube-observer/backups` on the Mac, which keeps all of
+  them. A server backup is deleted only after its SHA-256 checksums match the Mac copy.
+- Release directories (`/home/marko/releases/youtube-observer`): keep only the current
+  release and its rollback target. Older ones are archived to
+  `~/.local/state/youtube-observer/release-archive` without database copies, then deleted.
+- Candidate/verify database copies go in a temporary directory removed at the end of
+  the release. Never leave benchmark data or database copies on hserver.
+- Docker: keep youtube-observer containers/images of the 5 most recent releases
+  (Kamal's default). Never touch other services, volumes, the builder or build cache.
+- Record what was removed/kept in `/home/marko/hserver-admin/HANDOFF.md`.
+
 ## Home feed release
 
 `owntube-home-feed-20261119-1`, source `21781c421`, serves the curated TV Home feed

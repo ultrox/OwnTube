@@ -45,8 +45,11 @@ it. The German title cache was copied into the volume. Integrity passed.
 
 Sports, Live, Gaming, Music and News were not migrated yet: production creates their
 feeds when the TV first opens each category. Move them afterwards with
-`checks/owntube-home-feed-migrate.py --only=<categories> --apply` in the release
-directory, against `checks/local-final.sqlite3`, while the app is stopped.
+`owntube-home-feed-migrate.py --only=<categories> --apply` against
+`local-final.sqlite3`, while the app is stopped (then restart with `kamal app boot`).
+Both files are kept, checksum-verified, in `~/.local/state/owntube-home/migration/`
+on the Mac (the server release directory was removed under the retention policy);
+upload them to a temporary directory for the migration and delete it afterwards.
 
 `kamal app start` after the migration failed ("Failed to get endpoint for web");
 the container exited. `kamal app boot --version owntube-home-feed-20261119-1`
